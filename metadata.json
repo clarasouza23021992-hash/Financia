@@ -1,0 +1,6 @@
+{
+  "name": "Finanças da Minha Casa",
+  "description": "Gestão de boletos, pix e vencimentos com sincronização multi-dispositivo CloudKit, receitas, fluxo de caixa e comprovantes.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

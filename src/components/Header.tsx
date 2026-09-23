@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw } from 'lucide-react';
+import { Home, Plus, Cloud, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -8,6 +8,7 @@ interface HeaderProps {
   onOpenNewBill: () => void;
   onOpenNewRevenue?: () => void;
   onOpenCloudSync: () => void;
+  onOpenDataRecovery?: () => void;
   onOpenWifeConnect?: () => void;
   onOpenBoletoScanner?: () => void;
   onOpenProfiles?: () => void;
@@ -24,6 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedMonth = 'Outubro de 2026',
   onOpenNewBill,
   onOpenCloudSync,
+  onOpenDataRecovery,
   onOpenWifeConnect,
   onManualRefresh,
   isRefreshing = false,
@@ -61,6 +63,19 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-2">
+          {/* Recovery Button */}
+          {onOpenDataRecovery && (
+            <button
+              id="btn-header-data-recovery"
+              type="button"
+              onClick={onOpenDataRecovery}
+              title="Recuperador de dados e backups"
+              className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60"
+            >
+              <ShieldCheck className="w-4 h-4 text-teal-400" />
+            </button>
+          )}
+
           {/* Manual Refresh Button */}
           {onManualRefresh && (
             <button

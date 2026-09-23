@@ -20,6 +20,7 @@ interface CloudKitSyncDrawerProps {
   onToggleOffline: () => void;
   conflictLogs: SyncConflictLog[];
   onForceSync: () => Promise<void>;
+  onOpenDataRecovery?: () => void;
   onUpdateDevice?: (deviceId: string, updates: Partial<CloudDevice>) => void;
   onRemoveDevice?: (deviceId: string) => void;
 }
@@ -34,6 +35,7 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
   onToggleOffline,
   conflictLogs,
   onForceSync,
+  onOpenDataRecovery,
   onUpdateDevice,
   onRemoveDevice,
 }) => {
@@ -758,6 +760,35 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
               {isOffline ? 'Offline' : 'Online'}
             </button>
           </div>
+
+          {/* Data Recovery & Backups */}
+          {onOpenDataRecovery && (
+            <div className="bg-teal-500/10 dark:bg-teal-950/30 p-3.5 rounded-2xl border border-teal-500/30 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center flex-shrink-0">
+                  <ShieldCheck className="w-4 h-4" />
+                </div>
+                <div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                    Recuperador de Dados & Backups
+                  </span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
+                    Varredura profunda para restaurar contas ou carregar base do casal.
+                  </span>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenDataRecovery();
+                }}
+                className="px-3 py-1.5 bg-teal-500 hover:bg-teal-600 text-[#0A1128] text-xs font-bold rounded-xl active-press transition-all whitespace-nowrap ml-2 shadow-xs"
+              >
+                Abrir
+              </button>
+            </div>
+          )}
 
           {/* Sync Conflict Resolution (3-Way Merge) */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800">

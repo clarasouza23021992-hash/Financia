@@ -5,6 +5,7 @@ import {
 } from 'lucide-react';
 import { Bill, Revenue } from '../types/finance';
 import { exportFinancialPDF, exportFinancialCSV } from '../services/pdfExporter';
+import { getCategoryInfo } from '../utils/categories';
 
 interface CashFlowReportProps {
   bills: Bill[];
@@ -118,11 +119,16 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
         <div className="space-y-3">
           {categoryEntries.map(([cat, amt]) => {
             const pct = totalBills > 0 ? Math.round((amt / totalBills) * 100) : 0;
+            const catInfo = getCategoryInfo(cat);
+            const CatIcon = catInfo.icon;
             return (
               <div key={cat}>
-                <div className="flex items-center justify-between text-xs mb-1">
-                  <span className="font-semibold text-slate-800 dark:text-slate-200 truncate pr-2">
-                    {cat}
+                <div className="flex items-center justify-between text-xs mb-1 gap-2">
+                  <span className="font-semibold text-slate-800 dark:text-slate-200 truncate flex items-center gap-1.5 min-w-0">
+                    <span className={`w-5 h-5 rounded-md flex items-center justify-center shrink-0 ${catInfo.badgeBg}`}>
+                      <CatIcon className={`w-3.5 h-3.5 ${catInfo.iconColor}`} />
+                    </span>
+                    <span className="truncate">{cat}</span>
                   </span>
                   <div className="text-right flex-shrink-0 font-medium text-slate-600 dark:text-slate-400">
                     <span className="font-bold text-slate-900 dark:text-white mr-1.5">

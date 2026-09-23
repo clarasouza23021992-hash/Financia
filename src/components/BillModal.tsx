@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2 } from 'lucide-react';
 import { Bill, PixKeyType, RecurrenceType } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
+import { CATEGORIES_LIST, getCategoryInfo } from '../utils/categories';
 
 interface BillModalProps {
   isOpen: boolean;
@@ -18,17 +19,7 @@ interface BillModalProps {
   defaultMonth?: string;
 }
 
-const CATEGORIES = [
-  'Moradia & Condomínio',
-  'Água, Luz & Gás',
-  'Alimentação & Mercado',
-  'Transporte & Combustível',
-  'Saúde & Farmácia',
-  'Lazer & Assinaturas',
-  'Financiamentos & Empréstimos',
-  'Educação',
-  'Outras Despesas',
-];
+const CATEGORIES = CATEGORIES_LIST.map(c => c.name);
 
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
 const RECURRENCE_OPTIONS: RecurrenceType[] = ['Mensal Fixa', 'Parcelada', 'Única / Pontual'];
@@ -454,13 +445,25 @@ export const BillModal: React.FC<BillModalProps> = ({
 
           {/* Categoria */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Categoria
-            </label>
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Categoria
+              </label>
+              {(() => {
+                const info = getCategoryInfo(category);
+                const IconComp = info.icon;
+                return (
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full border ${info.badgeBg} ${info.badgeText} ${info.badgeBorder}`}>
+                    <IconComp className={`w-3.5 h-3.5 ${info.iconColor}`} />
+                    <span>{info.shortName || info.name}</span>
+                  </span>
+                );
+              })()}
+            </div>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             >
               {CATEGORIES.map((cat) => (
                 <option key={cat} value={cat}>

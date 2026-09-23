@@ -3,7 +3,9 @@ import {
   Copy, Check, Share2, Edit2, Trash2, CheckCircle2, 
   QrCode, Barcode, FileText, Paperclip, Undo2, Eye
 } from 'lucide-react';
+import { motion, AnimatePresence } from 'motion/react';
 import { Bill } from '../types/finance';
+import { getCategoryInfo } from '../utils/categories';
 
 interface BillCardProps {
   bill: Bill;
@@ -49,15 +51,8 @@ export const BillCard: React.FC<BillCardProps> = ({
     }
   };
 
-  // Category Color Map
-  const getCategoryTheme = (cat: string) => {
-    if (cat.includes('Moradia')) return 'bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950/40 dark:text-blue-300 dark:border-blue-800';
-    if (cat.includes('Água') || cat.includes('Luz')) return 'bg-amber-50 text-amber-700 border-amber-200 dark:bg-amber-950/40 dark:text-amber-300 dark:border-amber-800';
-    if (cat.includes('Alimentação')) return 'bg-emerald-50 text-emerald-700 border-emerald-200 dark:bg-emerald-950/40 dark:text-emerald-300 dark:border-emerald-800';
-    if (cat.includes('Saúde')) return 'bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950/40 dark:text-rose-300 dark:border-rose-800';
-    if (cat.includes('Lazer')) return 'bg-purple-50 text-purple-700 border-purple-200 dark:bg-purple-950/40 dark:text-purple-300 dark:border-purple-800';
-    return 'bg-slate-100 text-slate-700 border-slate-200 dark:bg-slate-800 dark:text-slate-300';
-  };
+  const categoryInfo = getCategoryInfo(bill.category);
+  const CategoryIcon = categoryInfo.icon;
 
   return (
     <div className={`bg-white dark:bg-[#131D38] rounded-2xl border ${
@@ -66,13 +61,14 @@ export const BillCard: React.FC<BillCardProps> = ({
         : bill.status === 'paid'
         ? 'border-emerald-200/80 dark:border-emerald-900/40 opacity-90'
         : 'border-slate-200/80 dark:border-slate-800 shadow-xs'
-    } p-4 transition-all`}>
+    } p-4 transition-all w-full max-w-full min-w-0 overflow-hidden`}>
       {/* Top Header: Category Tag & Status Tag */}
-      <div className="flex items-start justify-between gap-2 mb-2">
-        <div className="flex flex-wrap items-center gap-1.5">
-          {/* Category Badge */}
-          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border ${getCategoryTheme(bill.category)}`}>
-            {bill.category}
+      <div className="flex items-start justify-between gap-2 mb-2 w-full min-w-0">
+        <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
+          {/* Category Badge with Icon */}
+          <span className={`text-[11px] font-semibold px-2.5 py-0.5 rounded-full border inline-flex items-center gap-1.5 ${categoryInfo.badgeBg} ${categoryInfo.badgeText} ${categoryInfo.badgeBorder}`}>
+            <CategoryIcon className={`w-3.5 h-3.5 shrink-0 ${categoryInfo.iconColor}`} />
+            <span className="truncate max-w-[130px] sm:max-w-none">{bill.category}</span>
           </span>
 
           {/* Carried Over Debt Badge */}
@@ -91,7 +87,7 @@ export const BillCard: React.FC<BillCardProps> = ({
                 : 'bg-emerald-100 text-emerald-900 dark:bg-emerald-950/70 dark:text-emerald-200 border border-emerald-300 dark:border-emerald-800'
             }`}>
               <span>🔁</span>
-              <span>{bill.fixedValueType === 'variable_value' ? 'Mensal • Só a Dívida (Variável)' : 'Mensal • Dívida e Valor Fixo'}</span>
+              <span>{bill.fixedValueType === 'variable_value' ? 'Mensal (Variável)' : 'Mensal (Fixo)'}</span>
             </span>
           )}
 
@@ -106,27 +102,56 @@ export const BillCard: React.FC<BillCardProps> = ({
             </span>
           )}
 
-          {/* Status Badge */}
-          {bill.status === 'overdue' && (
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-300 dark:border-rose-800 flex items-center gap-1">
-              <span>⚠️</span> Atrasado há 2 dias
-            </span>
-          )}
-          {bill.status === 'pending' && bill.dueDate.endsWith('17') && (
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 flex items-center gap-1">
-              <span>⏰</span> Vence Hoje!
-            </span>
-          )}
-          {bill.status === 'pending' && !bill.dueDate.endsWith('17') && (
-            <span className="text-[11px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300">
-              Vence em {bill.dueDate.split('-').reverse().slice(0, 2).join('/')}
-            </span>
-          )}
-          {bill.status === 'paid' && (
-            <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Pago
-            </span>
-          )}
+          {/* Status Badge with Smooth Motion Transition Animation */}
+          <AnimatePresence mode="wait" initial={false}>
+            {bill.status === 'overdue' && (
+              <motion.span
+                key="overdue"
+                initial={{ opacity: 0, scale: 0.88, y: -2 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.88, y: 2 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-rose-100 text-rose-700 dark:bg-rose-950/70 dark:text-rose-400 border border-rose-300 dark:border-rose-800 flex items-center gap-1 shrink-0"
+              >
+                <span>⚠️</span> Atrasado
+              </motion.span>
+            )}
+            {bill.status === 'pending' && (
+              <motion.span
+                key={`pending-${bill.dueDate}`}
+                initial={{ opacity: 0, scale: 0.88, y: -2 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.88, y: 2 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
+                  bill.dueDate.endsWith('17')
+                    ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'
+                    : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                }`}
+              >
+                {bill.dueDate.endsWith('17') ? (
+                  <>
+                    <span>⏰</span> <span>Vence Hoje!</span>
+                  </>
+                ) : (
+                  <span>Vence em {bill.dueDate.split('-').reverse().slice(0, 2).join('/')}</span>
+                )}
+              </motion.span>
+            )}
+            {bill.status === 'paid' && (
+              <motion.span
+                key="paid"
+                initial={{ opacity: 0, scale: 0.88, y: -2 }}
+                animate={{ opacity: 1, scale: 1, y: 0 }}
+                exit={{ opacity: 0, scale: 0.88, y: 2 }}
+                transition={{ duration: 0.22, ease: 'easeOut' }}
+                className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-xs shrink-0"
+              >
+                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <span>Pago</span>
+              </motion.span>
+            )}
+          </AnimatePresence>
         </div>
 
         {/* Amount & Copy Amount Button */}
@@ -229,40 +254,50 @@ export const BillCard: React.FC<BillCardProps> = ({
         </div>
       )}
 
-      {/* Comprovante de Pagamento Attachment Indicator & Audit Trail */}
-      <div className="flex items-center justify-between pt-1 pb-2 border-t border-slate-100 dark:border-slate-800/80 mb-2 gap-2">
-        {bill.receiptName ? (
-          <button
-            id={`btn-view-receipt-${bill.id}`}
-            onClick={() => onViewReceipt(bill)}
-            className="flex items-center gap-1.5 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline active-press shrink min-w-0"
-            title="Visualizar Comprovante Anexado"
-          >
-            <Eye className="w-4 h-4 shrink-0 text-teal-600 dark:text-teal-400" />
-            <span className="font-bold underline">ver comprovante</span>
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate max-w-[120px] sm:max-w-[180px] font-normal">
-              ({bill.receiptName})
-            </span>
-          </button>
-        ) : (
-          <button
-            id={`btn-attach-receipt-${bill.id}`}
-            onClick={() => onAttachReceipt(bill)}
-            className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 active-press shrink-0"
-          >
-            <Paperclip className="w-3.5 h-3.5" />
-            <span>+ Anexar Comprovante</span>
-          </button>
-        )}
+      {/* Comprovante de Pagamento Attachment Indicator & Compact Audit Trail */}
+      <div className="flex items-center justify-between pt-1.5 pb-2 border-t border-slate-100 dark:border-slate-800/80 mb-2 gap-1.5 text-xs w-full min-w-0 max-w-full overflow-hidden">
+        <div className="min-w-0 flex-1 overflow-hidden">
+          {bill.receiptName ? (
+            <button
+              id={`btn-view-receipt-${bill.id}`}
+              onClick={() => onViewReceipt(bill)}
+              className="flex items-center gap-1.5 text-xs font-semibold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 hover:underline active-press min-w-0 max-w-full truncate"
+              title="Visualizar Comprovante Anexado"
+            >
+              <Eye className="w-3.5 h-3.5 shrink-0 text-teal-600 dark:text-teal-400" />
+              <span className="font-bold underline shrink-0">Comprovante</span>
+              <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate font-normal">
+                ({bill.receiptName})
+              </span>
+            </button>
+          ) : (
+            <button
+              id={`btn-attach-receipt-${bill.id}`}
+              onClick={() => onAttachReceipt(bill)}
+              className="flex items-center gap-1.5 text-xs text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 active-press min-w-0 truncate"
+            >
+              <Paperclip className="w-3.5 h-3.5 shrink-0" />
+              <span className="truncate">+ Comprovante</span>
+            </button>
+          )}
+        </div>
         
-        {/* Mostra data e hora de alteração EXCLUSIVAMENTE na dívida que foi de fato editada pelo usuário */}
+        {/* Mostra data e hora de alteração de forma ultra-compacta e discreta, sem esticar a largura da tela */}
         {Boolean(bill.isEdited && bill.lastEditedAt) ? (
-          <div className="flex flex-col items-end text-right shrink-0 leading-tight bg-amber-50/70 dark:bg-amber-950/30 px-2 py-0.5 rounded-lg border border-amber-200/60 dark:border-amber-900/40">
-            <span className="text-[10px] text-amber-800 dark:text-amber-300 font-mono font-bold flex items-center gap-1">
-              <span>✏️ Alterado</span>
-              <span>• {bill.updatedByDevice || 'Carlos'}</span>
-            </span>
-            <span className="text-[9.5px] text-slate-600 dark:text-slate-400 font-mono">
+          <div 
+            className="flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 font-mono bg-amber-50/90 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200/70 dark:border-amber-900/50 shrink-0 whitespace-nowrap"
+            title={`Alterado por ${bill.updatedByDevice || 'Carlos'} em ${(() => {
+              try {
+                const d = new Date(bill.lastEditedAt!);
+                return isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR');
+              } catch {
+                return '';
+              }
+            })()}`}
+          >
+            <span className="text-[9px]">✏️</span>
+            <span className="font-semibold">Editado</span>
+            <span className="text-slate-500 dark:text-slate-400 font-normal">
               {(() => {
                 try {
                   const d = new Date(bill.lastEditedAt!);
@@ -271,7 +306,7 @@ export const BillCard: React.FC<BillCardProps> = ({
                     const month = String(d.getMonth() + 1).padStart(2, '0');
                     const hours = String(d.getHours()).padStart(2, '0');
                     const minutes = String(d.getMinutes()).padStart(2, '0');
-                    return `${day}/${month} às ${hours}:${minutes}`;
+                    return `${day}/${month} ${hours}:${minutes}`;
                   }
                 } catch {
                   // ignore

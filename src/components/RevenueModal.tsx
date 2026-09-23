@@ -8,6 +8,7 @@ interface RevenueModalProps {
   onSave: (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string }) => void;
   profiles: UserProfile[];
   initialRevenue?: Revenue | null;
+  defaultMonth?: string;
 }
 
 const REVENUE_CATEGORIES = [
@@ -25,6 +26,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   onSave,
   profiles,
   initialRevenue,
+  defaultMonth,
 }) => {
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
@@ -46,13 +48,14 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
     } else {
       setName('');
       setAmount('');
-      setDate(new Date().toISOString().split('T')[0]);
+      const defaultDateStr = defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0];
+      setDate(defaultDateStr);
       setCategory('Salário & Renda');
       setRecurrence('Mensal');
       setProfileName(profiles[0]?.name || 'Carlos');
       setNotes('');
     }
-  }, [initialRevenue, isOpen, profiles]);
+  }, [initialRevenue, isOpen, profiles, defaultMonth]);
 
   if (!isOpen) return null;
 

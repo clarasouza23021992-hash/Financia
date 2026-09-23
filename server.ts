@@ -37,49 +37,27 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Filter out fictitious sample bills permanently
+// Filter out only exact original dummy mock bills, never user bills
 function isMockBillServer(b: any): boolean {
   if (!b) return false;
+  // If user edited or created this bill with version > 1 or custom device, it's real!
+  if (b.version && b.version > 1) return false;
+  if (b.isEdited || b.lastEditedAt) return false;
+  
   const id = (b.id || '').toLowerCase();
-  const mockIdKeys = [
-    'bill-condominio',
-    'bill-luz',
-    'bill-gas',
-    'bill-gas-pago',
-    'bill-internet',
-    'bill-financiamento',
-    'bill-mercado',
-    'bill-streaming',
-    'bill-saude',
-  ];
-  if (mockIdKeys.some(k => id === k || id.includes(k))) return true;
-
   const favored = (b.favored || '').toLowerCase();
-  if (
-    favored.includes('administradora predial alfa') ||
-    favored.includes('enel distribuição sp') ||
-    favored.includes('comgás são paulo') ||
-    favored.includes('claro brasil s.a.') ||
-    favored.includes('supermercado pão de açúcar') ||
-    favored.includes('netflix entretenimento brasil') ||
-    favored.includes('unimed saúde coop')
-  ) {
-    return true;
-  }
+  
+  // Only match the original static dummy placeholder records
+  if (id === 'bill-condominio' && favored.includes('administradora predial alfa')) return true;
+  if (id === 'bill-luz' && favored.includes('enel distribuição sp') && b.amount === 230) return true;
+  if (id === 'bill-gas' && favored.includes('comgás são paulo') && b.amount === 185) return true;
+  if (id === 'bill-gas-pago' && favored.includes('comgás são paulo')) return true;
+  if (id === 'bill-internet' && favored.includes('claro brasil') && b.amount === 149.9) return true;
+  if (id === 'bill-financiamento' && favored.includes('caixa') && b.amount === 1850) return true;
+  if (id === 'bill-mercado' && favored.includes('pão de açúcar') && b.amount === 720) return true;
+  if (id === 'bill-streaming' && favored.includes('netflix entretenimento') && b.amount === 55.9) return true;
+  if (id === 'bill-saude' && favored.includes('unimed') && b.amount === 940) return true;
 
-  const name = (b.name || '').trim().toLowerCase();
-  if (
-    (name === 'taxa de condomínio' && (b.amount === 430 || favored.includes('alfa'))) ||
-    name.includes('conta de luz (energia elétrica)') ||
-    (name.includes('gás encanado comgás') && (b.amount === 196.4 || b.amount === 196.40)) ||
-    name.includes('internet fibra óptica 600mb') ||
-    (name.includes('financiamento imobiliário') && (b.amount === 1850 || favored.includes('caixa'))) ||
-    (name.includes('compras do mês (mercado)') && b.amount === 720) ||
-    name.includes('netflix & spotify família') ||
-    (name.includes('plano de saúde familiar') && b.amount === 940)
-  ) {
-    return true;
-  }
   return false;
 }
 
@@ -121,68 +99,27 @@ function saveHouseholds(data: Record<string, HouseholdData>) {
 function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[] {
   if (!Array.isArray(revs)) return [];
 
-  const active = revs.filter((r) => r && r.id && !deletedIds.includes(r.id));
-  const salaryMap = new Map<string, any>();
-  const otherRevenues: any[] = [];
+  const map = new Map<string, any>();
+  for (const r of revs) {
+    if (!r || !r.id) continue;
+    if (deletedIds.includes(r.id)) continue;
 
-  for (const r of active) {
-    const rawName = (r.name || '').toLowerCase();
-    const rawProfile = (r.profileName || '').toLowerCase();
-    const isCarlos = rawProfile.includes('carlos') || rawProfile.includes('você') || rawProfile.includes('voce') || rawName.includes('carlos');
-    const isPaula = rawProfile.includes('paula') || rawProfile.includes('esposa') || rawProfile.includes('camila') || rawName.includes('paula');
-    const isSalary = (r.category === 'Salário & Renda') || rawName.includes('salário') || rawName.includes('salario') || rawName.includes('salár');
+    const existing = map.get(r.id);
+    if (!existing) {
+      map.set(r.id, r);
+    } else {
+      const incVersion = r.version || 0;
+      const curVersion = existing.version || 0;
+      const incUpdated = new Date(r.updatedAt || 0).getTime();
+      const curUpdated = new Date(existing.updatedAt || 0).getTime();
 
-    if ((isCarlos || isPaula) && isSalary) {
-      const personKey = isCarlos ? 'carlos' : 'paula';
-      const monthKey = (r.date || '2026-10').slice(0, 7);
-      const key = `${personKey}_${monthKey}`;
-
-      if (salaryMap.has(key)) {
-        const existing = salaryMap.get(key);
-        const existingIsLiquido = (existing.name || '').toLowerCase().includes('líquido') || (existing.name || '').toLowerCase().includes('liquido');
-        const currentIsLiquido = rawName.includes('líquido') || rawName.includes('liquido');
-
-        let winner = existing;
-        let loser = r;
-
-        if (currentIsLiquido && !existingIsLiquido) {
-          winner = r;
-          loser = existing;
-        } else if (!currentIsLiquido && existingIsLiquido) {
-          winner = existing;
-          loser = r;
-        } else if ((r.version || 0) > (existing.version || 0)) {
-          winner = r;
-          loser = existing;
-        } else if (new Date(r.updatedAt || 0).getTime() > new Date(existing.updatedAt || 0).getTime()) {
-          winner = r;
-          loser = existing;
-        }
-
-        salaryMap.set(key, winner);
-        deletedIds.push(loser.id);
-      } else {
-        salaryMap.set(key, r);
+      if (incVersion > curVersion || incUpdated >= curUpdated) {
+        map.set(r.id, r);
       }
-    } else {
-      otherRevenues.push(r);
     }
   }
 
-  const seenKeys = new Set<string>();
-  const finalOthers: any[] = [];
-  for (const r of otherRevenues) {
-    const key = `${(r.name || '').trim().toLowerCase()}_${r.amount}_${r.date}_${(r.profileName || '').trim().toLowerCase()}`;
-    if (seenKeys.has(key) || seenKeys.has(r.id)) {
-      deletedIds.push(r.id);
-    } else {
-      seenKeys.add(key);
-      seenKeys.add(r.id);
-      finalOthers.push(r);
-    }
-  }
-
-  return [...salaryMap.values(), ...finalOthers];
+  return Array.from(map.values());
 }
 
 async function startServer() {
@@ -389,7 +326,11 @@ async function startServer() {
   });
 
   // Vite middleware setup
-  if (process.env.NODE_ENV !== 'production') {
+  const isProduction =
+    process.env.NODE_ENV === 'production' ||
+    (typeof __filename !== 'undefined' && __filename.endsWith('server.cjs'));
+
+  if (!isProduction) {
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: 'spa',

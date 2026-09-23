@@ -10,6 +10,8 @@ const STORAGE_KEY_OFFLINE_QUEUE = 'financas_cloudkit_offline_queue_v3';
 const STORAGE_KEY_CUSTOMIZED = 'financas_cloudkit_user_customized_v1';
 const STORAGE_KEY_NO_MOCK = 'financas_cloudkit_no_mock_v1';
 const STORAGE_KEY_SYNC_LOGS = 'financas_cloudkit_sync_logs_v2';
+const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
+const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
   { id: 'p1', name: 'Você (Titular)', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
@@ -46,35 +48,24 @@ export const MOCK_BILL_IDS = [
 
 export function isMockBill(b: Partial<Bill>): boolean {
   if (!b) return false;
+  // If user edited or created this bill with version > 1 or custom device, it's real!
+  if (b.version && b.version > 1) return false;
+  if (b.isEdited || b.lastEditedAt) return false;
+
   const id = (b.id || '').toLowerCase();
-  if (MOCK_BILL_IDS.some(k => id === k || id.includes(k))) return true;
-
   const favored = (b.favored || '').toLowerCase();
-  if (
-    favored.includes('administradora predial alfa') ||
-    favored.includes('enel distribuição sp') ||
-    favored.includes('comgás são paulo') ||
-    favored.includes('claro brasil s.a.') ||
-    favored.includes('supermercado pão de açúcar') ||
-    favored.includes('netflix entretenimento brasil') ||
-    favored.includes('unimed saúde coop')
-  ) {
-    return true;
-  }
 
-  const name = (b.name || '').trim().toLowerCase();
-  if (
-    (name === 'taxa de condomínio' && (b.amount === 430 || favored.includes('alfa'))) ||
-    name.includes('conta de luz (energia elétrica)') ||
-    (name.includes('gás encanado comgás') && (b.amount === 196.4 || b.amount === 196.40)) ||
-    name.includes('internet fibra óptica 600mb') ||
-    (name.includes('financiamento imobiliário') && (b.amount === 1850 || favored.includes('caixa'))) ||
-    (name.includes('compras do mês (mercado)') && b.amount === 720) ||
-    name.includes('netflix & spotify família') ||
-    (name.includes('plano de saúde familiar') && b.amount === 940)
-  ) {
-    return true;
-  }
+  // Only match the original static dummy placeholder records
+  if (id === 'bill-condominio' && favored.includes('administradora predial alfa')) return true;
+  if (id === 'bill-luz' && favored.includes('enel distribuição sp') && b.amount === 230) return true;
+  if (id === 'bill-gas' && favored.includes('comgás são paulo') && b.amount === 185) return true;
+  if (id === 'bill-gas-pago' && favored.includes('comgás são paulo')) return true;
+  if (id === 'bill-internet' && favored.includes('claro brasil') && b.amount === 149.9) return true;
+  if (id === 'bill-financiamento' && favored.includes('caixa') && b.amount === 1850) return true;
+  if (id === 'bill-mercado' && favored.includes('pão de açúcar') && b.amount === 720) return true;
+  if (id === 'bill-streaming' && favored.includes('netflix entretenimento') && b.amount === 55.9) return true;
+  if (id === 'bill-saude' && favored.includes('unimed') && b.amount === 940) return true;
+
   return false;
 }
 
@@ -231,22 +222,298 @@ class CloudKitSyncEngine {
     this.notifyListeners(type, payload);
   }
 
+  // Generate couple household bills for specified or default months
+  public generateDefaultBills(months: string[] = ['2026-09', '2026-10', '2026-11']): Bill[] {
+    const activeDev = 'iPhone Carlos';
+    const nowIso = new Date().toISOString();
+    const result: Bill[] = [];
+
+    for (const month of months) {
+      result.push(
+        {
+          id: `bill-condo-${month}`,
+          name: 'Taxa de Condomínio',
+          amount: 580.00,
+          dueDate: `${month}-10`,
+          category: 'Habitação & Moradia',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-09T10:00:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Carlos' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Administradora do Condomínio',
+          notes: 'Boleto mensal do condomínio residencial.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 290.00 },
+            { name: 'Paula', percentage: 50, amount: 290.00 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'fixed_value',
+        },
+        {
+          id: `bill-luz-${month}`,
+          name: 'Energia Elétrica (Enel)',
+          amount: 245.60,
+          dueDate: `${month}-15`,
+          category: 'Habitação & Moradia',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-14T14:30:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Paula' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Enel Distribuição SP',
+          notes: 'Consumo de energia da residência.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 122.80 },
+            { name: 'Paula', percentage: 50, amount: 122.80 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'variable_value',
+        },
+        {
+          id: `bill-gas-${month}`,
+          name: 'Gás Encanado (Comgás)',
+          amount: 85.40,
+          dueDate: `${month}-18`,
+          category: 'Habitação & Moradia',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-18T09:15:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Carlos' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Comgás São Paulo',
+          notes: 'Consumo de gás encanado.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 42.70 },
+            { name: 'Paula', percentage: 50, amount: 42.70 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'variable_value',
+        },
+        {
+          id: `bill-internet-${month}`,
+          name: 'Internet Fibra Óptica',
+          amount: 139.90,
+          dueDate: `${month}-20`,
+          category: 'Internet & Telefone',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-20T11:00:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Carlos' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Claro Fibra / Vivo',
+          notes: 'Banda larga residencial 600 Mega.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 69.95 },
+            { name: 'Paula', percentage: 50, amount: 69.95 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'fixed_value',
+        },
+        {
+          id: `bill-moradia-${month}`,
+          name: 'Financiamento Imobiliário / Aluguel',
+          amount: 2450.00,
+          dueDate: `${month}-10`,
+          category: 'Habitação & Moradia',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-10T08:00:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Carlos' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Caixa Econômica Federal',
+          notes: 'Parcela mensal da moradia da família.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 1225.00 },
+            { name: 'Paula', percentage: 50, amount: 1225.00 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'fixed_value',
+        },
+        {
+          id: `bill-mercado-${month}`,
+          name: 'Supermercado & Feira do Mês',
+          amount: 1650.00,
+          dueDate: `${month}-08`,
+          category: 'Alimentação & Mercado',
+          status: month === '2026-09' ? 'paid' : 'pending',
+          paidAt: month === '2026-09' ? `${month}-08T17:00:00.000Z` : undefined,
+          paidBy: month === '2026-09' ? 'Paula' : undefined,
+          recurrence: 'Mensal Fixa',
+          favored: 'Supermercado Principal',
+          notes: 'Compras essenciais de mercado e feira para a casa.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 825.00 },
+            { name: 'Paula', percentage: 50, amount: 825.00 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'variable_value',
+        },
+        {
+          id: `bill-saude-${month}`,
+          name: 'Plano de Saúde Familiar',
+          amount: 980.00,
+          dueDate: `${month}-25`,
+          category: 'Saúde & Cuidados',
+          status: 'pending',
+          recurrence: 'Mensal Fixa',
+          favored: 'Operadora de Saúde',
+          notes: 'Mensalidade do plano de saúde do casal.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 490.00 },
+            { name: 'Paula', percentage: 50, amount: 490.00 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'fixed_value',
+        },
+        {
+          id: `bill-streaming-${month}`,
+          name: 'Streaming & Assinaturas',
+          amount: 69.90,
+          dueDate: `${month}-12`,
+          category: 'Lazer & Entretenimento',
+          status: 'paid',
+          paidAt: `${month}-05T12:00:00.000Z`,
+          paidBy: 'Carlos',
+          recurrence: 'Mensal Fixa',
+          favored: 'Netflix & Spotify',
+          notes: 'Serviços de streaming digital do casal.',
+          barcode: '',
+          pixKey: '',
+          pixType: 'Pix Copia e Cola',
+          splitHousehold: true,
+          splitDetails: [
+            { name: 'Carlos', percentage: 50, amount: 34.95 },
+            { name: 'Paula', percentage: 50, amount: 34.95 },
+          ],
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+          fixedValueType: 'fixed_value',
+        }
+      );
+    }
+    return result;
+  }
+
+  // Generate couple household revenues for specified or default months
+  public generateDefaultRevenues(months: string[] = ['2026-09', '2026-10', '2026-11']): Revenue[] {
+    const activeDev = 'iPhone Carlos';
+    const nowIso = new Date().toISOString();
+    const result: Revenue[] = [];
+
+    for (const month of months) {
+      result.push(
+        {
+          id: `rev-carlos-${month}`,
+          name: 'Salário Líquido (Carlos)',
+          amount: 6850.00,
+          date: `${month}-05`,
+          category: 'Salário & Renda',
+          recurrence: 'Mensal',
+          profileName: 'Carlos',
+          notes: 'Salário creditado em conta Itaú.',
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+        },
+        {
+          id: `rev-paula-${month}`,
+          name: 'Salário Líquido (Paula)',
+          amount: 7240.00,
+          date: `${month}-05`,
+          category: 'Salário & Renda',
+          recurrence: 'Mensal',
+          profileName: 'Paula',
+          notes: 'Salário creditado em conta Nubank.',
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+        },
+        {
+          id: `rev-rendimentos-${month}`,
+          name: 'Rendimento CDB / Tesouro Selic',
+          amount: 345.80,
+          date: `${month}-15`,
+          category: 'Investimentos & Rendimentos',
+          recurrence: 'Mensal',
+          profileName: 'Carlos',
+          notes: 'Rendimento da reserva de emergência do casal.',
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+        }
+      );
+    }
+    return result;
+  }
+
   // Load Bills
   public getBills(): Bill[] {
-    if (typeof window === 'undefined') return INITIAL_BILLS;
+    if (typeof window === 'undefined') return this.generateDefaultBills();
     let raw = localStorage.getItem(STORAGE_KEY_BILLS);
 
-    // Fallback checks on older storage keys so user's real bills are NEVER lost!
-    if (!raw) {
+    // Fallback checks on older storage keys and permanent Safety Vault so user's real bills are NEVER lost!
+    if (!raw || raw === '[]') {
       const fallbackKeys = [
+        STORAGE_KEY_SAFETY_VAULT_BILLS,
         'financas_cloudkit_bills_v2',
         'financas_cloudkit_bills_v1',
         'financas_cloudkit_bills',
         'household_bills',
+        'financas_bills_backup',
       ];
       for (const k of fallbackKeys) {
         const legacy = localStorage.getItem(k);
-        if (legacy && legacy !== 'null' && legacy !== 'undefined') {
+        if (legacy && legacy !== 'null' && legacy !== 'undefined' && legacy !== '[]') {
           raw = legacy;
           localStorage.setItem(STORAGE_KEY_BILLS, legacy);
           break;
@@ -254,21 +521,40 @@ class CloudKitSyncEngine {
       }
     }
 
-    // If user has no bills stored, initialize with clean empty list
-    if (!raw) {
-      localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
-      localStorage.setItem(STORAGE_KEY_NO_MOCK, 'true');
-      localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify([]));
-      return [];
+    // If user has no bills stored, check safety vault again before initializing defaults
+    if (!raw || raw === '[]') {
+      const vaultData = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS);
+      if (vaultData && vaultData !== '[]') {
+        raw = vaultData;
+        localStorage.setItem(STORAGE_KEY_BILLS, vaultData);
+      } else {
+        const defaultBills = this.generateDefaultBills();
+        raw = JSON.stringify(defaultBills);
+        localStorage.setItem(STORAGE_KEY_BILLS, raw);
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, raw);
+        return defaultBills;
+      }
     }
 
     try {
       const parsed: Bill[] = JSON.parse(raw);
-      // Strip any fictitious sample bills
+      // Strip only exact legacy mock bills
       const cleaned = parsed.filter(b => !isMockBill(b));
+      
+      // If cleaned became empty, restore default couple bills immediately!
+      if (cleaned.length === 0) {
+        const defaultBills = this.generateDefaultBills();
+        localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(defaultBills));
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(defaultBills));
+        return defaultBills;
+      }
+
       if (cleaned.length !== parsed.length) {
         localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(cleaned));
       }
+
+      // Secure real bills in the safety vault!
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(cleaned));
 
       // Migration: sanitize author so bills are never falsely attributed to Paula
       const migrated = cleaned.map(b => {
@@ -284,11 +570,34 @@ class CloudKitSyncEngine {
         };
       });
 
-      // Automatic Deduplication: remove identical duplicate bills (same name, dueDate, and amount)
       return this.deduplicateBills(migrated);
     } catch {
-      return [];
+      return this.generateDefaultBills();
     }
+  }
+
+  // Merge two bill lists safely, never dropping local user edits
+  public mergeBillsLists(localBills: Bill[], incomingBills: Bill[]): Bill[] {
+    const map = new Map<string, Bill>();
+    localBills.forEach(b => {
+      if (b && b.id) map.set(b.id, b);
+    });
+    incomingBills.forEach(b => {
+      if (!b || !b.id) return;
+      const current = map.get(b.id);
+      if (!current) {
+        map.set(b.id, b);
+      } else {
+        const incVersion = b.version || 0;
+        const curVersion = current.version || 0;
+        const incUpdated = new Date(b.updatedAt || 0).getTime();
+        const curUpdated = new Date(current.updatedAt || 0).getTime();
+        if (incVersion > curVersion || incUpdated >= curUpdated) {
+          map.set(b.id, b);
+        }
+      }
+    });
+    return Array.from(map.values());
   }
 
   // Deduplicate bills list keeping the richest / paid version
@@ -327,6 +636,10 @@ class CloudKitSyncEngine {
       isSynced: true,
     }));
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(updated));
+    // Keep in permanent safety vault whenever bills are not empty
+    if (updated.length > 0) {
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(updated));
+    }
     this.broadcastUpdate('BILLS_UPDATED', { count: updated.length });
     this.syncWithServer();
   }
@@ -708,86 +1021,34 @@ class CloudKitSyncEngine {
     }
   }
 
-  // Deduplicate revenues list to permanently prevent salary duplication
+  // Deduplicate revenues list strictly by ID without dropping user revenues
   public deduplicateRevenues(revenuesList: Revenue[]): Revenue[] {
     if (!Array.isArray(revenuesList)) return [];
 
     const activeDeleted = this.getDeletedRevenueIds();
-    const active = revenuesList.filter(r => r && r.id && !activeDeleted.includes(r.id));
-    
-    // Normalize and track unique monthly salaries for Carlos & Paula
-    const salaryMap = new Map<string, Revenue>();
-    const otherRevenues: Revenue[] = [];
-    const removedDuplicateIds: string[] = [];
+    const map = new Map<string, Revenue>();
 
-    for (const r of active) {
-      const rawName = (r.name || '').toLowerCase();
-      const rawProfile = (r.profileName || '').toLowerCase();
-      const isCarlos = rawProfile.includes('carlos') || rawProfile.includes('você') || rawProfile.includes('voce') || rawName.includes('carlos');
-      const isPaula = rawProfile.includes('paula') || rawProfile.includes('esposa') || rawProfile.includes('camila') || rawName.includes('paula');
-      const isSalary = (r.category === 'Salário & Renda') || rawName.includes('salário') || rawName.includes('salario') || rawName.includes('salár');
+    for (const r of revenuesList) {
+      if (!r || !r.id) continue;
+      // If actively deleted by user, skip
+      if (activeDeleted.includes(r.id)) continue;
 
-      if ((isCarlos || isPaula) && isSalary) {
-        const personKey = isCarlos ? 'Carlos' : 'Paula';
-        const monthKey = (r.date || '2026-10').slice(0, 7);
-        const key = `${personKey}_${monthKey}`;
+      const existing = map.get(r.id);
+      if (!existing) {
+        map.set(r.id, r);
+      } else {
+        const rVersion = r.version || 0;
+        const curVersion = existing.version || 0;
+        const rUpdated = new Date(r.updatedAt || 0).getTime();
+        const curUpdated = new Date(existing.updatedAt || 0).getTime();
 
-        if (salaryMap.has(key)) {
-          const existing = salaryMap.get(key)!;
-          const existingIsLiquido = (existing.name || '').toLowerCase().includes('líquido') || (existing.name || '').toLowerCase().includes('liquido');
-          const currentIsLiquido = rawName.includes('líquido') || rawName.includes('liquido');
-
-          let winner = existing;
-          let loser = r;
-
-          // Priority logic:
-          // 1. "Salário Líquido" format preferred over generic "Salário"
-          // 2. Higher version
-          // 3. Newer updatedAt
-          if (currentIsLiquido && !existingIsLiquido) {
-            winner = r;
-            loser = existing;
-          } else if (!currentIsLiquido && existingIsLiquido) {
-            winner = existing;
-            loser = r;
-          } else if ((r.version || 0) > (existing.version || 0)) {
-            winner = r;
-            loser = existing;
-          } else if (new Date(r.updatedAt || 0).getTime() > new Date(existing.updatedAt || 0).getTime()) {
-            winner = r;
-            loser = existing;
-          }
-
-          salaryMap.set(key, winner);
-          removedDuplicateIds.push(loser.id);
-        } else {
-          salaryMap.set(key, r);
+        if (rVersion > curVersion || rUpdated >= curUpdated) {
+          map.set(r.id, r);
         }
-      } else {
-        otherRevenues.push(r);
       }
     }
 
-    // Deduplicate any exact other revenues by name + amount + date + profile
-    const seenOther = new Set<string>();
-    const finalOthers: Revenue[] = [];
-    for (const r of otherRevenues) {
-      const key = `${(r.name || '').trim().toLowerCase()}_${Number(r.amount || 0).toFixed(2)}_${r.date}_${(r.profileName || '').trim().toLowerCase()}`;
-      if (seenOther.has(key) || seenOther.has(r.id)) {
-        removedDuplicateIds.push(r.id);
-      } else {
-        seenOther.add(key);
-        seenOther.add(r.id);
-        finalOthers.push(r);
-      }
-    }
-
-    // Automatically record removed duplicates in deleted tombstones so they are never revived from server
-    if (removedDuplicateIds.length > 0) {
-      removedDuplicateIds.forEach(id => this.recordDeletedRevenue(id));
-    }
-
-    return [...salaryMap.values(), ...finalOthers];
+    return Array.from(map.values());
   }
 
   // Delete Bill
@@ -802,19 +1063,20 @@ class CloudKitSyncEngine {
 
   // Revenues
   public getRevenues(): Revenue[] {
-    if (typeof window === 'undefined') return INITIAL_REVENUES;
+    if (typeof window === 'undefined') return this.generateDefaultRevenues();
     let raw = localStorage.getItem(STORAGE_KEY_REVENUES);
 
-    // Fallback checks on older keys
-    if (!raw) {
+    // Fallback checks on older keys and safety vault
+    if (!raw || raw === '[]') {
       const fallbackKeys = [
+        STORAGE_KEY_SAFETY_VAULT_REVENUES,
         'financas_cloudkit_revenues_v2',
         'financas_cloudkit_revenues_v1',
         'financas_cloudkit_revenues',
       ];
       for (const k of fallbackKeys) {
         const legacy = localStorage.getItem(k);
-        if (legacy && legacy !== 'null' && legacy !== 'undefined') {
+        if (legacy && legacy !== 'null' && legacy !== 'undefined' && legacy !== '[]') {
           raw = legacy;
           localStorage.setItem(STORAGE_KEY_REVENUES, legacy);
           break;
@@ -822,18 +1084,24 @@ class CloudKitSyncEngine {
       }
     }
 
-    if (!raw) {
-      if (localStorage.getItem(STORAGE_KEY_CUSTOMIZED) === 'true') {
-        return [];
+    if (!raw || raw === '[]') {
+      const vaultData = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_REVENUES);
+      if (vaultData && vaultData !== '[]') {
+        raw = vaultData;
+        localStorage.setItem(STORAGE_KEY_REVENUES, vaultData);
+      } else {
+        const defaultRevs = this.generateDefaultRevenues();
+        raw = JSON.stringify(defaultRevs);
+        localStorage.setItem(STORAGE_KEY_REVENUES, raw);
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, raw);
+        return defaultRevs;
       }
-      localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(INITIAL_REVENUES));
-      return INITIAL_REVENUES;
     }
 
     try {
       const parsed: Revenue[] = JSON.parse(raw);
       const activeDeleted = this.getDeletedRevenueIds();
-      const sanitized = parsed
+      let sanitized = parsed
         .filter(r => r && r.id && !activeDeleted.includes(r.id))
         .map(r => ({
           ...r,
@@ -842,13 +1110,27 @@ class CloudKitSyncEngine {
           updatedByDevice: r.updatedByDevice?.replace(/Camila/g, 'Paula'),
         }));
 
+      // If aggressive tombstones wiped everything, unblock them
+      if (sanitized.length === 0 && parsed.length > 0) {
+        localStorage.setItem('financas_deleted_revenue_ids', '[]');
+        sanitized = parsed;
+      }
+
+      // If still empty, restore default revenues immediately!
+      if (sanitized.length === 0) {
+        const defaultRevs = this.generateDefaultRevenues();
+        localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(defaultRevs));
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(defaultRevs));
+        return defaultRevs;
+      }
+
       const deduped = this.deduplicateRevenues(sanitized);
       if (deduped.length !== parsed.length) {
         localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(deduped));
       }
       return deduped;
     } catch {
-      return INITIAL_REVENUES;
+      return this.generateDefaultRevenues();
     }
   }
 
@@ -857,6 +1139,9 @@ class CloudKitSyncEngine {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
     const deduped = this.deduplicateRevenues(revenues);
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(deduped));
+    if (deduped.length > 0) {
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(deduped));
+    }
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
   }
 
@@ -867,31 +1152,21 @@ class CloudKitSyncEngine {
     const monthPrefix = selectedMonthId ? selectedMonthId : '2026-10';
     const dateStr = `${monthPrefix}-05`;
 
-    // Filter out all previous salary entries for Carlos & Paula in this month, recording their IDs as deleted tombstones
-    const nonSalaryRevenues: Revenue[] = [];
-    rawRevenues.forEach(r => {
-      const rawName = (r.name || '').toLowerCase();
-      const rawProfile = (r.profileName || '').toLowerCase();
-      const isCarlos = rawProfile.includes('carlos') || rawProfile.includes('você') || rawName.includes('carlos');
-      const isPaula = rawProfile.includes('paula') || rawProfile.includes('esposa') || rawProfile.includes('camila') || rawName.includes('paula');
-      const isSalary = (r.category === 'Salário & Renda') || rawName.includes('salár');
-      const isSameMonth = (r.date || '').startsWith(monthPrefix);
-
-      if ((isCarlos || isPaula) && isSalary && isSameMonth) {
-        this.recordDeletedRevenue(r.id);
-      } else {
-        nonSalaryRevenues.push(r);
-      }
-    });
-
-    const nowIso = new Date().toISOString();
     const carlosId = `rev-carlos-${monthPrefix}`;
     const paulaId = `rev-paula-${monthPrefix}`;
 
-    // Remove target IDs from deleted list if they were there
+    // Remove target IDs from deleted list
     const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== carlosId && id !== paulaId);
     localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
 
+    // Keep all non-matching revenues
+    const remainingRevenues = rawRevenues.filter(r => {
+      const isTargetCarlos = r.id === carlosId || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && (r.category === 'Salário & Renda') && (r.date || '').startsWith(monthPrefix));
+      const isTargetPaula = r.id === paulaId || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && (r.category === 'Salário & Renda') && (r.date || '').startsWith(monthPrefix));
+      return !isTargetCarlos && !isTargetPaula;
+    });
+
+    const nowIso = new Date().toISOString();
     const carlosSalaryRev: Revenue = {
       id: carlosId,
       name: 'Salário Líquido (Carlos)',
@@ -922,7 +1197,7 @@ class CloudKitSyncEngine {
       isSynced: true,
     };
 
-    const updated = [carlosSalaryRev, paulaSalaryRev, ...nonSalaryRevenues];
+    const updated = [carlosSalaryRev, paulaSalaryRev, ...remainingRevenues];
     this.saveRevenues(updated);
     this.syncWithServer();
     return updated;
@@ -932,7 +1207,14 @@ class CloudKitSyncEngine {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
     const revenues = this.getRevenues();
     const activeDev = this.getActiveDevice().name;
-    const existingIndex = rev.id ? revenues.findIndex(r => r.id === rev.id) : -1;
+    const revId = rev.id || `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`;
+
+    // Ensure this ID is NEVER in deleted list
+    const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== revId);
+    localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
+
+    const existingIndex = revenues.findIndex(r => r.id === revId);
+    const nowIso = new Date().toISOString();
 
     let saved: Revenue;
     if (existingIndex >= 0) {
@@ -940,24 +1222,26 @@ class CloudKitSyncEngine {
       saved = {
         ...existing,
         ...rev,
+        id: revId,
+        amount: Number(rev.amount) || 0,
         version: (existing.version || 1) + 1,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
-      } as Revenue;
+      };
       revenues[existingIndex] = saved;
     } else {
       saved = {
-        id: rev.id || `rev-${Date.now()}`,
-        name: rev.name,
-        amount: rev.amount,
+        id: revId,
+        name: rev.name.trim(),
+        amount: Number(rev.amount) || 0,
         date: rev.date,
         category: rev.category,
         recurrence: rev.recurrence || 'Mensal',
         profileName: rev.profileName || 'Carlos',
         notes: rev.notes || '',
         version: 1,
-        updatedAt: new Date().toISOString(),
+        updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
       };
@@ -966,13 +1250,44 @@ class CloudKitSyncEngine {
 
     const deduped = this.deduplicateRevenues(revenues);
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(deduped));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(deduped));
     this.broadcastUpdate('REVENUE_UPSERTED', saved);
+    this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
     this.syncWithServer();
     return saved;
   }
 
   public saveRevenue(rev: Partial<Revenue> & { name: string; amount: number; date: string; category: string }): Revenue {
     return this.upsertRevenue(rev);
+  }
+
+  // Ensure default data if empty and clear any corrupt tombstones
+  public ensureDefaultDataIfEmpty(): boolean {
+    if (typeof window === 'undefined') return false;
+
+    // Purge any corrupted tombstones that might hide newly created items
+    localStorage.removeItem('financas_deleted_revenue_ids');
+
+    let changed = false;
+    let currentBills = this.getBills();
+    if (currentBills.length === 0) {
+      currentBills = this.generateDefaultBills();
+      this.saveBills(currentBills);
+      changed = true;
+    }
+
+    let currentRevs = this.getRevenues();
+    if (currentRevs.length === 0) {
+      currentRevs = this.generateDefaultRevenues();
+      this.saveRevenues(currentRevs);
+      changed = true;
+    }
+
+    if (changed) {
+      this.syncWithServer();
+      this.broadcastUpdate('SYNC_COMPLETED');
+    }
+    return changed;
   }
 
   public deleteRevenue(id: string): void {
@@ -1247,16 +1562,32 @@ class CloudKitSyncEngine {
         const activeDeletedBills = this.getDeletedBillIds();
         const activeDeletedRevenues = this.getDeletedRevenueIds();
 
-        if (Array.isArray(serverHouse.bills)) {
+        if (Array.isArray(serverHouse.bills) && serverHouse.bills.length > 0) {
           const filteredBills = serverHouse.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
-          localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(filteredBills));
+          const currentLocal = this.getBills();
+          // Safe two-way merge: never drop local bills when merging server updates
+          const merged = this.mergeBillsLists(currentLocal, filteredBills);
+          localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(merged));
+          if (merged.length > 0) {
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(merged));
+          }
+        } else if (localBills.length > 0) {
+          // If server had 0 bills but client has local bills, keep local bills and update vault
+          localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(localBills));
         }
+
         if (Array.isArray(serverHouse.revenues) && serverHouse.revenues.length > 0) {
           const filteredRevenues = serverHouse.revenues.filter(
             (r: any) => r && r.id && !activeDeletedRevenues.includes(r.id)
           );
-          const dedupedRevenues = this.deduplicateRevenues(filteredRevenues);
-          localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(dedupedRevenues));
+          const currentRevs = this.getRevenues();
+          const mergedRevs = this.deduplicateRevenues([...currentRevs, ...filteredRevenues]);
+          localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(mergedRevs));
+          if (mergedRevs.length > 0) {
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(mergedRevs));
+          }
+        } else if (localRevenues.length > 0) {
+          localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(localRevenues));
         }
         if (Array.isArray(serverHouse.profiles) && serverHouse.profiles.length > 0) {
           localStorage.setItem(STORAGE_KEY_PROFILES, JSON.stringify(serverHouse.profiles));
@@ -1422,6 +1753,406 @@ class CloudKitSyncEngine {
     return await this.syncWithServer();
   }
 
+
+  // Deep scan all localStorage keys and cloud server to rescue any lost financial data
+  public async scanAndRecoverLostData(): Promise<{
+    success: boolean;
+    billsRecovered: number;
+    revenuesRecovered: number;
+    sources: string[];
+    foundOtherMonths: string[];
+  }> {
+    if (typeof window === 'undefined') {
+      return { success: false, billsRecovered: 0, revenuesRecovered: 0, sources: [], foundOtherMonths: [] };
+    }
+
+    const recoveredBillsMap = new Map<string, Bill>();
+    const recoveredRevenuesMap = new Map<string, Revenue>();
+    const sourcesFound: string[] = [];
+
+    // Helper to test and collect bills
+    const tryExtractBills = (dataStr: string, sourceName: string) => {
+      try {
+        const parsed = JSON.parse(dataStr);
+        let list: any[] = [];
+        if (Array.isArray(parsed)) {
+          list = parsed;
+        } else if (parsed && Array.isArray(parsed.bills)) {
+          list = parsed.bills;
+        } else if (parsed && parsed.household && Array.isArray(parsed.household.bills)) {
+          list = parsed.household.bills;
+        }
+        for (const item of list) {
+          if (item && item.name && (item.amount !== undefined || item.dueDate)) {
+            if (isMockBill(item)) continue;
+            const bill: Bill = {
+              id: item.id || `bill-rec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              name: String(item.name || '').trim(),
+              amount: Number(item.amount) || 0,
+              dueDate: item.dueDate || '2026-10-10',
+              category: item.category || 'Habitação & Moradia',
+              status: item.status || 'pending',
+              paidAt: item.paidAt,
+              paidBy: item.paidBy === 'Camila' ? 'Paula' : item.paidBy,
+              recurrence: item.recurrence || 'Mensal Fixa',
+              favored: item.favored || '',
+              barcode: item.barcode || '',
+              pixKey: item.pixKey || '',
+              pixType: item.pixType || 'Pix Copia e Cola',
+              notes: item.notes || '',
+              splitHousehold: item.splitHousehold ?? true,
+              splitDetails: item.splitDetails || [
+                { name: 'Carlos', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
+                { name: 'Paula', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
+              ],
+              version: item.version || 1,
+              updatedAt: item.updatedAt || new Date().toISOString(),
+              updatedByDevice: item.updatedByDevice || 'iPhone Carlos',
+              isSynced: true,
+              receiptUrl: item.receiptUrl,
+              receiptName: item.receiptName,
+              fixedValueType: item.fixedValueType === 'variable_value' ? 'variable_value' : 'fixed_value',
+            };
+            const key = bill.id || `${bill.name.toLowerCase()}_${bill.dueDate}_${bill.amount.toFixed(2)}`;
+            if (!recoveredBillsMap.has(key)) {
+              recoveredBillsMap.set(key, bill);
+              if (!sourcesFound.includes(sourceName)) sourcesFound.push(sourceName);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    // Helper to test and collect revenues
+    const tryExtractRevenues = (dataStr: string, sourceName: string) => {
+      try {
+        const parsed = JSON.parse(dataStr);
+        let list: any[] = [];
+        if (Array.isArray(parsed)) {
+          list = parsed;
+        } else if (parsed && Array.isArray(parsed.revenues)) {
+          list = parsed.revenues;
+        } else if (parsed && parsed.household && Array.isArray(parsed.household.revenues)) {
+          list = parsed.household.revenues;
+        }
+        for (const item of list) {
+          if (item && item.name && (item.amount !== undefined || item.category)) {
+            const rev: Revenue = {
+              id: item.id || `rev-rec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
+              name: String(item.name || '').trim().replace(/Camila/g, 'Paula'),
+              amount: Number(item.amount) || 0,
+              date: item.date || '2026-10-05',
+              category: item.category || 'Salário & Renda',
+              recurrence: item.recurrence || 'Mensal',
+              profileName: (item.profileName === 'Camila' ? 'Paula' : item.profileName) || 'Carlos',
+              notes: item.notes || '',
+              version: item.version || 1,
+              updatedAt: item.updatedAt || new Date().toISOString(),
+              updatedByDevice: item.updatedByDevice || 'iPhone Carlos',
+              isSynced: true,
+            };
+            const key = rev.id || `${rev.name.toLowerCase()}_${rev.date}_${rev.amount.toFixed(2)}`;
+            if (!recoveredRevenuesMap.has(key)) {
+              recoveredRevenuesMap.set(key, rev);
+              if (!sourcesFound.includes(sourceName)) sourcesFound.push(sourceName);
+            }
+          }
+        }
+      } catch {}
+    };
+
+    // 1. Scan all localStorage keys
+    try {
+      for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key) {
+          const val = localStorage.getItem(key);
+          if (val && val.length > 5 && (val.startsWith('[') || val.startsWith('{'))) {
+            tryExtractBills(val, `Armazenamento Local (${key})`);
+            tryExtractRevenues(val, `Armazenamento Local (${key})`);
+          }
+        }
+      }
+    } catch {}
+
+    // 2. Scan server household endpoint
+    try {
+      const houseId = this.getHouseholdId();
+      const resp = await fetch(`/api/household/${encodeURIComponent(houseId)}`);
+      if (resp.ok) {
+        const serverData = await resp.json();
+        if (serverData && serverData.household) {
+          if (Array.isArray(serverData.household.bills) && serverData.household.bills.length > 0) {
+            tryExtractBills(JSON.stringify(serverData.household.bills), 'Nuvem / Servidor Principal');
+          }
+          if (Array.isArray(serverData.household.revenues) && serverData.household.revenues.length > 0) {
+            tryExtractRevenues(JSON.stringify(serverData.household.revenues), 'Nuvem / Servidor Principal');
+          }
+        }
+      }
+    } catch {}
+
+    const allRecoveredBills = Array.from(recoveredBillsMap.values());
+    const allRecoveredRevenues = Array.from(recoveredRevenuesMap.values());
+
+    if (allRecoveredBills.length > 0) {
+      // Clear tombstones for recovered IDs
+      const recoveredIds = new Set(allRecoveredBills.map(b => b.id));
+      const cleanDeleted = this.getDeletedBillIds().filter(id => !recoveredIds.has(id));
+      localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
+
+      const existingBills = this.getBills();
+      const merged = this.deduplicateBills(this.mergeBillsLists(existingBills, allRecoveredBills));
+      localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(merged));
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(merged));
+      this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
+    }
+
+    if (allRecoveredRevenues.length > 0) {
+      const recoveredRevIds = new Set(allRecoveredRevenues.map(r => r.id));
+      const cleanRevDeleted = this.getDeletedRevenueIds().filter(id => !recoveredRevIds.has(id));
+      localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanRevDeleted));
+
+      const existingRevs = this.getRevenues();
+      const mergedRevs = this.deduplicateRevenues([...existingRevs, ...allRecoveredRevenues]);
+      localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(mergedRevs));
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(mergedRevs));
+      this.broadcastUpdate('REVENUES_UPDATED', { count: mergedRevs.length });
+    }
+
+    // Push recovered data to server
+    try {
+      await this.syncWithServer();
+    } catch {}
+
+    const currentBills = this.getBills();
+    const monthsWithBills = Array.from(new Set(currentBills.map(b => b.dueDate.slice(0, 7))));
+
+    return {
+      success: allRecoveredBills.length > 0 || allRecoveredRevenues.length > 0,
+      billsRecovered: allRecoveredBills.length,
+      revenuesRecovered: allRecoveredRevenues.length,
+      sources: sourcesFound,
+      foundOtherMonths: monthsWithBills,
+    };
+  }
+
+  // Restore complete household preset (Carlos & Paula) with realistic household bills
+  public restoreCouplePresetData(targetMonthId: string = '2026-10'): { bills: Bill[]; revenues: Revenue[] } {
+    const month = targetMonthId || '2026-10';
+    const activeDev = this.getActiveDevice().name || 'iPhone Carlos';
+    const nowIso = new Date().toISOString();
+
+    const presetBills: Bill[] = [
+      {
+        id: `bill-preset-condominio-${month}`,
+        name: 'Taxa de Condomínio',
+        amount: 580.00,
+        dueDate: `${month}-10`,
+        category: 'Habitação & Moradia',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Administradora do Condomínio',
+        notes: 'Boleto mensal do condomínio.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 290.00 },
+          { name: 'Paula', percentage: 50, amount: 290.00 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'fixed_value',
+      },
+      {
+        id: `bill-preset-luz-${month}`,
+        name: 'Energia Elétrica (Enel)',
+        amount: 245.60,
+        dueDate: `${month}-15`,
+        category: 'Habitação & Moradia',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Enel Distribuição',
+        notes: 'Consumo de energia da residência.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 122.80 },
+          { name: 'Paula', percentage: 50, amount: 122.80 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'variable_value',
+      },
+      {
+        id: `bill-preset-gas-${month}`,
+        name: 'Gás Encanado (Comgás)',
+        amount: 85.40,
+        dueDate: `${month}-18`,
+        category: 'Habitação & Moradia',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Comgás',
+        notes: 'Consumo de gás encanado.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 42.70 },
+          { name: 'Paula', percentage: 50, amount: 42.70 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'variable_value',
+      },
+      {
+        id: `bill-preset-internet-${month}`,
+        name: 'Internet Fibra Óptica',
+        amount: 139.90,
+        dueDate: `${month}-20`,
+        category: 'Internet & Telefone',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Claro Fibra / Vivo',
+        notes: 'Banda larga residencial 600 Mega.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 69.95 },
+          { name: 'Paula', percentage: 50, amount: 69.95 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'fixed_value',
+      },
+      {
+        id: `bill-preset-moradia-${month}`,
+        name: 'Financiamento Imobiliário / Aluguel',
+        amount: 2450.00,
+        dueDate: `${month}-10`,
+        category: 'Habitação & Moradia',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Caixa Econômica / Locador',
+        notes: 'Parcela mensal da moradia da família.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 1225.00 },
+          { name: 'Paula', percentage: 50, amount: 1225.00 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'fixed_value',
+      },
+      {
+        id: `bill-preset-mercado-${month}`,
+        name: 'Supermercado & Feira do Mês',
+        amount: 1650.00,
+        dueDate: `${month}-08`,
+        category: 'Alimentação & Mercado',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Supermercado Principal',
+        notes: 'Compras essenciais de mercado e mantimentos.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 825.00 },
+          { name: 'Paula', percentage: 50, amount: 825.00 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'variable_value',
+      },
+      {
+        id: `bill-preset-saude-${month}`,
+        name: 'Plano de Saúde Familiar',
+        amount: 980.00,
+        dueDate: `${month}-25`,
+        category: 'Saúde & Cuidados',
+        status: 'pending',
+        recurrence: 'Mensal Fixa',
+        favored: 'Operadora de Saúde',
+        notes: 'Mensalidade do plano de saúde do casal.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 490.00 },
+          { name: 'Paula', percentage: 50, amount: 490.00 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'fixed_value',
+      },
+      {
+        id: `bill-preset-streaming-${month}`,
+        name: 'Streaming & Assinaturas',
+        amount: 69.90,
+        dueDate: `${month}-12`,
+        category: 'Lazer & Entretenimento',
+        status: 'paid',
+        paidAt: `${month}-05T12:00:00.000Z`,
+        paidBy: 'Carlos',
+        recurrence: 'Mensal Fixa',
+        favored: 'Netflix / Spotify Família',
+        notes: 'Serviços de entretenimento digital da casa.',
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        splitHousehold: true,
+        splitDetails: [
+          { name: 'Carlos', percentage: 50, amount: 34.95 },
+          { name: 'Paula', percentage: 50, amount: 34.95 },
+        ],
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        fixedValueType: 'fixed_value',
+      },
+    ];
+
+    // Remove tombstones for preset IDs
+    const presetIds = presetBills.map(b => b.id);
+    const cleanDeleted = this.getDeletedBillIds().filter(id => !presetIds.includes(id));
+    localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
+
+    // Save bills to main storage and safety vault
+    this.saveBills(presetBills);
+
+    // Save revenues (Carlos R$ 6850, Paula R$ 7240, Rendimentos R$ 345,80)
+    const revenues = this.updateCoupleSalaries(6850, 7240, month);
+
+    return { bills: presetBills, revenues };
+  }
 
   // Reset to default sample
   public resetToSample(): void {

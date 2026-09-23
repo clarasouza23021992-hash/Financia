@@ -47,24 +47,9 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
       r.name.toLowerCase().includes('camila')
   );
 
-  // Helper to safely calculate member revenue without doubling if multiple salary entries ever exist
+  // Helper to reliably sum all revenues for the family member
   const calculateMemberTotal = (memberRevs: typeof revenues) => {
-    const salaries = memberRevs.filter(
-      r => r.category === 'Salário & Renda' || r.name.toLowerCase().includes('salár')
-    );
-    const nonSalaries = memberRevs.filter(
-      r => !(r.category === 'Salário & Renda' || r.name.toLowerCase().includes('salár'))
-    );
-
-    let salaryAmount = 0;
-    if (salaries.length > 0) {
-      // Pick the primary salary entry (preferring "Líquido" or the highest/latest one)
-      const primary = salaries.find(s => s.name.toLowerCase().includes('líquido') || s.name.toLowerCase().includes('liquido')) || salaries[0];
-      salaryAmount = primary.amount;
-    }
-
-    const nonSalarySum = nonSalaries.reduce((acc, r) => acc + r.amount, 0);
-    return salaryAmount + nonSalarySum;
+    return memberRevs.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
   };
 
   const carlosSalary = calculateMemberTotal(carlosRevenues);

@@ -18,11 +18,12 @@ import { BankSyncModal } from './components/BankSyncModal';
 import { BoletoScannerModal } from './components/BoletoScannerModal';
 import { ProfilesModal } from './components/ProfilesModal';
 import { ReceiptViewerModal } from './components/ReceiptViewerModal';
-import { MonthSelector, MonthOption } from './components/MonthSelector';
+import { MonthSelector, MonthOption, INITIAL_SUBSEQUENT_MONTHS } from './components/MonthSelector';
 import { CoupleRevenueCard } from './components/CoupleRevenueCard';
 import { EditCoupleSalariesModal } from './components/EditCoupleSalariesModal';
 import { WifeConnectionModal } from './components/WifeConnectionModal';
 import { PullToRefresh } from './components/PullToRefresh';
+import { DataRecoveryModal } from './components/DataRecoveryModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -81,9 +82,29 @@ export default function App() {
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [viewingReceiptBill, setViewingReceiptBill] = useState<Bill | null>(null);
+  const [isDataRecoveryModalOpen, setIsDataRecoveryModalOpen] = useState(false);
 
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+
+  // Map other months that contain bills (in case bills are in a different month)
+  const otherMonthsWithBills = useMemo(() => {
+    const map = new Map<string, number>();
+    bills.forEach(b => {
+      const m = (b.dueDate || '').slice(0, 7);
+      if (m && m !== selectedMonth.id) {
+        map.set(m, (map.get(m) || 0) + 1);
+      }
+    });
+    return Array.from(map.entries()).map(([monthId, count]) => ({ monthId, count }));
+  }, [bills, selectedMonth.id]);
+
+  // Automatic rescue check to ensure bills and revenues are never lost or empty
+  useEffect(() => {
+    cloudkit.ensureDefaultDataIfEmpty();
+    setBills(cloudkit.getBills());
+    setRevenues(cloudkit.getRevenues());
+  }, []);
 
   // Profiles and Notifications
   const [profiles, setProfiles] = useState<UserProfile[]>(() => cloudkit.getProfiles());
@@ -411,7 +432,7 @@ export default function App() {
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 ${
+    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 w-full max-w-full overflow-x-hidden ${
       isDarkMode ? 'dark bg-[#080D1E] text-white' : 'bg-[#F4F6F9] text-slate-900'
     }`}>
       {/* Native App Header */}
@@ -426,6 +447,7 @@ export default function App() {
           setIsRevenueModalOpen(true);
         }}
         onOpenCloudSync={() => setIsCloudDrawerOpen(true)}
+        onOpenDataRecovery={() => setIsDataRecoveryModalOpen(true)}
         onOpenWifeConnect={() => setIsWifeConnectModalOpen(true)}
         onOpenBoletoScanner={() => setIsBoletoScannerOpen(true)}
         onOpenProfiles={() => setIsProfilesModalOpen(true)}
@@ -454,7 +476,7 @@ export default function App() {
       )}
 
       {/* Main Content Area with Pull-To-Refresh Support */}
-      <main className="flex-1 max-w-xl w-full mx-auto pb-24">
+      <main className="flex-1 max-w-xl w-full mx-auto pb-24 min-w-0 overflow-x-hidden">
         <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
         {currentTab === 'bills' && (
           <div className="space-y-1">
@@ -588,7 +610,7 @@ export default function App() {
             {/* List of Bill Cards */}
             <div className="px-4 py-2 space-y-3">
               {filteredBills.length === 0 ? (
-                <div className="bg-white dark:bg-[#131D38] p-7 rounded-3xl text-center border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
+                <div className="bg-white dark:bg-[#131D38] p-6 sm:p-7 rounded-3xl text-center border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
                   <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto">
                     <FileText className="w-6 h-6" />
                   </div>
@@ -597,26 +619,86 @@ export default function App() {
                       ? `Nenhuma conta em ${selectedMonth.label}`
                       : 'Nenhuma conta encontrada nos filtros'}
                   </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto">
+                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
                     {currentMonthBills.length === 0
-                      ? `Você ainda não cadastrou contas para ${selectedMonth.label}. Você pode replicar as contas recorrentes do mês anterior ou cadastrar uma nova conta.`
+                      ? `Você ainda não visualiza contas em ${selectedMonth.label}. Se você já havia cadastrado ou se suas informações sumiram, use o Recuperador de Dados abaixo ou veja se suas contas estão em outro mês.`
                       : 'Nenhuma despesa corresponde aos filtros selecionados.'}
                   </p>
+
+                  {/* Indicator if bills are present in another month */}
+                  {currentMonthBills.length === 0 && otherMonthsWithBills.length > 0 && (
+                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-300/80 dark:border-amber-700/60 text-xs text-amber-900 dark:text-amber-200 text-left space-y-2">
+                      <div className="font-bold flex items-center gap-1.5 text-xs">
+                        <span>💡 Suas contas cadastradas foram localizadas em outro mês:</span>
+                      </div>
+                      <div className="flex flex-wrap gap-2">
+                        {otherMonthsWithBills.map(({ monthId, count }) => (
+                          <button
+                            key={monthId}
+                            type="button"
+                            onClick={() => {
+                              const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
+                                id: monthId,
+                                label: monthId,
+                                shortLabel: monthId,
+                              };
+                              setSelectedMonth(found);
+                            }}
+                            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-bold rounded-xl border border-amber-400/40 flex items-center gap-1 active-press text-[11px]"
+                          >
+                            <span>Ver {count} conta(s) em {monthId}</span>
+                            <ChevronRight className="w-3.5 h-3.5" />
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                    {/* Recovery Modal Button */}
+                    <button
+                      type="button"
+                      onClick={() => setIsDataRecoveryModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 font-bold text-xs rounded-xl border border-blue-500/30 active-press"
+                      title="Varredura profunda para restaurar dados perdidos"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                      <span>Recuperar Dados & Backups</span>
+                    </button>
+
+                    {/* Restore Couple Preset Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        cloudkit.restoreCouplePresetData(selectedMonth.id);
+                        setBills(cloudkit.getBills());
+                        setRevenues(cloudkit.getRevenues());
+                        setToastNotification(`Contas e salários de Carlos e Paula restaurados para ${selectedMonth.label}!`);
+                      }}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 font-bold text-xs rounded-xl border border-teal-500/30 active-press"
+                      title="Carregar contas e salários essenciais da família"
+                    >
+                      <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                      <span>Restaurar Base Carlos & Paula</span>
+                    </button>
+
                     {currentMonthBills.length === 0 && (
                       <button
+                        type="button"
                         onClick={() => handleReplicateBillsToMonth(selectedMonth.id)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 font-bold text-xs rounded-xl border border-teal-500/30 active-press"
+                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 active-press"
                       >
                         <span>📋 Replicar Contas Recorrentes</span>
                       </button>
                     )}
+
                     <button
+                      type="button"
                       onClick={() => {
                         setEditingBill(null);
                         setIsBillModalOpen(true);
                       }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#00C49F] text-[#0A1128] font-bold text-xs rounded-xl shadow-xs active-press"
+                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-bold text-xs rounded-xl shadow-xs active-press"
                     >
                       <Plus className="w-4 h-4 stroke-[3]" />
                       <span>Cadastrar Nova Conta</span>
@@ -830,6 +912,7 @@ export default function App() {
         onSave={handleSaveRevenue}
         profiles={profiles}
         initialRevenue={editingRevenue}
+        defaultMonth={selectedMonth.id}
       />
 
       <EditCoupleSalariesModal
@@ -853,6 +936,7 @@ export default function App() {
         onToggleOffline={() => setIsOffline(!isOffline)}
         conflictLogs={conflictLogs}
         onForceSync={handleForceSync}
+        onOpenDataRecovery={() => setIsDataRecoveryModalOpen(true)}
         onUpdateDevice={handleUpdateDevice}
         onRemoveDevice={handleRemoveDevice}
       />
@@ -903,6 +987,25 @@ export default function App() {
           setViewingReceiptBill(null);
         }}
         bill={viewingReceiptBill}
+      />
+
+      <DataRecoveryModal
+        isOpen={isDataRecoveryModalOpen}
+        onClose={() => setIsDataRecoveryModalOpen(false)}
+        currentMonthId={selectedMonth.id}
+        onSelectMonth={(monthId) => {
+          const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
+            id: monthId,
+            label: monthId,
+            shortLabel: monthId,
+          };
+          setSelectedMonth(found);
+        }}
+        onDataRestored={() => {
+          setBills(cloudkit.getBills());
+          setRevenues(cloudkit.getRevenues());
+          setToastNotification('Contas e receitas restauradas e atualizadas com sucesso!');
+        }}
       />
     </div>
   );

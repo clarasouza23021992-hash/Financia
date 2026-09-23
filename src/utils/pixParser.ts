@@ -164,19 +164,19 @@ function inferCategoryAndBillName(companyName: string): { category: string; bill
   const upper = companyName.toUpperCase();
 
   if (upper.includes('ENEL') || upper.includes('CPFL') || upper.includes('LIGHT') || upper.includes('CEMIG') || upper.includes('ELEKTRO') || upper.includes('EQUATORIAL') || upper.includes('ENERGIA') || upper.includes('LUZ')) {
-    return { category: 'Água, Luz & Gás', billName: `Conta de Luz (${toTitleCase(companyName)})` };
+    return { category: 'Energia Elétrica', billName: `Conta de Luz (${toTitleCase(companyName)})` };
   }
   if (upper.includes('SABESP') || upper.includes('SANEPAR') || upper.includes('COPASA') || upper.includes('EMBASA') || upper.includes('CORSAN') || upper.includes('AGUA') || upper.includes('ÁGUA') || upper.includes('SANEAMENTO')) {
-    return { category: 'Água, Luz & Gás', billName: `Conta de Água (${toTitleCase(companyName)})` };
+    return { category: 'Água & Saneamento', billName: `Conta de Água (${toTitleCase(companyName)})` };
   }
-  if (upper.includes('COMGAS') || upper.includes('COMGÁS') || upper.includes('NATURGY') || upper.includes('GAS') || upper.includes('GÁS')) {
-    return { category: 'Água, Luz & Gás', billName: `Gás Encanado (${toTitleCase(companyName)})` };
+  if (upper.includes('COMGAS') || upper.includes('COMGÁS') || upper.includes('NATURGY') || upper.includes('GAS') || upper.includes('GÁS') || upper.includes('ULTRAGAZ') || upper.includes('LIQUIGAS') || upper.includes('LIQUIGÁS')) {
+    return { category: 'Gás', billName: `Conta de Gás (${toTitleCase(companyName)})` };
   }
   if (upper.includes('CONDOMINIO') || upper.includes('CONDOMÍNIO') || upper.includes('PREDIAL') || upper.includes('LELLO') || upper.includes('HABITATUS') || upper.includes('IMOBIL') || upper.includes('EDIFICIO') || upper.includes('EDIFÍCIO')) {
     return { category: 'Moradia & Condomínio', billName: 'Taxa de Condomínio' };
   }
   if (upper.includes('CLARO') || upper.includes('VIVO') || upper.includes('TIM') || upper.includes('OI') || upper.includes('FIBRA') || upper.includes('INTERNET') || upper.includes('TELECOM')) {
-    return { category: 'Moradia & Condomínio', billName: `Internet / Telecom (${toTitleCase(companyName)})` };
+    return { category: 'Internet, TV & Telefonia', billName: `Internet / Telecom (${toTitleCase(companyName)})` };
   }
   if (upper.includes('CAIXA') || upper.includes('ITAU') || upper.includes('ITAÚ') || upper.includes('BRADESCO') || upper.includes('SANTANDER') || upper.includes('NUBANK') || upper.includes('BANCO') || upper.includes('FINANCIAMENTO') || upper.includes('EMPRESTIMO') || upper.includes('EMPRÉSTIMO')) {
     return { category: 'Financiamentos & Empréstimos', billName: `Financiamento / Parcela (${toTitleCase(companyName)})` };

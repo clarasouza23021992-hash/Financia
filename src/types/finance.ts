@@ -68,6 +68,7 @@ export interface UserProfile {
   splitShare: number; // e.g. 50
   splitPercentage?: number;
   phone?: string;
+  email?: string;
   color: string;
   avatar: string;
 }

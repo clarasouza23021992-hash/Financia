@@ -397,7 +397,24 @@ async function startServer() {
 
     // Update Profiles if provided
     if (Array.isArray(profiles) && profiles.length > 0) {
-      household.profiles = profiles;
+      const enrichedProfiles = profiles.map((p: any) => {
+        if (p.id === 'p1') {
+          return {
+            ...p,
+            name: p.name === 'Você (Titular)' ? 'Carlos Ramos' : p.name,
+            email: p.email || 'l.carlosramos92@gmail.com',
+          };
+        }
+        if (p.id === 'p2') {
+          return {
+            ...p,
+            name: p.name === 'Esposa' ? 'Clara Souza' : p.name,
+            email: p.email || 'clarasouza23021992@gmail.com',
+          };
+        }
+        return p;
+      });
+      household.profiles = enrichedProfiles;
     }
 
     household.lastUpdated = nowIso;

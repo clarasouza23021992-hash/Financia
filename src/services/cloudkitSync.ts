@@ -15,8 +15,8 @@ const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
 const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
-  { id: 'p1', name: 'Você (Titular)', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
-  { id: 'p2', name: 'Esposa', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
+  { id: 'p1', name: 'Carlos Ramos', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👨🏻', phone: '', email: 'l.carlosramos92@gmail.com' },
+  { id: 'p2', name: 'Clara Souza', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '', email: 'clarasouza23021992@gmail.com' },
 ];
 
 export const DEFAULT_DEVICES: CloudDevice[] = [
@@ -24,10 +24,19 @@ export const DEFAULT_DEVICES: CloudDevice[] = [
     id: 'dev_user_main',
     name: 'iPhone Carlos',
     model: 'iPhone 15 Pro',
-    owner: 'Carlos',
+    owner: 'Carlos Ramos',
     lastActive: 'Agora mesmo',
     isCurrent: true,
-    iCloudAccount: 'carlos@icloud.com',
+    iCloudAccount: 'l.carlosramos92@gmail.com',
+  },
+  {
+    id: 'dev_user_clara',
+    name: 'iPhone Clara',
+    model: 'iPhone 15',
+    owner: 'Clara Souza',
+    lastActive: 'Agora mesmo',
+    isCurrent: false,
+    iCloudAccount: 'clarasouza23021992@gmail.com',
   },
 ];
 
@@ -1030,6 +1039,24 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('BILLS_UPDATED', { count: realBills.length });
     this.syncWithServer();
     return realBills;
+  }
+
+  // Method to completely clear all user data and start from scratch
+  public clearAllData(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    localStorage.setItem(STORAGE_KEY_NO_MOCK, 'true');
+    const all = this.getBills();
+    all.forEach(b => {
+      if (b.id) this.recordDeletedBill(b.id);
+    });
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify([]));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify([]));
+    this.broadcastUpdate('BILLS_UPDATED', { count: 0 });
+    this.broadcastUpdate('REVENUES_UPDATED', { count: 0 });
+    this.syncWithServer();
   }
 
   // Save bill with automatic generation of installments for Parcelada
@@ -2728,7 +2755,20 @@ class CloudKitSyncEngine {
     }
     try {
       const parsed: UserProfile[] = JSON.parse(raw);
-      return Array.isArray(parsed) && parsed.length > 0 ? parsed : DEFAULT_PROFILES;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Upgrade legacy generic placeholders to Carlos & Clara with verified emails
+        const upgraded = parsed.map(p => {
+          if (p.id === 'p1' && (!p.email || p.name === 'Você (Titular)')) {
+            return { ...p, name: p.name === 'Você (Titular)' ? 'Carlos Ramos' : p.name, email: p.email || 'l.carlosramos92@gmail.com' };
+          }
+          if (p.id === 'p2' && (!p.email || p.name === 'Esposa')) {
+            return { ...p, name: p.name === 'Esposa' ? 'Clara Souza' : p.name, email: p.email || 'clarasouza23021992@gmail.com' };
+          }
+          return p;
+        });
+        return upgraded;
+      }
+      return DEFAULT_PROFILES;
     } catch {
       return DEFAULT_PROFILES;
     }

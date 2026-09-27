@@ -164,7 +164,9 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-0.5">
           {monthsList.map((month) => {
             const isSelected = month.id === selectedMonthId;
-            const count = bills.filter(b => b.dueDate.startsWith(month.id)).length;
+            const monthBills = bills.filter(b => b.dueDate.startsWith(month.id));
+            const count = monthBills.length;
+            const monthAmount = monthBills.reduce((acc, b) => acc + b.amount, 0);
 
             return (
               <button
@@ -185,8 +187,9 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
                       ? 'bg-teal-500/20 text-teal-700 dark:text-teal-300'
                       : 'bg-slate-200 dark:bg-slate-700 text-slate-400'
                   }`}
+                  title={`${count} contas somando R$ ${monthAmount.toFixed(2)}`}
                 >
-                  {count} {count === 1 ? 'conta' : 'contas'}
+                  {count > 0 ? `R$ ${monthAmount.toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 0 })}` : '0'}
                 </span>
               </button>
             );

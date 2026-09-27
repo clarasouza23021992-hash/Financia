@@ -110,7 +110,7 @@ export const PullToRefresh: React.FC<PullToRefreshProps> = ({
   const opacity = Math.min(1, pullDistance / (PULL_THRESHOLD * 0.6));
 
   return (
-    <div ref={containerRef} className="relative w-full">
+    <div ref={containerRef} className="relative w-full max-w-full overflow-x-hidden">
       {/* Pull Indicator Container */}
       <div
         id="pull-to-refresh-indicator"

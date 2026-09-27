@@ -216,17 +216,17 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                 </div>
               </div>
 
-              {/* 2. Valor da Dívida */}
+              {/* 2. Dívida Deste Mês */}
               <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                 <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
-                  <span>Valor da Dívida</span>
-                  <span className="text-white/60 font-normal">{bills.length} contas</span>
+                  <span>Dívida Deste Mês</span>
+                  <span className="text-white/60 font-normal">{bills.length} {bills.length === 1 ? 'conta' : 'contas'}</span>
                 </div>
                 <div className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">
                   {formatBRL(totalBillsAmount)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">
-                  Total de Despesas e Contas do Mês
+                  Total de Dívidas de {selectedMonth}
                 </div>
               </div>
             </div>

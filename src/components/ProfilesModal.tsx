@@ -512,33 +512,17 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                         className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
                       />
                     </div>
-                    <div className="grid grid-cols-2 gap-2">
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
-                          Papel / Relação
-                        </label>
-                        <input
-                          type="text"
-                          value={newRole}
-                          onChange={(e) => setNewRole(e.target.value)}
-                          placeholder="Ex: Marido, Esposa"
-                          className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
-                          Divisão Despesas (%)
-                        </label>
-                        <input
-                          type="number"
-                          min={0}
-                          max={100}
-                          value={newSplit}
-                          onChange={(e) => setNewSplit(Number(e.target.value))}
-                          placeholder="50"
-                          className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                        />
-                      </div>
+                    <div>
+                      <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
+                        Papel / Relação (Opcional)
+                      </label>
+                      <input
+                        type="text"
+                        value={newRole}
+                        onChange={(e) => setNewRole(e.target.value)}
+                        placeholder="Ex: Titular, Morador, Familiar"
+                        className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                      />
                     </div>
                     <button
                       type="button"
@@ -587,32 +571,17 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                           />
                         </div>
 
-                        <div className="grid grid-cols-2 gap-2">
-                          <div>
-                            <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
-                              Papel / Relação
-                            </label>
-                            <input
-                              type="text"
-                              value={editRole}
-                              onChange={(e) => setEditRole(e.target.value)}
-                              className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                            />
-                          </div>
-
-                          <div>
-                            <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
-                              Divisão de Despesas (%)
-                            </label>
-                            <input
-                              type="number"
-                              min={0}
-                              max={100}
-                              value={editSplit}
-                              onChange={(e) => setEditSplit(Number(e.target.value))}
-                              className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
-                            />
-                          </div>
+                        <div>
+                          <label className="text-[11px] font-semibold text-slate-700 dark:text-slate-300 block mb-0.5">
+                            Papel / Relação
+                          </label>
+                          <input
+                            type="text"
+                            value={editRole}
+                            onChange={(e) => setEditRole(e.target.value)}
+                            placeholder="Ex: Titular, Morador"
+                            className="w-full px-3 py-1.5 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-xs text-slate-900 dark:text-white"
+                          />
                         </div>
 
                         <div className="flex gap-2 pt-1">
@@ -647,14 +616,6 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                           <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-semibold flex-shrink-0">
                             {p.role || 'Morador'}
                           </span>
-                        </div>
-                        {p.email && (
-                          <div className="text-[10.5px] text-purple-600 dark:text-purple-400 font-semibold truncate">
-                            {p.email}
-                          </div>
-                        )}
-                        <div className="text-[11px] text-slate-500 dark:text-slate-400">
-                          Responsável por {p.splitPercentage ?? p.splitShare ?? 50}% dos custos
                         </div>
                       </div>
                     </div>

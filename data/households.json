@@ -8,25 +8,12 @@
     "profiles": [
       {
         "id": "p1",
-        "name": "Carlos Ramos",
-        "role": "Administrador da Casa",
-        "splitShare": 50,
-        "splitPercentage": 50,
+        "name": "Titular",
+        "role": "Responsável",
         "color": "#3B82F6",
-        "avatar": "👨🏻",
+        "avatar": "👤",
         "phone": "",
-        "email": "l.carlosramos92@gmail.com"
-      },
-      {
-        "id": "p2",
-        "name": "Clara Souza",
-        "role": "Administradora da Casa",
-        "splitShare": 50,
-        "splitPercentage": 50,
-        "color": "#EC4899",
-        "avatar": "👩🏻",
-        "phone": "",
-        "email": "clarasouza23021992@gmail.com"
+        "email": ""
       }
     ],
     "devices": [

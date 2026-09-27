@@ -15,28 +15,18 @@ const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
 const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
-  { id: 'p1', name: 'Carlos Ramos', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👨🏻', phone: '', email: 'l.carlosramos92@gmail.com' },
-  { id: 'p2', name: 'Clara Souza', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '', email: 'clarasouza23021992@gmail.com' },
+  { id: 'p1', name: 'Titular', role: 'Responsável', splitShare: 100, splitPercentage: 100, color: '#3B82F6', avatar: '👤', phone: '', email: '' },
 ];
 
 export const DEFAULT_DEVICES: CloudDevice[] = [
   {
     id: 'dev_user_main',
-    name: 'iPhone Carlos',
-    model: 'iPhone 15 Pro',
-    owner: 'Carlos Ramos',
+    name: 'Meu Smartphone',
+    model: 'Smartphone (Tela de Início)',
+    owner: 'Titular',
     lastActive: 'Agora mesmo',
     isCurrent: true,
-    iCloudAccount: 'l.carlosramos92@gmail.com',
-  },
-  {
-    id: 'dev_user_clara',
-    name: 'iPhone Clara',
-    model: 'iPhone 15',
-    owner: 'Clara Souza',
-    lastActive: 'Agora mesmo',
-    isCurrent: false,
-    iCloudAccount: 'clarasouza23021992@gmail.com',
+    iCloudAccount: '',
   },
 ];
 
@@ -1789,8 +1779,8 @@ class CloudKitSyncEngine {
     const monthPrefix = selectedMonthId || '2026-10';
 
     const profiles = this.getProfiles();
-    const p1Name = profiles[0]?.name || 'Carlos Ramos';
-    const p2Name = profiles[1]?.name || 'Clara Souza';
+    const p1Name = profiles[0]?.name || 'Titular';
+    const p2 = profiles[1];
 
     const defaultMonths = [
       '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
@@ -1837,40 +1827,42 @@ class CloudKitSyncEngine {
         return !isCarlos && !isPaulaOrClara;
       });
 
-      updated.push(
-        {
-          id: carlosId,
-          name: `Salário Líquido (${p1Name})`,
-          amount: Number(carlosAmount) || 0,
-          date: dateStr,
-          category: 'Salário & Renda',
-          recurrence: 'Mensal',
-          profileName: p1Name,
-          notes: `Salário de ${p1Name}`,
-          version: newVersion,
-          updatedAt: nowIso,
-          updatedByDevice: activeDev,
-          isSynced: true,
-          isUserFilled: true,
-          userCustomized: true,
-        },
-        {
+      updated.push({
+        id: carlosId,
+        name: p1Name && p1Name !== 'Titular' && p1Name !== 'Morador 1' ? `Salário (${p1Name})` : 'Salário / Renda Principal',
+        amount: Number(carlosAmount) || 0,
+        date: dateStr,
+        category: 'Salário & Renda',
+        recurrence: 'Mensal',
+        profileName: p1Name,
+        notes: `Renda de ${p1Name}`,
+        version: newVersion,
+        updatedAt: nowIso,
+        updatedByDevice: activeDev,
+        isSynced: true,
+        isUserFilled: true,
+        userCustomized: true,
+      });
+
+      if (paulaAmount > 0 || p2) {
+        const p2Name = p2?.name || 'Morador 2';
+        updated.push({
           id: paulaId,
-          name: `Salário Líquido (${p2Name})`,
+          name: p2?.name ? `Salário (${p2.name})` : 'Segunda Renda',
           amount: Number(paulaAmount) || 0,
           date: dateStr,
           category: 'Salário & Renda',
           recurrence: 'Mensal',
           profileName: p2Name,
-          notes: `Salário de ${p2Name}`,
+          notes: `Renda de ${p2Name}`,
           version: newVersion,
           updatedAt: nowIso,
           updatedByDevice: activeDev,
           isSynced: true,
           isUserFilled: true,
           userCustomized: true,
-        }
-      );
+        });
+      }
     }
 
     this.saveRevenues(updated);
@@ -2822,17 +2814,9 @@ class CloudKitSyncEngine {
     try {
       const parsed: UserProfile[] = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Upgrade legacy generic placeholders to Carlos & Clara with verified emails
-        const upgraded = parsed.map(p => {
-          if (p.id === 'p1' && (!p.email || p.name === 'Você (Titular)')) {
-            return { ...p, name: p.name === 'Você (Titular)' ? 'Carlos Ramos' : p.name, email: p.email || 'l.carlosramos92@gmail.com' };
-          }
-          if (p.id === 'p2' && (!p.email || p.name === 'Esposa')) {
-            return { ...p, name: p.name === 'Esposa' ? 'Clara Souza' : p.name, email: p.email || 'clarasouza23021992@gmail.com' };
-          }
-          return p;
-        });
-        return upgraded;
+        // Strip out developer Clara Souza if previously cached
+        const filtered = parsed.filter(p => p && p.name !== 'Clara Souza' && p.email !== 'clarasouza23021992@gmail.com');
+        return filtered.length > 0 ? filtered : DEFAULT_PROFILES;
       }
       return DEFAULT_PROFILES;
     } catch {

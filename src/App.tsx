@@ -224,37 +224,31 @@ export default function App() {
 
   // Salaries of Resident 1 and Resident 2 (Editable by user)
   const carlosCurrentSalary = useMemo(() => {
-    const userPName = profiles[0]?.name || 'Carlos Ramos';
+    const userPName = profiles[0]?.name || 'Morador 1';
     const r = currentMonthRevenues.find(x => {
       const nameLower = (x.name || '').toLowerCase();
       const profLower = (x.profileName || '').toLowerCase();
       return (
         x.id.startsWith('rev-carlos-') ||
         x.id.startsWith('rev-p1-') ||
-        profLower.includes('carlos') ||
-        nameLower.includes('carlos') ||
         profLower === userPName.toLowerCase() ||
-        nameLower.includes(userPName.toLowerCase())
+        nameLower.includes(userPName.toLowerCase()) ||
+        nameLower.includes('salário') ||
+        nameLower.includes('salario')
       );
     });
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
   const paulaCurrentSalary = useMemo(() => {
-    const spousePName = profiles[1]?.name || 'Clara Souza';
+    const spousePName = profiles[1]?.name || '';
+    if (!spousePName) return 0;
     const r = currentMonthRevenues.find(x => {
       const nameLower = (x.name || '').toLowerCase();
       const profLower = (x.profileName || '').toLowerCase();
       return (
         x.id.startsWith('rev-paula-') ||
-        x.id.startsWith('rev-clara-') ||
         x.id.startsWith('rev-p2-') ||
-        profLower.includes('clara') ||
-        nameLower.includes('clara') ||
-        profLower.includes('paula') ||
-        nameLower.includes('paula') ||
-        profLower.includes('esposa') ||
-        nameLower.includes('esposa') ||
         profLower === spousePName.toLowerCase() ||
         nameLower.includes(spousePName.toLowerCase())
       );
@@ -267,13 +261,11 @@ export default function App() {
     return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
   }, [currentMonthRevenues]);
 
-  // Handler to edit and save Carlos & Clara salaries
+  // Handler to edit and save salaries
   const handleSaveCoupleSalaries = (carlosAmount: number, paulaAmount: number) => {
-    const p1 = profiles[0]?.name || 'Carlos Ramos';
-    const p2 = profiles[1]?.name || 'Clara Souza';
     cloudkit.updateCoupleSalaries(carlosAmount, paulaAmount, selectedMonth.id);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Salários salvos com sucesso: ${p1} (R$ ${carlosAmount.toFixed(2)}) e ${p2} (R$ ${paulaAmount.toFixed(2)})`);
+    showTemporaryToast(`Valores de renda salvos com sucesso!`);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
@@ -465,7 +457,7 @@ export default function App() {
         status: 'paid',
         recurrence: 'Mensal Fixa',
         fixedValueType: revData.amount > 0 ? 'fixed_value' : 'variable_value',
-        splitHousehold: true,
+        splitHousehold: false,
       };
       cloudkit.saveBill(billData);
       setBills(cloudkit.getBills());
@@ -573,7 +565,7 @@ export default function App() {
           status: 'paid',
           recurrence: 'Mensal Fixa',
           fixedValueType: (r.amount || 0) > 0 ? 'fixed_value' : 'variable_value',
-          splitHousehold: true,
+          splitHousehold: false,
           notes: 'Importado via Extrato (classificado como Dívida)',
         });
       } else {
@@ -1138,7 +1130,7 @@ export default function App() {
             category: cloudkit.guessCategoryFromName(name || ''),
             recurrence: 'Mensal Fixa',
             fixedValueType: parseFloat(amount || '') > 0 ? 'fixed_value' : 'variable_value',
-            splitHousehold: true,
+            splitHousehold: false,
           } as any);
           setIsBillModalOpen(true);
         }}
@@ -1151,8 +1143,8 @@ export default function App() {
         paulaCurrentSalary={paulaCurrentSalary}
         selectedMonth={selectedMonth.label}
         onSaveSalaries={handleSaveCoupleSalaries}
-        userLabel={`Meu Salário (${profiles[0]?.name || 'Você'})`}
-        spouseLabel={`Salário de ${profiles[1]?.name || 'Esposa'}`}
+        userLabel={profiles[0]?.name ? `Renda (${profiles[0].name})` : 'Minha Renda'}
+        spouseLabel={profiles[1]?.name ? `Renda (${profiles[1].name})` : 'Segunda Renda'}
       />
 
       <CloudKitSyncDrawer

@@ -143,10 +143,16 @@ export default function App() {
       } else if (event.type === 'PROFILES_UPDATED') {
         setProfiles(cloudkit.getProfiles());
       } else if (event.type === 'SYNC_COMPLETED') {
-        setBills(cloudkit.getBills());
-        setRevenues(cloudkit.getRevenues());
-        setProfiles(cloudkit.getProfiles());
-        setDevices(cloudkit.getDevices());
+        const nextBills = cloudkit.getBills();
+        const nextRevs = cloudkit.getRevenues();
+        const nextProfiles = cloudkit.getProfiles();
+        const nextDevices = cloudkit.getDevices();
+
+        // Only update states if contents actually changed to avoid re-render thrashing
+        setBills(prev => JSON.stringify(prev) !== JSON.stringify(nextBills) ? nextBills : prev);
+        setRevenues(prev => JSON.stringify(prev) !== JSON.stringify(nextRevs) ? nextRevs : prev);
+        setProfiles(prev => JSON.stringify(prev) !== JSON.stringify(nextProfiles) ? nextProfiles : prev);
+        setDevices(prev => JSON.stringify(prev) !== JSON.stringify(nextDevices) ? nextDevices : prev);
       }
     });
 
@@ -494,10 +500,13 @@ export default function App() {
     const total = pending.reduce((sum, b) => sum + b.amount, 0);
     const half = total / 2;
 
+    const user1Name = profiles[0]?.name || 'Morador 1';
+    const user2Name = profiles[1]?.name || 'Morador 2';
+
     let text = `*Resumo de Contas do Lar - Finanças da Minha Casa*\n`;
     text += `📅 Mês: ${selectedMonth.label}\n`;
     text += `💰 Total Pendente: R$ ${total.toFixed(2).replace('.', ',')}\n`;
-    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (Carlos & Paula)\n\n`;
+    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (${user1Name} & ${user2Name})\n\n`;
     text += `*Contas a pagar:*\n`;
     pending.forEach((b, i) => {
       text += `${i + 1}. ${b.name} - R$ ${b.amount.toFixed(2).replace('.', ',')} (Vence: ${b.dueDate})\n`;

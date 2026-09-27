@@ -57,55 +57,66 @@ export const BillModal: React.FC<BillModalProps> = ({
   // Recorrência Mensal Fixa: Dívida e Valor vs Só a Dívida (User explicitly requested)
   const [fixedValueType, setFixedValueType] = useState<'fixed_value' | 'variable_value'>('fixed_value');
 
+  const prevIsOpenRef = React.useRef(false);
+  const initialBillIdRef = React.useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (initialBill) {
-      setName(initialBill.name);
-      setAmount(initialBill.amount.toString());
-      setDueDate(initialBill.dueDate);
-      setCategory(initialBill.category);
-      setFavored(initialBill.favored);
-      setBarcode(initialBill.barcode || '');
-      setPixKey(initialBill.pixKey || '');
-      setPixType(initialBill.pixType || 'CNPJ');
-      setRecurrence(initialBill.recurrence || 'Mensal Fixa');
-      setFixedValueType(initialBill.fixedValueType || 'fixed_value');
-      setNotes(initialBill.notes || '');
-      setReceiptName(initialBill.receiptName || '');
-      setReceiptUrl(initialBill.receiptUrl || '');
-      setReceiptSize(initialBill.receiptSize || '');
-      setTotalInstallments(initialBill.totalInstallments || 10);
-      setCurrentInstallment(initialBill.installmentNumber || 1);
-      setValueIsPerInstallment(true);
-      setPixDetectedNotice(null);
-      setBarcodeDetectedNotice(null);
-      setCategoryNotice(null);
-      setApplyToFutureMonths(true);
-    } else {
-      // Default for new bill
-      setName('');
-      setAmount('');
-      const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
-      setDueDate(defaultDate);
-      setCategory('Outras Despesas');
-      setFavored('');
-      setBarcode('');
-      setPixKey('');
-      setPixType('CNPJ');
-      setRecurrence('Mensal Fixa');
-      setFixedValueType('fixed_value');
-      setNotes('');
-      setReceiptName('');
-      setReceiptUrl('');
-      setReceiptSize('');
-      setTotalInstallments(10);
-      setCurrentInstallment(1);
-      setValueIsPerInstallment(true);
-      setPixDetectedNotice(null);
-      setBarcodeDetectedNotice(null);
-      setCategoryNotice(null);
-      setApplyToFutureMonths(true);
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const billChanged = isOpen && initialBill?.id !== initialBillIdRef.current;
+
+    if (justOpened || billChanged) {
+      if (initialBill) {
+        setName(initialBill.name);
+        setAmount(initialBill.amount.toString());
+        setDueDate(initialBill.dueDate);
+        setCategory(initialBill.category);
+        setFavored(initialBill.favored);
+        setBarcode(initialBill.barcode || '');
+        setPixKey(initialBill.pixKey || '');
+        setPixType(initialBill.pixType || 'CNPJ');
+        setRecurrence(initialBill.recurrence || 'Mensal Fixa');
+        setFixedValueType(initialBill.fixedValueType || 'fixed_value');
+        setNotes(initialBill.notes || '');
+        setReceiptName(initialBill.receiptName || '');
+        setReceiptUrl(initialBill.receiptUrl || '');
+        setReceiptSize(initialBill.receiptSize || '');
+        setTotalInstallments(initialBill.totalInstallments || 10);
+        setCurrentInstallment(initialBill.installmentNumber || 1);
+        setValueIsPerInstallment(true);
+        setPixDetectedNotice(null);
+        setBarcodeDetectedNotice(null);
+        setCategoryNotice(null);
+        setApplyToFutureMonths(true);
+      } else {
+        // Default for new bill
+        setName('');
+        setAmount('');
+        const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
+        setDueDate(defaultDate);
+        setCategory('Outras Despesas');
+        setFavored('');
+        setBarcode('');
+        setPixKey('');
+        setPixType('CNPJ');
+        setRecurrence('Mensal Fixa');
+        setFixedValueType('fixed_value');
+        setNotes('');
+        setReceiptName('');
+        setReceiptUrl('');
+        setReceiptSize('');
+        setTotalInstallments(10);
+        setCurrentInstallment(1);
+        setValueIsPerInstallment(true);
+        setPixDetectedNotice(null);
+        setBarcodeDetectedNotice(null);
+        setCategoryNotice(null);
+        setApplyToFutureMonths(true);
+      }
     }
-  }, [initialBill, isOpen]);
+
+    prevIsOpenRef.current = isOpen;
+    initialBillIdRef.current = initialBill?.id;
+  }, [initialBill?.id, isOpen]);
 
   // Handler for typing name and auto-detecting category intelligently
   const handleNameChange = (val: string) => {

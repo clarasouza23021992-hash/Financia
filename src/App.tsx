@@ -3,7 +3,7 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine
+  RefreshCw, ScanLine, Calculator
 } from 'lucide-react';
 import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog } from './types/finance';
 import { cloudkit, isMockBill } from './services/cloudkitSync';
@@ -22,7 +22,7 @@ import { CoupleRevenueCard } from './components/CoupleRevenueCard';
 import { EditCoupleSalariesModal } from './components/EditCoupleSalariesModal';
 import { WifeConnectionModal } from './components/WifeConnectionModal';
 import { PullToRefresh } from './components/PullToRefresh';
-import { DataRecoveryModal } from './components/DataRecoveryModal';
+import { CalculatorModal } from './components/CalculatorModal';
 import { DeleteBillModal } from './components/DeleteBillModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
@@ -82,7 +82,7 @@ export default function App() {
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [viewingReceiptBill, setViewingReceiptBill] = useState<Bill | null>(null);
-  const [isDataRecoveryModalOpen, setIsDataRecoveryModalOpen] = useState(false);
+  const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
 
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
@@ -111,9 +111,11 @@ export default function App() {
 
   // Automatic check to ensure bills & revenues are safe, recurring bills and revenues auto-populate subsequent months, and debts are not in revenues
   useEffect(() => {
+    // Thorough deduplication to remove any repeating debts and restore clean originals
+    cloudkit.cleanupAndDeduplicateAllBills();
     cloudkit.ensureDefaultDataIfEmpty();
     cloudkit.sanitizeAndMigrateMismatchedRevenues();
-    const updatedBills = cloudkit.autoPropagateRecurringBills();
+    const updatedBills = cloudkit.cleanupAndDeduplicateAllBills();
     const updatedRevs = cloudkit.autoPropagateRecurringRevenues();
     setBills(updatedBills);
     setRevenues(updatedRevs);
@@ -192,6 +194,23 @@ export default function App() {
     }
   };
 
+  // Hard reload and cache busting for iPhone / PWA
+  const handleForceAppReload = async () => {
+    try {
+      if ('caches' in window) {
+        const keys = await caches.keys();
+        await Promise.all(keys.map(k => caches.delete(k)));
+      }
+      if ('serviceWorker' in navigator) {
+        const regs = await navigator.serviceWorker.getRegistrations();
+        for (const r of regs) await r.unregister();
+      }
+    } catch {}
+    const url = new URL(window.location.href);
+    url.searchParams.set('reload', String(Date.now()));
+    window.location.href = url.toString();
+  };
+
   const handleToggleDarkMode = () => {
     setIsDarkMode(prev => {
       const next = !prev;
@@ -262,9 +281,9 @@ export default function App() {
     }
   };
 
-  // Filtered Bills based on status, search, and category
+  // Filtered Bills sorted alphabetically (A-Z) based on status, search, and category
   const filteredBills = useMemo(() => {
-    return currentMonthBills.filter(bill => {
+    const list = currentMonthBills.filter(bill => {
       // Status Filter
       if (statusFilter === 'pending' && bill.status !== 'pending') return false;
       if (statusFilter === 'paid' && bill.status !== 'paid') return false;
@@ -276,15 +295,18 @@ export default function App() {
       // Search Query
       if (searchQuery.trim()) {
         const query = searchQuery.toLowerCase();
-        const matchesName = bill.name.toLowerCase().includes(query);
-        const matchesFavored = bill.favored.toLowerCase().includes(query);
-        const matchesCategory = bill.category.toLowerCase().includes(query);
+        const matchesName = (bill.name || '').toLowerCase().includes(query);
+        const matchesFavored = (bill.favored || '').toLowerCase().includes(query);
+        const matchesCategory = (bill.category || '').toLowerCase().includes(query);
         const matchesBarcode = (bill.barcode || '').includes(query);
         if (!matchesName && !matchesFavored && !matchesCategory && !matchesBarcode) return false;
       }
 
       return true;
     });
+
+    // Ordenação alfabética de A a Z solicitada pelo usuário
+    return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
   }, [currentMonthBills, statusFilter, categoryFilter, searchQuery]);
 
   // Categories list for filter chips
@@ -582,7 +604,7 @@ export default function App() {
           setIsRevenueModalOpen(true);
         }}
         onOpenCloudSync={() => setIsCloudDrawerOpen(true)}
-        onOpenDataRecovery={() => setIsDataRecoveryModalOpen(true)}
+        onOpenCalculator={() => setIsCalculatorOpen(true)}
         onOpenWifeConnect={() => setIsWifeConnectModalOpen(true)}
         onOpenBoletoScanner={() => setIsBoletoScannerOpen(true)}
         onOpenProfiles={() => setIsProfilesModalOpen(true)}
@@ -631,21 +653,32 @@ export default function App() {
 
             {/* Quick Pull / Manual Refresh Toolbar Bar */}
             <div className="mx-4 my-1 px-3 py-1.5 bg-white dark:bg-[#131D38] border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between text-xs shadow-xs">
-              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium text-[11px]">
+              <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium text-[11px] truncate">
                 <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
-                <span className="truncate">Puxe a tela para baixo para sincronizar</span>
+                <span className="truncate">Puxe a tela para baixo</span>
               </div>
-              <button
-                type="button"
-                id="btn-sync-now"
-                onClick={handleManualRefresh}
-                disabled={isRefreshing}
-                className="flex items-center gap-1 font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 active:scale-95 transition-all px-2.5 py-1 rounded-xl bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 flex-shrink-0 text-[11px]"
-                title="Sincronizar dados agora"
-              >
-                <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
-                <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
-              </button>
+              <div className="flex items-center gap-1.5 flex-shrink-0">
+                <button
+                  type="button"
+                  id="btn-sync-now"
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  className="flex items-center gap-1 font-bold text-teal-600 dark:text-teal-400 hover:text-teal-700 dark:hover:text-teal-300 active:scale-95 transition-all px-2.5 py-1 rounded-xl bg-teal-50 dark:bg-teal-950/50 hover:bg-teal-100 text-[11px]"
+                  title="Sincronizar dados com os outros celulares da casa"
+                >
+                  <RefreshCw className={`w-3 h-3 ${isRefreshing ? 'animate-spin' : ''}`} />
+                  <span>{isRefreshing ? 'Atualizando...' : 'Atualizar Agora'}</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={handleForceAppReload}
+                  className="flex items-center gap-1 font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 active:scale-95 transition-all px-2 py-1 rounded-xl bg-slate-100 dark:bg-slate-800 text-[10px]"
+                  title="Forçar recarregamento do app limpando o cache do iPhone / navegador"
+                >
+                  <span>Recarregar</span>
+                </button>
+              </div>
             </div>
 
             {/* 2. Couple Revenue Summary */}
@@ -711,7 +744,16 @@ export default function App() {
             </div>
 
             {/* Quick Actions Row */}
-            <div className="px-4 py-1 flex items-center gap-2">
+            <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => setIsCalculatorOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
+              >
+                <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                <span>Calculadora</span>
+              </button>
+
               <button
                 type="button"
                 onClick={() => setIsBoletoScannerOpen(true)}
@@ -982,7 +1024,6 @@ export default function App() {
         onToggleOffline={() => setIsOffline(!isOffline)}
         conflictLogs={conflictLogs}
         onForceSync={handleForceSync}
-        onOpenDataRecovery={() => setIsDataRecoveryModalOpen(true)}
         onUpdateDevice={handleUpdateDevice}
         onRemoveDevice={handleRemoveDevice}
       />

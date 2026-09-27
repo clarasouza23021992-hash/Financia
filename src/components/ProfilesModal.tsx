@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   X, Users, Bell, Shield, Check, Edit2, Plus, 
-  Trash2, Moon, Sun, User, UserCheck, Smartphone
+  Trash2, Moon, Sun, User, UserCheck, Smartphone, RefreshCw
 } from 'lucide-react';
 import { UserProfile, NotificationSetting, CloudDevice } from '../types/finance';
 
@@ -505,6 +505,40 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                 >
                   {isDarkMode ? <Sun className="w-4 h-4 text-amber-400" /> : <Moon className="w-4 h-4 text-indigo-500" />}
                   <span>{isDarkMode ? 'Claro' : 'Escuro'}</span>
+                </button>
+              </div>
+
+              {/* Cache & App Version Reload for iPhone / Safari */}
+              <div className="bg-slate-50 dark:bg-slate-900 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div>
+                  <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                    Atualização & Cache do iPhone / Navegador
+                  </span>
+                  <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-1 leading-relaxed">
+                    Caso tenha enviado atualizações para o GitHub e o seu iPhone ainda exiba a versão anterior, toque no botão abaixo para descarregar o cache do iOS Safari e recarregar os arquivos mais novos.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={async () => {
+                    try {
+                      if ('caches' in window) {
+                        const keys = await caches.keys();
+                        await Promise.all(keys.map(k => caches.delete(k)));
+                      }
+                      if ('serviceWorker' in navigator) {
+                        const regs = await navigator.serviceWorker.getRegistrations();
+                        for (const r of regs) await r.unregister();
+                      }
+                    } catch {}
+                    const url = new URL(window.location.href);
+                    url.searchParams.set('reload', String(Date.now()));
+                    window.location.href = url.toString();
+                  }}
+                  className="w-full py-2.5 px-3 bg-teal-600 hover:bg-teal-700 text-white font-bold text-xs rounded-xl flex items-center justify-center gap-2 active-press transition-colors shadow-xs"
+                >
+                  <RefreshCw className="w-4 h-4" />
+                  <span>Limpar Cache e Recarregar Versão Mais Recente</span>
                 </button>
               </div>
             </div>

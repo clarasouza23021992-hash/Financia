@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw, ShieldCheck } from 'lucide-react';
+import { Home, Plus, Cloud, Heart, RefreshCw, Calculator } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -8,7 +8,7 @@ interface HeaderProps {
   onOpenNewBill: () => void;
   onOpenNewRevenue?: () => void;
   onOpenCloudSync: () => void;
-  onOpenDataRecovery?: () => void;
+  onOpenCalculator?: () => void;
   onOpenWifeConnect?: () => void;
   onOpenBoletoScanner?: () => void;
   onOpenProfiles?: () => void;
@@ -25,7 +25,7 @@ export const Header: React.FC<HeaderProps> = ({
   selectedMonth = 'Outubro de 2026',
   onOpenNewBill,
   onOpenCloudSync,
-  onOpenDataRecovery,
+  onOpenCalculator,
   onOpenWifeConnect,
   onManualRefresh,
   isRefreshing = false,
@@ -63,16 +63,16 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
-          {/* Recovery Button */}
-          {onOpenDataRecovery && (
+          {/* Calculator Button */}
+          {onOpenCalculator && (
             <button
-              id="btn-header-data-recovery"
+              id="btn-header-calculator"
               type="button"
-              onClick={onOpenDataRecovery}
-              title="Recuperador de dados e backups"
+              onClick={onOpenCalculator}
+              title="Abrir Calculadora"
               className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60"
             >
-              <ShieldCheck className="w-4 h-4 text-teal-400" />
+              <Calculator className="w-4 h-4 text-[#00E5B5]" />
             </button>
           )}
 

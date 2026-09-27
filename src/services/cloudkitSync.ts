@@ -557,6 +557,16 @@ class CloudKitSyncEngine {
     const deletedSet = new Set(deleted);
     const map = new Map<string, Bill>();
 
+    const normalizeText = (text: string) => {
+      return (text || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toLowerCase()
+        .replace(/\(recuperad[oa]\)/gi, '')
+        .replace(/\s+/g, ' ')
+        .trim();
+    };
+
     for (const b of billsList) {
       if (!b || !b.id || isMockBill(b) || deletedSet.has(b.id)) {
         if (b?.id && !deletedSet.has(b.id) && isMockBill(b)) {
@@ -566,8 +576,8 @@ class CloudKitSyncEngine {
         continue;
       }
 
-      const cleanName = (b.name || '').trim().toLowerCase();
-      const month = (b.dueDate || '').substring(0, 7);
+      const cleanName = normalizeText(b.name);
+      const month = (b.dueDate || '').substring(0, 7) || '2026-10';
       const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
       const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
 
@@ -583,6 +593,11 @@ class CloudKitSyncEngine {
           keepIncoming = true;
         } else if (existing.receiptUrl && !b.receiptUrl) {
           keepIncoming = false;
+        } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
+          // Favor original bill over recovery-generated clone
+          keepIncoming = false;
+        } else if (!b.id.startsWith('bill-rec-') && existing.id.startsWith('bill-rec-')) {
+          keepIncoming = true;
         } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
           keepIncoming = true;
         } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
@@ -600,21 +615,48 @@ class CloudKitSyncEngine {
         }
 
         if (keepIncoming) {
-          if (!existing.id.startsWith('rec_') && !existing.isProjected) {
-            this.recordDeletedBill(existing.id);
-            deletedSet.add(existing.id);
-          }
+          this.recordDeletedBill(existing.id);
+          deletedSet.add(existing.id);
           map.set(key, b);
         } else {
-          if (!b.id.startsWith('rec_') && !b.isProjected) {
-            this.recordDeletedBill(b.id);
-            deletedSet.add(b.id);
-          }
+          this.recordDeletedBill(b.id);
+          deletedSet.add(b.id);
         }
       } else {
         map.set(key, b);
       }
     }
+
+    return Array.from(map.values());
+  }
+
+  // Force thorough deduplication across all months and remove repeating bills
+  public cleanupAndDeduplicateAllBills(): Bill[] {
+    if (typeof window === 'undefined') return [];
+
+    let raw = localStorage.getItem(STORAGE_KEY_BILLS);
+    let bills: Bill[] = [];
+    try {
+      bills = raw ? JSON.parse(raw) : [];
+    } catch {
+      bills = [];
+    }
+    if (!Array.isArray(bills)) bills = [];
+
+    // Filter out mock bills
+    bills = bills.filter(b => !isMockBill(b));
+
+    const deduped = this.deduplicateBills(bills);
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
+    
+    // Clear temporary deep scan cache keys
+    localStorage.removeItem('financas_bills_deep_scan');
+    
+    this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
+    this.syncWithServer();
+    return deduped;
+  }
 
     // Cross-month cleanup:
     // If a bill was rescheduled/moved (single 'Única / Pontual' or carried-over bill), eliminate earlier phantom ghost copies.

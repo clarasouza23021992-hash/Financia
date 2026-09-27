@@ -75,6 +75,8 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
       lastSync: 'Atualizado manualmente',
       securityHash: `sha256-real-${Date.now()}`,
       cardHolder: cardHolder.trim() || undefined,
+      cardName: finalInstitution,
+      last4: accountNumber.replace(/\D/g, '').slice(-4) || undefined,
       closingDay: closingDay ? parseInt(closingDay, 10) : undefined,
       dueDay: dueDay ? parseInt(dueDay, 10) : undefined,
     };

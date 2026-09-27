@@ -1,6 +1,7 @@
 import React from 'react';
 import { Wallet, TrendingUp, Plus, Edit3, Sparkles, Scale, CheckCircle2, AlertCircle, Minus, Equal } from 'lucide-react';
 import { Revenue, Bill } from '../types/finance';
+import { isMockRevenue } from '../services/cloudkitSync';
 
 interface CoupleRevenueCardProps {
   revenues: Revenue[];
@@ -25,8 +26,11 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   userProfileName = 'Você',
   spouseProfileName = 'Esposa',
 }) => {
+  // Real revenues only, excluding any mock records
+  const realRevenues = revenues.filter(r => !isMockRevenue(r));
+
   // Identify You and Wife's salaries dynamically
-  const carlosRevenues = revenues.filter(
+  const carlosRevenues = realRevenues.filter(
     r =>
       r.profileName === userProfileName ||
       r.profileName === 'Carlos' ||
@@ -35,7 +39,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
       r.name.toLowerCase().includes('carlos') ||
       r.name.toLowerCase().includes('meu')
   );
-  const paulaRevenues = revenues.filter(
+  const paulaRevenues = realRevenues.filter(
     r =>
       r.profileName === spouseProfileName ||
       r.profileName === 'Paula' ||
@@ -48,7 +52,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   );
 
   // Helper to reliably sum all revenues for the family member
-  const calculateMemberTotal = (memberRevs: typeof revenues) => {
+  const calculateMemberTotal = (memberRevs: typeof realRevenues) => {
     return memberRevs.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
   };
 
@@ -59,7 +63,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   const combinedSalaries = carlosSalary + paulaSalary;
 
   // Other revenues (investments, bonuses, etc.)
-  const otherRevenues = revenues.filter(
+  const otherRevenues = realRevenues.filter(
     r =>
       !carlosRevenues.some(cr => cr.id === r.id) &&
       !paulaRevenues.some(pr => pr.id === r.id)

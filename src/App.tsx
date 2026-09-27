@@ -3,10 +3,10 @@ import {
   Search, Filter, Plus, FileText, Landmark, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal, Building2, CreditCard, Upload,
-  RefreshCw
+  RefreshCw, Smartphone, Zap, ScanLine
 } from 'lucide-react';
-import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog } from './types/finance';
-import { cloudkit } from './services/cloudkitSync';
+import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog, CardPurchaseResult } from './types/finance';
+import { cloudkit, isMockBill } from './services/cloudkitSync';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
 import { BillCard } from './components/BillCard';
@@ -14,7 +14,7 @@ import { BillModal } from './components/BillModal';
 import { RevenueModal } from './components/RevenueModal';
 import { CashFlowReport } from './components/CashFlowReport';
 import { CloudKitSyncDrawer } from './components/CloudKitSyncDrawer';
-import { BankSyncModal } from './components/BankSyncModal';
+import { BankSyncModal, BankModalTab } from './components/BankSyncModal';
 import { BoletoScannerModal } from './components/BoletoScannerModal';
 import { ProfilesModal } from './components/ProfilesModal';
 import { ReceiptViewerModal } from './components/ReceiptViewerModal';
@@ -24,6 +24,7 @@ import { EditCoupleSalariesModal } from './components/EditCoupleSalariesModal';
 import { WifeConnectionModal } from './components/WifeConnectionModal';
 import { PullToRefresh } from './components/PullToRefresh';
 import { DataRecoveryModal } from './components/DataRecoveryModal';
+import { DeleteBillModal } from './components/DeleteBillModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
   const [conflictLogs, setConflictLogs] = useState<SyncConflictLog[]>(() => cloudkit.getConflictLogs());
   const [isOffline, setIsOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
 
   // Wife Connection State
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
@@ -78,6 +80,7 @@ export default function App() {
 
   const [isCloudDrawerOpen, setIsCloudDrawerOpen] = useState(false);
   const [isBankModalOpen, setIsBankModalOpen] = useState(false);
+  const [bankModalTab, setBankModalTab] = useState<BankModalTab>('card_purchase');
   const [isBoletoScannerOpen, setIsBoletoScannerOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -99,13 +102,6 @@ export default function App() {
     return Array.from(map.entries()).map(([monthId, count]) => ({ monthId, count }));
   }, [bills, selectedMonth.id]);
 
-  // Automatic rescue check to ensure bills and revenues are never lost or empty
-  useEffect(() => {
-    cloudkit.ensureDefaultDataIfEmpty();
-    setBills(cloudkit.getBills());
-    setRevenues(cloudkit.getRevenues());
-  }, []);
-
   // Profiles and Notifications
   const [profiles, setProfiles] = useState<UserProfile[]>(() => cloudkit.getProfiles());
 
@@ -115,6 +111,24 @@ export default function App() {
     { id: 'notif-3', title: 'Alerta vermelho para contas atrasadas', daysBeforeDue: -1, enabled: true },
     { id: 'notif-4', title: 'Notificar quando o cônjuge/morador anexar comprovante', daysBeforeDue: 0, enabled: true },
   ]);
+
+  // Automatic check to ensure bills & revenues are safe, recurring bills and revenues auto-populate subsequent months, and debts are not in revenues
+  useEffect(() => {
+    cloudkit.ensureDefaultDataIfEmpty();
+    cloudkit.sanitizeAndMigrateMismatchedRevenues();
+    const updatedBills = cloudkit.autoPropagateRecurringBills();
+    const updatedRevs = cloudkit.autoPropagateRecurringRevenues();
+    setBills(updatedBills);
+    setRevenues(updatedRevs);
+  }, []);
+
+  // When selected month changes, ensure all recurring and installment bills & revenues are populated
+  useEffect(() => {
+    const updatedBills = cloudkit.ensureRecurringBillsForMonth(selectedMonth.id);
+    setBills(updatedBills);
+    const updatedRevs = cloudkit.ensureRecurringRevenuesForMonth(selectedMonth.id);
+    setRevenues(updatedRevs);
+  }, [selectedMonth.id]);
 
   // Sync with CloudKit Real-Time BroadcastChannel
   useEffect(() => {
@@ -139,26 +153,21 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Check for upcoming bills to notify automatically
+  // Check for upcoming bills in current selected month to notify automatically
   useEffect(() => {
-    const overdue = bills.find(b => b.status === 'overdue');
+    const currentMonthPrefix = selectedMonth.id;
+    const monthBills = bills.filter(b => (b.dueDate || '').startsWith(currentMonthPrefix));
+    const overdue = monthBills.find(b => b.status === 'overdue');
     if (overdue) {
-      setToastNotification(`⚠️ Lembrete de Conta Atrasada: ${overdue.name} (R$ ${overdue.amount.toFixed(2)})`);
+      setToastNotification(`⚠️ Lembrete de Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2)})`);
     } else {
-      const dueSoon = bills.find(b => b.status === 'pending');
+      const todayStr = new Date().toISOString().split('T')[0];
+      const dueSoon = monthBills.find(b => b.status === 'pending' && (b.dueDate || '') >= todayStr);
       if (dueSoon) {
-        setToastNotification(`⏰ Próximo Vencimento: ${dueSoon.name} vence em breve (R$ ${dueSoon.amount.toFixed(2)})`);
+        setToastNotification(`⏰ Próximo Vencimento: ${dueSoon.name} vence em breve (R$ ${Number(dueSoon.amount || 0).toFixed(2)})`);
       }
     }
-  }, [bills]);
-
-  // Ensure debts & recurring bills propagate to current and future months automatically
-  useEffect(() => {
-    const updated = cloudkit.ensureRecurringBillsForMonth(selectedMonth.id);
-    if (updated.length !== bills.length) {
-      setBills(updated);
-    }
-  }, [selectedMonth.id]);
+  }, [bills, selectedMonth.id]);
 
   const showTemporaryToast = (msg: string) => {
     setToastNotification(msg);
@@ -200,48 +209,51 @@ export default function App() {
 
   // Month-aware Bills: returns actual saved bills for the selected month
   const currentMonthBills = useMemo(() => {
-    return bills.filter(b => b.dueDate.startsWith(selectedMonth.id));
+    return bills.filter(b => (b.dueDate || '').startsWith(selectedMonth.id));
   }, [bills, selectedMonth.id]);
+
+  // Month-aware Revenues: returns actual saved revenues for the selected month
+  const currentMonthRevenues = useMemo(() => {
+    return revenues.filter(r => (r.date || '').startsWith(selectedMonth.id));
+  }, [revenues, selectedMonth.id]);
 
   // Check if initial sample mock bills are present in current bills
   const hasMockBills = useMemo(() => {
-    const mockIds = ['bill-condominio', 'bill-luz', 'bill-gas', 'bill-internet', 'bill-supermercado', 'bill-saude'];
-    return bills.some(b => mockIds.includes(b.id));
+    return bills.some(b => isMockBill(b));
   }, [bills]);
 
-  // Salaries of Carlos and Paula (Editable by user)
+  // Salaries of Resident 1 and Resident 2 (Editable by user)
   const carlosCurrentSalary = useMemo(() => {
-    const r = revenues.find(x => x.profileName === 'Carlos' || x.name.toLowerCase().includes('carlos'));
-    return r ? r.amount : 6850;
-  }, [revenues]);
+    const userPName = profiles[0]?.name || 'Carlos';
+    const r = currentMonthRevenues.find(x => 
+      x.profileName === userPName || 
+      x.profileName === 'Carlos' || 
+      x.name.toLowerCase().includes(userPName.toLowerCase())
+    );
+    return r ? r.amount : 0;
+  }, [currentMonthRevenues, profiles]);
 
   const paulaCurrentSalary = useMemo(() => {
-    const r = revenues.find(x => 
+    const spousePName = profiles[1]?.name || 'Paula';
+    const r = currentMonthRevenues.find(x => 
+      x.profileName === spousePName || 
       x.profileName === 'Paula' || 
-      x.profileName === 'Camila' || 
-      x.name.toLowerCase().includes('paula') || 
-      x.name.toLowerCase().includes('camila')
+      x.profileName === 'Esposa' || 
+      x.name.toLowerCase().includes(spousePName.toLowerCase())
     );
-    return r ? r.amount : 7240;
-  }, [revenues]);
+    return r ? r.amount : 0;
+  }, [currentMonthRevenues, profiles]);
 
-  // Total Combined Revenue of the Household
+  // Total Combined Revenue of the Household for the selected month
   const totalGrandRevenue = useMemo(() => {
-    return revenues.reduce((sum, r) => sum + r.amount, 0);
-  }, [revenues]);
+    return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
+  }, [currentMonthRevenues]);
 
   // Handler to edit and save Carlos & Paula salaries
   const handleSaveCoupleSalaries = (carlosAmount: number, paulaAmount: number) => {
     cloudkit.updateCoupleSalaries(carlosAmount, paulaAmount, selectedMonth.id);
     setRevenues(cloudkit.getRevenues());
     showTemporaryToast(`Salários atualizados: Carlos (R$ ${carlosAmount.toFixed(2)}) e Paula (R$ ${paulaAmount.toFixed(2)})`);
-  };
-
-  // Handler to replicate recurring bills into a target subsequent month
-  const handleReplicateBillsToMonth = (targetMonthId: string) => {
-    const updated = cloudkit.replicateBillsToMonth(targetMonthId, selectedMonth.id);
-    setBills(cloudkit.getBills());
-    showTemporaryToast(`Contas replicadas para o mês ${targetMonthId} com sucesso!`);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
@@ -287,36 +299,130 @@ export default function App() {
 
   // Handlers for Bill operations
   const handleSaveBill = (
-    billData: Partial<Bill>,
+    billData: Partial<Bill> & { applyToFutureMonths?: boolean; previousName?: string },
     installmentConfig?: {
       totalInstallments: number;
       currentInstallment: number;
       valueIsPerInstallment: boolean;
     }
   ) => {
-    if (billData.recurrence === 'Parcelada' && installmentConfig) {
-      cloudkit.saveBillWithInstallments(billData, installmentConfig);
-    } else {
-      cloudkit.saveBill(billData);
-      if (billData.recurrence === 'Mensal Fixa') {
-        cloudkit.ensureRecurringBillsForMonth(selectedMonth.id);
+    // 1. Ensure existing bill's unique ID is properly referenced instead of triggering an insert
+    let targetId = billData.id || editingBill?.id;
+
+    if (!targetId) {
+      const allBills = cloudkit.getBills();
+      const cleanBarcode = (billData.barcode || '').replace(/\D/g, '');
+      const cleanName = (billData.name || '').trim().toLowerCase();
+      const targetMonth = (billData.dueDate || '').substring(0, 7);
+
+      const matchedExisting = allBills.find(b => {
+        const bBarcode = (b.barcode || '').replace(/\D/g, '');
+        if (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) return true;
+        const bMonth = (b.dueDate || '').substring(0, 7);
+        const bName = b.name.trim().toLowerCase();
+        return (bMonth === targetMonth || bMonth === selectedMonth.id) && bName === cleanName;
+      });
+
+      if (matchedExisting) {
+        targetId = matchedExisting.id;
       }
+    }
+
+    const finalBillData: Partial<Bill> & { applyToFutureMonths?: boolean; previousName?: string } = {
+      ...(editingBill || {}),
+      ...billData,
+      id: targetId,
+      applyToFutureMonths: billData.applyToFutureMonths,
+      previousName: billData.previousName || editingBill?.name,
+    };
+
+    if (finalBillData.recurrence === 'Parcelada' && installmentConfig && installmentConfig.totalInstallments > 1) {
+      cloudkit.saveBillWithInstallments(finalBillData, installmentConfig);
+    } else {
+      cloudkit.saveBill(finalBillData);
     }
     setBills(cloudkit.getBills());
     setConflictLogs(cloudkit.getConflictLogs());
-    showTemporaryToast(
-      billData.recurrence === 'Parcelada' && installmentConfig && installmentConfig.totalInstallments > 1
-        ? `✅ Dívida parcelada em ${installmentConfig.totalInstallments}x salva e lançada nos próximos meses!`
-        : (billData.id ? 'Conta atualizada com sucesso!' : 'Nova conta cadastrada e sincronizada!')
-    );
+    setEditingBill(null);
+
+    const billMonth = (finalBillData.dueDate || '').substring(0, 7);
+    const monthNames: Record<string, string> = {
+      '2026-08': 'Agosto/2026',
+      '2026-09': 'Setembro/2026',
+      '2026-10': 'Outubro/2026',
+      '2026-11': 'Novembro/2026',
+      '2026-12': 'Dezembro/2026',
+      '2027-01': 'Janeiro/2027',
+      '2027-02': 'Fevereiro/2027',
+      '2027-03': 'Março/2027',
+    };
+    const targetLabel = monthNames[billMonth] || billMonth;
+
+    if (finalBillData.recurrence === 'Parcelada' && installmentConfig && installmentConfig.totalInstallments > 1) {
+      showTemporaryToast(`✅ Dívida parcelada em ${installmentConfig.totalInstallments}x salva e lançada nos próximos meses!`);
+    } else if (billMonth && billMonth !== selectedMonth.id) {
+      const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === billMonth) || {
+        id: billMonth,
+        label: targetLabel,
+        shortLabel: billMonth,
+      };
+      setSelectedMonth(targetMonthOption);
+      showTemporaryToast(`✅ Conta salva com vencimento em ${targetLabel}!`);
+    } else {
+      showTemporaryToast(targetId ? 'Conta atualizada com sucesso!' : 'Nova conta cadastrada e sincronizada!');
+    }
   };
 
-  const handleDeleteBill = (id: string) => {
-    if (confirm('Deseja realmente remover esta conta das Finanças da Casa?')) {
-      cloudkit.deleteBill(id);
-      setBills(cloudkit.getBills());
-      showTemporaryToast('Conta excluída.');
-    }
+  const handleMoveBillMonth = (bill: Bill, targetMonthId: string) => {
+    const currentDay = (bill.dueDate.split('-')[2] || '10').padStart(2, '0');
+    const [y, m] = targetMonthId.split('-').map(Number);
+    const maxDays = new Date(y, m, 0).getDate();
+    const safeDay = String(Math.min(parseInt(currentDay, 10), maxDays)).padStart(2, '0');
+    const newDueDate = `${targetMonthId}-${safeDay}`;
+
+    cloudkit.saveBill({
+      ...bill,
+      dueDate: newDueDate,
+    });
+    setBills(cloudkit.getBills());
+    setConflictLogs(cloudkit.getConflictLogs());
+
+    const monthNames: Record<string, string> = {
+      '2026-08': 'Agosto/2026',
+      '2026-09': 'Setembro/2026',
+      '2026-10': 'Outubro/2026',
+      '2026-11': 'Novembro/2026',
+      '2026-12': 'Dezembro/2026',
+      '2027-01': 'Janeiro/2027',
+      '2027-02': 'Fevereiro/2027',
+      '2027-03': 'Março/2027',
+    };
+    const targetLabel = monthNames[targetMonthId] || targetMonthId;
+    const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === targetMonthId) || {
+      id: targetMonthId,
+      label: targetLabel,
+      shortLabel: targetMonthId,
+    };
+    setSelectedMonth(targetMonthOption);
+    showTemporaryToast(`✅ Dívida "${bill.name}" movida para ${targetLabel}!`);
+  };
+
+  const handleDeleteBill = (bill: Bill) => {
+    setBillToDelete(bill);
+  };
+
+  const handleDeleteSingleMonth = (bill: Bill) => {
+    cloudkit.deleteBill(bill.id);
+    setBills(cloudkit.getBills());
+    setBillToDelete(null);
+    showTemporaryToast(`Conta "${bill.name}" excluída de ${selectedMonth.label}.`);
+  };
+
+  const handleDeleteAllMonths = (bill: Bill) => {
+    const deletedIds = cloudkit.deleteBillSeries(bill);
+    setBills(cloudkit.getBills());
+    setBillToDelete(null);
+    showTemporaryToast(`🗑️ Dívida "${bill.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
   const handleTogglePaid = (bill: Bill) => {
@@ -328,6 +434,26 @@ export default function App() {
 
   // Handlers for Revenue operations
   const handleSaveRevenue = (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string }) => {
+    // If user saved a bill/debt in revenue form, intercept it, save as Bill, and do not save as Revenue!
+    if (cloudkit.isDebtExpense(revData)) {
+      const billData: Partial<Bill> = {
+        name: revData.name,
+        amount: revData.amount,
+        dueDate: revData.date,
+        category: cloudkit.guessCategoryFromName(revData.name),
+        favored: revData.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() || revData.name,
+        status: 'paid',
+        recurrence: 'Mensal Fixa',
+        fixedValueType: revData.amount > 0 ? 'fixed_value' : 'variable_value',
+        splitHousehold: true,
+      };
+      cloudkit.saveBill(billData);
+      setBills(cloudkit.getBills());
+      setRevenues(cloudkit.getRevenues());
+      showTemporaryToast(`Conta "${revData.name}" direcionada com sucesso para Dívidas do Lar!`);
+      return;
+    }
+
     cloudkit.saveRevenue(revData);
     setRevenues(cloudkit.getRevenues());
     showTemporaryToast('Receita adicionada ao Fluxo de Caixa!');
@@ -413,26 +539,79 @@ export default function App() {
 
   // Import bank transactions
   const handleImportBankTransactions = (newBills: Partial<Bill>[], newRevenues: Partial<Revenue>[]) => {
-    newBills.forEach(b => cloudkit.saveBill(b));
-    newRevenues.forEach(r => cloudkit.saveRevenue(r as any));
+    const validRevenues: Partial<Revenue>[] = [];
+    const extraBills: Partial<Bill>[] = [];
+
+    newRevenues.forEach(r => {
+      if (cloudkit.isDebtExpense(r as any)) {
+        extraBills.push({
+          name: r.name,
+          amount: Math.abs(r.amount || 0),
+          dueDate: r.date || `${selectedMonth.id}-10`,
+          category: cloudkit.guessCategoryFromName(r.name || ''),
+          favored: r.name ? r.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() : 'Despesa Bancária',
+          status: 'paid',
+          recurrence: 'Mensal Fixa',
+          fixedValueType: (r.amount || 0) > 0 ? 'fixed_value' : 'variable_value',
+          splitHousehold: true,
+          notes: 'Importado via Extrato (classificado como Dívida)',
+        });
+      } else {
+        validRevenues.push(r);
+      }
+    });
+
+    const allBillsToSave = [...newBills, ...extraBills];
+    allBillsToSave.forEach(b => cloudkit.saveBill(b));
+    validRevenues.forEach(r => cloudkit.saveRevenue(r as any));
     setBills(cloudkit.getBills());
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Importação concluída: ${newBills.length} despesas reais e ${newRevenues.length} receitas inseridas!`);
+    showTemporaryToast(`Importação concluída: ${allBillsToSave.length} despesas salvas em Dívidas e ${validRevenues.length} receitas registradas!`);
+  };
+
+  // Handle credit card purchase published
+  const handlePurchasePublished = (result: CardPurchaseResult) => {
+    setBills(cloudkit.getBills());
+    const firstDueDateDisplay = result.firstDueDate ? result.firstDueDate.split('-').reverse().join('/') : '';
+    showTemporaryToast(
+      `💳 Compra registrada! ${result.installmentsCount} parcelas de R$ ${result.installmentAmount.toFixed(2).replace('.', ',')} agendadas no app (1ª em ${firstDueDateDisplay}).`
+    );
   };
 
   // Boleto / Pix AI Scanner completed
   const handleBoletoScanned = (scannedData: Partial<Bill>) => {
     const processed = parseScannedBoletoOrPix(scannedData, selectedMonth.id);
-    setEditingBill(processed as Bill);
+    const allBills = cloudkit.getBills();
+    const cleanBarcode = (processed.barcode || '').replace(/\D/g, '');
+    const cleanName = (processed.name || '').trim().toLowerCase();
+    const cleanFavored = (processed.favored || '').trim().toLowerCase();
+
+    const existingMatch = allBills.find(b => {
+      const bBarcode = (b.barcode || '').replace(/\D/g, '');
+      if (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) return true;
+      const bName = b.name.trim().toLowerCase();
+      const bFavored = (b.favored || '').trim().toLowerCase();
+      return bName === cleanName || (cleanFavored.length > 3 && bFavored === cleanFavored);
+    });
+
+    const billToEdit: Partial<Bill> = {
+      ...(existingMatch || {}),
+      ...processed,
+      pixType: processed.pixType as any,
+      recurrence: (processed.recurrence as any) || 'Mensal Fixa',
+      id: scannedData.id || processed.id || existingMatch?.id,
+    };
+
+    setEditingBill(billToEdit as Bill);
     setIsBillModalOpen(true);
-    const dueDateDisplay = processed.dueDate ? processed.dueDate.split('-').reverse().join('/') : '';
+    const dueDateDisplay = billToEdit.dueDate ? billToEdit.dueDate.split('-').reverse().join('/') : '';
     showTemporaryToast(
-      `✨ Boleto/Pix processado: Favorecido "${processed.favored || processed.name}" e Vencimento (${dueDateDisplay}) preenchidos automaticamente!`
+      `✨ Boleto/Pix processado: Favorecido "${billToEdit.favored || billToEdit.name}" e Vencimento (${dueDateDisplay}) preenchidos automaticamente!`
     );
   };
 
   return (
-    <div className={`min-h-screen flex flex-col font-sans transition-colors duration-300 w-full max-w-full overflow-x-hidden ${
+    <div className={`h-full min-h-0 flex flex-col font-sans transition-colors duration-300 w-full overflow-hidden ${
       isDarkMode ? 'dark bg-[#080D1E] text-white' : 'bg-[#F4F6F9] text-slate-900'
     }`}>
       {/* Native App Header */}
@@ -461,23 +640,26 @@ export default function App() {
 
       {/* Intelligent Due Date Notification Toast Banner */}
       {toastNotification && (
-        <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 mx-4 mt-3 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs">
-          <div className="flex items-center gap-2 min-w-0">
-            <Bell className="w-4 h-4 text-[#FFD166] flex-shrink-0 animate-pulse" />
-            <span className="font-semibold truncate">{toastNotification}</span>
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-4 mt-2.5 flex-shrink-0">
+          <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs">
+            <div className="flex items-center gap-2 min-w-0">
+              <Bell className="w-4 h-4 text-[#FFD166] flex-shrink-0 animate-pulse" />
+              <span className="font-semibold truncate">{toastNotification}</span>
+            </div>
+            <button
+              onClick={() => setToastNotification(null)}
+              className="text-slate-400 hover:text-white text-[11px] font-bold px-1.5 py-0.5 flex-shrink-0"
+            >
+              Dispensar
+            </button>
           </div>
-          <button
-            onClick={() => setToastNotification(null)}
-            className="text-slate-400 hover:text-white text-[11px] font-bold px-1.5 py-0.5"
-          >
-            Dispensar
-          </button>
         </div>
       )}
 
       {/* Main Content Area with Pull-To-Refresh Support */}
-      <main className="flex-1 max-w-xl w-full mx-auto pb-24 min-w-0 overflow-x-hidden">
-        <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
+      <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0 pb-8">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto min-h-full">
+          <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
         {currentTab === 'bills' && (
           <div className="space-y-1">
             {/* 1. Month Selector with Subsequent Months starting October 2026 */}
@@ -485,11 +667,10 @@ export default function App() {
               selectedMonthId={selectedMonth.id}
               onSelectMonth={(month) => {
                 setSelectedMonth(month);
-                const updated = cloudkit.ensureRecurringBillsForMonth(month.id);
+                const updated = cloudkit.autoPropagateRecurringBills([month.id]);
                 setBills(updated);
               }}
               bills={bills}
-              onReplicateBillsToMonth={handleReplicateBillsToMonth}
             />
 
             {/* Quick Pull / Manual Refresh Toolbar Bar */}
@@ -513,7 +694,7 @@ export default function App() {
 
             {/* 2. Couple Revenue Summary */}
             <CoupleRevenueCard
-              revenues={revenues}
+              revenues={currentMonthRevenues}
               bills={currentMonthBills}
               selectedMonth={selectedMonth.label}
               onOpenNewRevenue={() => {
@@ -571,6 +752,45 @@ export default function App() {
                   </button>
                 ))}
               </div>
+            </div>
+
+            {/* Quick Actions Row: Compra no Cartão & Notificação Push */}
+            <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
+              <button
+                type="button"
+                onClick={() => {
+                  setBankModalTab('card_purchase');
+                  setIsBankModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-xs active-press whitespace-nowrap transition-all"
+              >
+                <CreditCard className="w-3.5 h-3.5" />
+                <span>💳 Compra no Cartão</span>
+                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">
+                  Parcelas Auto
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setBankModalTab('live_sync');
+                  setIsBankModalOpen(true);
+                }}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200/80 dark:border-slate-700/80 active-press whitespace-nowrap transition-all"
+              >
+                <Smartphone className="w-3.5 h-3.5 text-purple-500" />
+                <span>Colar Push do Banco</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsBoletoScannerOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all"
+              >
+                <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                <span>Escanear Boleto/Pix</span>
+              </button>
             </div>
 
             {/* Search & Category Filter Bar */}
@@ -666,32 +886,6 @@ export default function App() {
                       <span>Recuperar Dados & Backups</span>
                     </button>
 
-                    {/* Restore Couple Preset Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        cloudkit.restoreCouplePresetData(selectedMonth.id);
-                        setBills(cloudkit.getBills());
-                        setRevenues(cloudkit.getRevenues());
-                        setToastNotification(`Contas e salários de Carlos e Paula restaurados para ${selectedMonth.label}!`);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-teal-500/15 hover:bg-teal-500/25 text-teal-700 dark:text-teal-300 font-bold text-xs rounded-xl border border-teal-500/30 active-press"
-                      title="Carregar contas e salários essenciais da família"
-                    >
-                      <Sparkles className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                      <span>Restaurar Base Carlos & Paula</span>
-                    </button>
-
-                    {currentMonthBills.length === 0 && (
-                      <button
-                        type="button"
-                        onClick={() => handleReplicateBillsToMonth(selectedMonth.id)}
-                        className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs rounded-xl border border-slate-200 dark:border-slate-700 active-press"
-                      >
-                        <span>📋 Replicar Contas Recorrentes</span>
-                      </button>
-                    )}
-
                     <button
                       type="button"
                       onClick={() => {
@@ -718,6 +912,7 @@ export default function App() {
                     onTogglePaid={handleTogglePaid}
                     onViewReceipt={handleViewReceipt}
                     onAttachReceipt={handleAttachReceipt}
+                    onMoveMonth={handleMoveBillMonth}
                   />
                 ))
               )}
@@ -729,7 +924,7 @@ export default function App() {
         {currentTab === 'cashflow' && (
           <CashFlowReport
             bills={currentMonthBills}
-            revenues={revenues}
+            revenues={currentMonthRevenues}
             selectedMonth={selectedMonth.label}
             onOpenNewRevenue={() => {
               setEditingRevenue(null);
@@ -813,16 +1008,17 @@ export default function App() {
             </div>
           </div>
         )}
-        </PullToRefresh>
+          </PullToRefresh>
+        </div>
       </main>
 
-      {/* Native iOS Bottom Tab Bar Navigation */}
-      <nav className="fixed bottom-0 inset-x-0 bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 z-40 px-4 py-1.5 pb-[max(0.75rem,env(safe-area-inset-bottom))] shadow-lg">
-        <div className="max-w-xl mx-auto flex items-center justify-around">
+      {/* Native Bottom Tab Bar Navigation */}
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-1 sm:px-4 py-1 sm:py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-0.5 sm:gap-1">
           {/* Tab 1: Contas */}
           <button
             onClick={() => setCurrentTab('bills')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
               currentTab === 'bills'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
                 : 'text-slate-400 hover:text-slate-600'
@@ -836,57 +1032,58 @@ export default function App() {
                 </span>
               )}
             </div>
-            <span className="text-[10px] tracking-tight">Dívidas</span>
+            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Dívidas</span>
           </button>
 
           {/* Tab 2: Fluxo de Caixa */}
           <button
             onClick={() => setCurrentTab('cashflow')}
-            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
               currentTab === 'cashflow'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] tracking-tight">Fluxo de Caixa</span>
+            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
           </button>
 
-          {/* Tab 3: Bancos & Open Finance */}
+          {/* Tab 3: Cartões & Sync */}
           <button
             onClick={() => {
               setCurrentTab('bank');
+              setBankModalTab('card_purchase');
               setIsBankModalOpen(true);
             }}
-            className={`flex flex-col items-center gap-1 py-1 px-3 rounded-xl transition-all ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
               currentTab === 'bank'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <Landmark className="w-5 h-5" />
-            <span className="text-[10px] tracking-tight">Bancos API</span>
+            <CreditCard className="w-5 h-5 text-purple-500" />
+            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Cartões & Sync</span>
           </button>
 
           {/* Tab 4: CloudKit Sync Drawer */}
           <button
             onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <div className="relative">
               <Cloud className="w-5 h-5 text-teal-600 dark:text-teal-400" />
               <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
-            <span className="text-[10px] tracking-tight">iCloud Sync</span>
+            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">iCloud Sync</span>
           </button>
 
           {/* Tab 5: Moradores & Configurações */}
           <button
             onClick={() => setIsProfilesModalOpen(true)}
-            className="flex flex-col items-center gap-1 py-1 px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <Users className="w-5 h-5" />
-            <span className="text-[10px] tracking-tight">Moradores</span>
+            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Moradores</span>
           </button>
         </div>
       </nav>
@@ -913,6 +1110,18 @@ export default function App() {
         profiles={profiles}
         initialRevenue={editingRevenue}
         defaultMonth={selectedMonth.id}
+        onSwitchToBill={(name, amount) => {
+          setEditingBill({
+            name: name || '',
+            amount: parseFloat((amount || '').replace(',', '.')) || 0,
+            dueDate: `${selectedMonth.id}-10`,
+            category: cloudkit.guessCategoryFromName(name || ''),
+            recurrence: 'Mensal Fixa',
+            fixedValueType: parseFloat(amount || '') > 0 ? 'fixed_value' : 'variable_value',
+            splitHousehold: true,
+          } as any);
+          setIsBillModalOpen(true);
+        }}
       />
 
       <EditCoupleSalariesModal
@@ -945,6 +1154,8 @@ export default function App() {
         isOpen={isBankModalOpen}
         onClose={() => setIsBankModalOpen(false)}
         onImportTransactions={handleImportBankTransactions}
+        onPurchasePublished={handlePurchasePublished}
+        initialTab={bankModalTab}
       />
 
       <BoletoScannerModal
@@ -993,6 +1204,7 @@ export default function App() {
         isOpen={isDataRecoveryModalOpen}
         onClose={() => setIsDataRecoveryModalOpen(false)}
         currentMonthId={selectedMonth.id}
+        currentMonthLabel={selectedMonth.label}
         onSelectMonth={(monthId) => {
           const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
             id: monthId,
@@ -1006,6 +1218,15 @@ export default function App() {
           setRevenues(cloudkit.getRevenues());
           setToastNotification('Contas e receitas restauradas e atualizadas com sucesso!');
         }}
+      />
+
+      <DeleteBillModal
+        isOpen={Boolean(billToDelete)}
+        onClose={() => setBillToDelete(null)}
+        bill={billToDelete}
+        currentMonthLabel={selectedMonth.label}
+        onDeleteCurrentMonth={handleDeleteSingleMonth}
+        onDeleteAllMonths={handleDeleteAllMonths}
       />
     </div>
   );

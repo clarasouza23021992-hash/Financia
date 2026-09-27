@@ -102,7 +102,7 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             </span>
           </div>
           <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
-            Os valores informados serão salvos e sincronizados automaticamente na nuvem.
+            🔁 Os salários serão salvos e preenchidos automaticamente para este mês e todos os meses subsequentes.
           </p>
         </div>
 
@@ -168,30 +168,18 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             </div>
           </div>
 
-          {/* Quick preset buttons */}
-          <div className="flex items-center gap-2 pt-1">
-            <span className="text-[11px] text-slate-500 dark:text-slate-400 font-medium">
-              Ajuste rápido:
-            </span>
+          {/* Clean inputs helper */}
+          <div className="flex items-center justify-between pt-1 text-[11px] text-slate-500 dark:text-slate-400">
+            <span>Preencha os valores exatos recebidos por cada um.</span>
             <button
               type="button"
               onClick={() => {
-                setCarlosInput('7000,00');
-                setPaulaInput('7000,00');
+                setCarlosInput('');
+                setPaulaInput('');
               }}
-              className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg hover:bg-slate-200"
+              className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-lg"
             >
-              7k cada
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setCarlosInput('6850,00');
-                setPaulaInput('7240,00');
-              }}
-              className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 font-semibold rounded-lg hover:bg-slate-200"
-            >
-              Padrão
+              Limpar Campos
             </button>
           </div>
 

@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { 
   ShieldCheck, RefreshCw, AlertCircle, Database, CheckCircle2, 
-  ArrowRight, Download, Upload, Calendar, X, Sparkles, FileText, Landmark
+  ArrowRight, Download, Upload, Calendar, X, Sparkles, FileText, Landmark,
+  Trash2, AlertTriangle, Check
 } from 'lucide-react';
 import { cloudkit } from '../services/cloudkitSync';
 import { Bill, Revenue } from '../types/finance';
@@ -10,6 +11,7 @@ interface DataRecoveryModalProps {
   isOpen: boolean;
   onClose: () => void;
   currentMonthId: string;
+  currentMonthLabel?: string;
   onSelectMonth?: (monthId: string) => void;
   onDataRestored: () => void;
 }
@@ -18,6 +20,7 @@ export const DataRecoveryModal: React.FC<DataRecoveryModalProps> = ({
   isOpen,
   onClose,
   currentMonthId,
+  currentMonthLabel,
   onSelectMonth,
   onDataRestored,
 }) => {
@@ -69,6 +72,7 @@ export const DataRecoveryModal: React.FC<DataRecoveryModalProps> = ({
     }
   };
 
+  // Full backup
   const handleExportBackup = () => {
     const bills = cloudkit.getBills();
     const revenues = cloudkit.getRevenues();
@@ -85,10 +89,41 @@ export const DataRecoveryModal: React.FC<DataRecoveryModalProps> = ({
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `backup_financas_${new Date().toISOString().slice(0, 10)}.json`;
+    a.download = `backup_financas_completo_${new Date().toISOString().slice(0, 10)}.json`;
     a.click();
     URL.revokeObjectURL(url);
-    setFeedbackMsg('Backup baixado com sucesso em arquivo JSON!');
+    setFeedbackMsg('Backup completo baixado com sucesso em arquivo JSON!');
+  };
+
+  // Backup with ONLY visible debts of the current month
+  const handleExportVisibleMonthBackup = () => {
+    const res = cloudkit.exportVisibleDebtsBackup({
+      monthId: currentMonthId,
+      monthLabel: currentMonthLabel || currentMonthId,
+      scope: 'current_month',
+    });
+    setFeedbackMsg(`Backup gerado! ${res.count} dívidas visíveis de ${currentMonthLabel || currentMonthId} baixadas (${res.filename}).`);
+  };
+
+  // Backup with ONLY all currently active and visible debts
+  const handleExportAllVisibleBackup = () => {
+    const res = cloudkit.exportVisibleDebtsBackup({
+      scope: 'all_visible',
+    });
+    setFeedbackMsg(`Backup gerado! ${res.count} dívidas ativas e visíveis do app baixadas (${res.filename}).`);
+  };
+
+  // Purge old backups and old debts permanently
+  const handlePurgeOldBackups = () => {
+    const confirmMsg =
+      'Atenção: Esta ação vai apagar definitivamente todos os backups antigos em cache do navegador e o histórico de dívidas antigas excluídas.\n\nApenas as dívidas e receitas ATIVAS e VISÍVEIS no aplicativo serão preservadas e mantidas intactas.\n\nDeseja realizar esta limpeza agora?';
+    if (confirm(confirmMsg)) {
+      const res = cloudkit.purgeOldBackupsAndLegacyDebts();
+      onDataRestored();
+      setFeedbackMsg(
+        `Limpeza concluída! ${res.purgedDebtsCount} backups/chaves antigas removidas. Restaram ${res.activeBillsCount} dívidas e ${res.activeRevenuesCount} receitas ativas protegidas.`
+      );
+    }
   };
 
   const handleImportBackup = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -341,26 +376,84 @@ export const DataRecoveryModal: React.FC<DataRecoveryModalProps> = ({
 
           {activeTab === 'backup' && (
             <div className="space-y-4">
+              {/* Opção 1: Salvar Backup com Somente as Dívidas Visíveis no App */}
               <div className="bg-slate-50 dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-                <h4 className="text-xs font-bold text-slate-900 dark:text-white">
-                  Backup Manual & Portabilidade
-                </h4>
-                <p className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Baixe uma cópia de segurança em formato JSON a qualquer momento ou envie um arquivo anterior para restaurar tudo.
-                </p>
+                <div className="flex items-center gap-2">
+                  <div className="w-6 h-6 rounded-lg bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center">
+                    <Download className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-slate-900 dark:text-white">
+                      Salvar Backup com Dívidas Visíveis no App
+                    </h4>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                      Gere arquivos de backup limpos contendo somente as dívidas ativas e visíveis.
+                    </p>
+                  </div>
+                </div>
 
-                <div className="grid grid-cols-2 gap-2 pt-1">
+                <div className="space-y-2 pt-1">
+                  {/* Botão: Dívidas visíveis do mês atual */}
+                  <button
+                    type="button"
+                    onClick={handleExportVisibleMonthBackup}
+                    className="w-full p-3 bg-white dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-left rounded-xl border border-slate-200 dark:border-slate-700 flex items-start gap-3 transition-all shadow-xs group"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-teal-500/10 text-teal-600 dark:text-teal-400 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-teal-500 group-hover:text-white transition-colors">
+                      <Calendar className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Salvar Backup (Apenas Dívidas Visíveis deste Mês)
+                        </span>
+                        <span className="text-[10px] bg-teal-100 dark:bg-teal-900/50 text-teal-700 dark:text-teal-300 font-semibold px-2 py-0.5 rounded-full">
+                          {currentMonthLabel || currentMonthId}
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Exporta unicamente as dívidas visíveis em <b>{currentMonthLabel || currentMonthId}</b>, sem histórico antigo de outros meses.
+                      </p>
+                    </div>
+                  </button>
+
+                  {/* Botão: Todas as dívidas ativas e visíveis */}
+                  <button
+                    type="button"
+                    onClick={handleExportAllVisibleBackup}
+                    className="w-full p-3 bg-white dark:bg-slate-800/90 hover:bg-slate-100 dark:hover:bg-slate-700/80 text-left rounded-xl border border-slate-200 dark:border-slate-700 flex items-start gap-3 transition-all shadow-xs group"
+                  >
+                    <div className="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 mt-0.5 group-hover:bg-emerald-500 group-hover:text-white transition-colors">
+                      <CheckCircle2 className="w-4 h-4" />
+                    </div>
+                    <div className="flex-1 min-w-0">
+                      <div className="flex items-center justify-between">
+                        <span className="text-xs font-bold text-slate-900 dark:text-white">
+                          Salvar Backup (Todas as Dívidas Ativas e Visíveis)
+                        </span>
+                        <span className="text-[10px] bg-emerald-100 dark:bg-emerald-900/50 text-emerald-700 dark:text-emerald-300 font-semibold px-2 py-0.5 rounded-full">
+                          Limpo & Atual
+                        </span>
+                      </div>
+                      <p className="text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        Exporta todas as contas e receitas ativas no momento, excluindo qualquer resíduo ou dívida apagada.
+                      </p>
+                    </div>
+                  </button>
+                </div>
+
+                <div className="grid grid-cols-2 gap-2 pt-1 border-t border-slate-200/70 dark:border-slate-700/70">
                   <button
                     type="button"
                     onClick={handleExportBackup}
-                    className="p-3 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-white text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-1.5 transition-all shadow-xs"
+                    className="p-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-xs"
                   >
-                    <Download className="w-4 h-4 text-teal-500" />
-                    <span>Baixar Backup</span>
+                    <Download className="w-3.5 h-3.5 text-blue-500" />
+                    <span>Backup Completo (Tudo)</span>
                   </button>
 
-                  <label className="p-3 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-800 dark:text-white text-xs font-bold rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer">
-                    <Upload className="w-4 h-4 text-blue-500" />
+                  <label className="p-2.5 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 text-xs font-semibold rounded-xl border border-slate-200 dark:border-slate-700 flex items-center justify-center gap-1.5 transition-all shadow-xs cursor-pointer">
+                    <Upload className="w-3.5 h-3.5 text-indigo-500" />
                     <span>Importar Backup</span>
                     <input
                       type="file"
@@ -370,6 +463,39 @@ export const DataRecoveryModal: React.FC<DataRecoveryModalProps> = ({
                     />
                   </label>
                 </div>
+              </div>
+
+              {/* Opção 2: Apagar Backups Antigos com Dívidas Antigas */}
+              <div className="bg-rose-50/60 dark:bg-rose-950/20 p-4 rounded-2xl border border-rose-200 dark:border-rose-900/50 space-y-3">
+                <div className="flex items-start gap-2.5">
+                  <div className="w-7 h-7 rounded-xl bg-rose-500/15 text-rose-600 dark:text-rose-400 flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Trash2 className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h4 className="text-xs font-bold text-rose-950 dark:text-rose-200">
+                      Apagar Backups Antigos & Dívidas Antigas
+                    </h4>
+                    <p className="text-[11px] text-rose-800/80 dark:text-rose-300/80 mt-0.5 leading-relaxed">
+                      Exclui permanentemente todos os backups antigos em cache do navegador, elimina restos de dívidas excluídas no passado e limpa os registros da lixeira.
+                    </p>
+                  </div>
+                </div>
+
+                <div className="p-2.5 bg-white/80 dark:bg-[#0A1128]/80 rounded-xl border border-rose-200/60 dark:border-rose-900/40 text-[11px] text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                  <ShieldCheck className="w-4 h-4 text-emerald-500 flex-shrink-0" />
+                  <span>
+                    <b>Garantia:</b> Apenas as dívidas e receitas <b>visíveis e ativas no app</b> serão mantidas e protegidas.
+                  </span>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handlePurgeOldBackups}
+                  className="w-full py-2.5 px-4 bg-rose-600 hover:bg-rose-700 active:bg-rose-800 text-white font-bold text-xs rounded-xl shadow-xs flex items-center justify-center gap-2 transition-all active-press"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span>Apagar Backups Antigos e Dívidas Antigas</span>
+                </button>
               </div>
             </div>
           )}

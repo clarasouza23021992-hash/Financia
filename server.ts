@@ -37,28 +37,16 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Filter out only exact original dummy mock bills, never user bills
+// Filter out only explicitly marked mock/demo seed items, NEVER real user bills
 function isMockBillServer(b: any): boolean {
   if (!b) return false;
-  // If user edited or created this bill with version > 1 or custom device, it's real!
-  if (b.version && b.version > 1) return false;
-  if (b.isEdited || b.lastEditedAt) return false;
-  
-  const id = (b.id || '').toLowerCase();
-  const favored = (b.favored || '').toLowerCase();
-  
-  // Only match the original static dummy placeholder records
-  if (id === 'bill-condominio' && favored.includes('administradora predial alfa')) return true;
-  if (id === 'bill-luz' && favored.includes('enel distribuição sp') && b.amount === 230) return true;
-  if (id === 'bill-gas' && favored.includes('comgás são paulo') && b.amount === 185) return true;
-  if (id === 'bill-gas-pago' && favored.includes('comgás são paulo')) return true;
-  if (id === 'bill-internet' && favored.includes('claro brasil') && b.amount === 149.9) return true;
-  if (id === 'bill-financiamento' && favored.includes('caixa') && b.amount === 1850) return true;
-  if (id === 'bill-mercado' && favored.includes('pão de açúcar') && b.amount === 720) return true;
-  if (id === 'bill-streaming' && favored.includes('netflix entretenimento') && b.amount === 55.9) return true;
-  if (id === 'bill-saude' && favored.includes('unimed') && b.amount === 940) return true;
+  return b.isMockSeed === true || b.isDemoPlaceholder === true;
+}
 
-  return false;
+// Filter out only explicitly marked mock/demo seed revenues
+function isMockRevenueServer(r: any): boolean {
+  if (!r) return false;
+  return r.isMockSeed === true || r.isDemoPlaceholder === true;
 }
 
 function loadHouseholds(): Record<string, HouseholdData> {
@@ -66,7 +54,7 @@ function loadHouseholds(): Record<string, HouseholdData> {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const store: Record<string, HouseholdData> = JSON.parse(raw);
-      // Clean mock bills from all households
+      // Clean mock bills and mock revenues from all households
       let changed = false;
       Object.keys(store).forEach(k => {
         const h = store[k];
@@ -74,6 +62,11 @@ function loadHouseholds(): Record<string, HouseholdData> {
           const originalLen = h.bills.length;
           h.bills = h.bills.filter((b: any) => !isMockBillServer(b));
           if (h.bills.length !== originalLen) changed = true;
+        }
+        if (h && Array.isArray(h.revenues)) {
+          const originalRevLen = h.revenues.length;
+          h.revenues = h.revenues.filter((r: any) => !isMockRevenueServer(r));
+          if (h.revenues.length !== originalRevLen) changed = true;
         }
       });
       if (changed) {
@@ -95,13 +88,111 @@ function saveHouseholds(data: Record<string, HouseholdData>) {
   }
 }
 
+// Server-side bill deduplication to eliminate duplicate bills and phantom 0.00 records
+function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bills: any[]; deletedIds: string[] } {
+  if (!Array.isArray(bills)) return { bills: [], deletedIds };
+  const deletedSet = new Set(deletedIds);
+  const map = new Map<string, any>();
+  const extraDeleted: string[] = [];
+
+  for (const b of bills) {
+    if (!b || !b.id || isMockBillServer(b) || deletedSet.has(b.id)) {
+      if (b?.id && !deletedSet.has(b.id) && isMockBillServer(b)) {
+        deletedSet.add(b.id);
+        extraDeleted.push(b.id);
+      }
+      continue;
+    }
+
+    const month = (b.dueDate || '').substring(0, 7);
+    const cleanName = (b.name || '').trim().toLowerCase();
+    const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
+    const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
+
+    if (map.has(key)) {
+      const existing = map.get(key);
+      let keepIncoming = false;
+      if (b.status === 'paid' && existing.status !== 'paid') {
+        keepIncoming = true;
+      } else if (existing.status === 'paid' && b.status !== 'paid') {
+        keepIncoming = false;
+      } else if (b.receiptUrl && !existing.receiptUrl) {
+        keepIncoming = true;
+      } else if (existing.receiptUrl && !b.receiptUrl) {
+        keepIncoming = false;
+      } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
+        keepIncoming = true;
+      } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
+        keepIncoming = false;
+      } else {
+        const bVer = b.version || 1;
+        const eVer = existing.version || 1;
+        if (bVer > eVer) {
+          keepIncoming = true;
+        } else {
+          const bTime = new Date(b.updatedAt || 0).getTime();
+          const eTime = new Date(existing.updatedAt || 0).getTime();
+          if (bTime > eTime) keepIncoming = true;
+        }
+      }
+
+      if (keepIncoming) {
+        extraDeleted.push(existing.id);
+        deletedSet.add(existing.id);
+        map.set(key, b);
+      } else {
+        extraDeleted.push(b.id);
+        deletedSet.add(b.id);
+      }
+    } else {
+      map.set(key, b);
+    }
+  }
+
+  // Cross-month cleanup: only for moved/rescheduled one-time pontual bills
+  const list = Array.from(map.values());
+  const finalList: any[] = [];
+  
+  for (const b of list) {
+    // CRITICAL: Recurring bills ('Mensal Fixa') and installment bills ('Parcelada') legitimately exist in multiple months!
+    if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType || b.isProjected) {
+      finalList.push(b);
+      continue;
+    }
+
+    const bMonth = (b.dueDate || '').substring(0, 7);
+    const bName = (b.name || '').trim().toLowerCase();
+    const bBarcode = (b.barcode || '').replace(/\D/g, '');
+
+    // Check if there is a newer scheduled version of this single pontual bill in a later month
+    const hasLaterMonthVersion = list.some(other => {
+      if (other.id === b.id) return false;
+      if (other.recurrence === 'Mensal Fixa' || other.recurrence === 'Parcelada' || other.fixedValueType) return false;
+      const otherMonth = (other.dueDate || '').substring(0, 7);
+      if (otherMonth <= bMonth) return false;
+      const otherBarcode = (other.barcode || '').replace(/\D/g, '');
+      if (bBarcode.length >= 10 && otherBarcode === bBarcode) return true;
+      return other.name.trim().toLowerCase() === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
+    });
+
+    if (hasLaterMonthVersion) {
+      extraDeleted.push(b.id);
+      deletedSet.add(b.id);
+    } else {
+      finalList.push(b);
+    }
+  }
+
+  return { bills: finalList, deletedIds: Array.from(deletedSet) };
+}
+
 // Server-side revenue deduplication to eliminate duplicate salaries
 function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[] {
   if (!Array.isArray(revs)) return [];
 
   const map = new Map<string, any>();
   for (const r of revs) {
-    if (!r || !r.id) continue;
+    if (!r || !r.id || isMockRevenueServer(r)) continue;
     if (deletedIds.includes(r.id)) continue;
 
     const existing = map.get(r.id);
@@ -172,6 +263,17 @@ async function startServer() {
         devices: [],
         lastUpdated: nowIso,
       };
+    }
+
+    // If forceReplace is requested (e.g. user purged old backups and debts), reset server store directly
+    if (req.body.forceReplace === true) {
+      household.bills = Array.isArray(bills) ? bills.filter((b: any) => !isMockBillServer(b)) : [];
+      household.revenues = Array.isArray(revenues) ? revenues : [];
+      household.deletedBillIds = [];
+      household.deletedRevenueIds = [];
+      household.lastUpdated = nowIso;
+      saveHouseholds(store);
+      return res.json({ success: true, household, timestamp: nowIso });
     }
 
     // Filter out only obsolete mock static placeholder IDs, preserving all real user phones
@@ -250,7 +352,14 @@ async function startServer() {
         }
       });
 
-      household.bills = Array.from(billMap.values()).filter((b: any) => !isMockBillServer(b));
+      const rawMerged = Array.from(billMap.values()).filter((b: any) => !isMockBillServer(b));
+      const dedupResult = deduplicateBillsServer(rawMerged, household.deletedBillIds);
+      household.bills = dedupResult.bills;
+      household.deletedBillIds = dedupResult.deletedIds;
+    } else if (Array.isArray(household.bills) && household.bills.length > 0) {
+      const dedupResult = deduplicateBillsServer(household.bills, household.deletedBillIds);
+      household.bills = dedupResult.bills;
+      household.deletedBillIds = dedupResult.deletedIds;
     }
 
     // Merge Revenues
@@ -325,7 +434,315 @@ async function startServer() {
     res.json({ success: true, devices: household.devices });
   });
 
-  // Vite middleware setup
+  // Helper to parse bank push/SMS notification text
+  function parseBankPushText(text: string): {
+    totalAmount: number;
+    installments: number;
+    installmentAmount?: number;
+    description: string;
+    cardName: string;
+    cardLast4?: string;
+  } {
+    const raw = String(text || '').trim();
+
+    // 1. Amount extraction: e.g. R$ 1.500,00 or R$150,00 or 1.200,50
+    let totalAmount = 0;
+    const amountMatch = raw.match(/(?:R\$\s*|valor\s*(?:de)?\s*R\$\s*|de\s*R\$\s*)([0-9]{1,3}(?:\.[0-9]{3})*|\d+)(?:,(\d{2}))?/i) ||
+                        raw.match(/\b([0-9]{1,3}(?:\.[0-9]{3})*,\d{2})\b/);
+    if (amountMatch) {
+      if (amountMatch[2] !== undefined) {
+        const whole = amountMatch[1].replace(/\./g, '');
+        const cents = amountMatch[2];
+        totalAmount = parseFloat(`${whole}.${cents}`);
+      } else {
+        totalAmount = parseFloat(amountMatch[1].replace(/\./g, '').replace(',', '.'));
+      }
+    }
+
+    // 2. Installments: e.g. "em 10x", "10x de", "parcelado em 3x", "12 parcelas"
+    let installments = 1;
+    let installmentAmount: number | undefined;
+
+    const instMatch = raw.match(/(\d{1,2})\s*x\s*(?:de\s*(?:R\$\s*)?([0-9.,]+))?/i) ||
+                      raw.match(/(?:parcelad[oa]\s*em\s*|em\s*)(\d{1,2})\s*(?:vezes|parcelas)/i);
+    if (instMatch) {
+      installments = Math.max(1, parseInt(instMatch[1], 10));
+      if (instMatch[2]) {
+        installmentAmount = parseFloat(instMatch[2].replace(/\./g, '').replace(',', '.'));
+      }
+    }
+
+    // 3. Card brand/bank detection
+    let cardName = 'Cartão de Crédito';
+    const lower = raw.toLowerCase();
+    if (lower.includes('nubank')) cardName = 'Nubank';
+    else if (lower.includes('itau') || lower.includes('itaucard')) cardName = 'Banco Itaú';
+    else if (lower.includes('bradesco')) cardName = 'Banco Bradesco';
+    else if (lower.includes('santander')) cardName = 'Banco Santander';
+    else if (lower.includes('ourocard') || lower.includes('banco do brasil') || lower.includes('bb')) cardName = 'Banco do Brasil';
+    else if (lower.includes('c6')) cardName = 'C6 Bank';
+    else if (lower.includes('inter')) cardName = 'Banco Inter';
+    else if (lower.includes('caixa')) cardName = 'Caixa Econômica';
+    else if (lower.includes('xp')) cardName = 'XP Investimentos';
+    else if (lower.includes('btg')) cardName = 'BTG Pactual';
+
+    // 4. Last 4 digits
+    let cardLast4: string | undefined;
+    const last4Match = raw.match(/(?:final|cart[aã]o\s*final)\s*([0-9]{4})/i);
+    if (last4Match) {
+      cardLast4 = last4Match[1];
+    }
+
+    // 5. Merchant / Description
+    let description = 'Compra no Cartão';
+    const atMatch = raw.match(/(?:na|no|em)\s+([A-Za-z0-9À-ÿ\s&.-]{3,35})(?:\s+aprovada|\s+no\s+valor|\s+de\s+R|\.|$)/i);
+    if (atMatch && atMatch[1] && !atMatch[1].toLowerCase().includes('cart') && !atMatch[1].toLowerCase().includes('aprovad')) {
+      description = atMatch[1].trim();
+    } else {
+      const genericMatch = raw.match(/compra(?:\s+aprovada)?\s+(?:de\s+R\$[0-9.,]+\s+)?(?:no\s+seu\s+[A-Za-z0-9]+\s+)?(?:na|no|em)\s+([A-Za-z0-9À-ÿ\s&.-]{3,30})/i);
+      if (genericMatch && genericMatch[1]) {
+        description = genericMatch[1].trim();
+      }
+    }
+
+    return {
+      totalAmount,
+      installments,
+      installmentAmount,
+      description,
+      cardName,
+      cardLast4,
+    };
+  }
+
+  // Generate installment bills for a credit card purchase
+  function generateCardPurchaseBills(reqData: {
+    description: string;
+    totalAmount: number;
+    installments: number;
+    installmentAmount?: number;
+    purchaseDate?: string;
+    dueDay?: number;
+    closingDay?: number;
+    cardName?: string;
+    cardLast4?: string;
+    cardHolder?: string;
+    category?: string;
+    splitHousehold?: boolean;
+    notes?: string;
+  }): any[] {
+    const totalAmount = Number(reqData.totalAmount) || 0;
+    const installments = Math.max(1, Number(reqData.installments) || 1);
+    const purchaseDate = reqData.purchaseDate || new Date().toISOString().slice(0, 10);
+    const dueDay = reqData.dueDay || 15;
+    const closingDay = reqData.closingDay || 5;
+    const cardName = reqData.cardName || 'Cartão de Crédito';
+    const cardLast4 = reqData.cardLast4 || '0000';
+    const cardHolder = reqData.cardHolder || 'Paula';
+    const cleanDesc = reqData.description?.trim() || 'Compra no Cartão';
+
+    const calcInstallmentAmount = reqData.installmentAmount && reqData.installmentAmount > 0
+      ? Number(reqData.installmentAmount)
+      : Number((totalAmount / installments).toFixed(2));
+
+    const [pYStr, pMStr, pDStr] = purchaseDate.split('-');
+    const pYear = parseInt(pYStr, 10) || new Date().getFullYear();
+    const pMonth = parseInt(pMStr, 10) || (new Date().getMonth() + 1);
+    const pDay = parseInt(pDStr, 10) || new Date().getDate();
+
+    // Determine initial invoice month based on closingDay
+    let invoiceYear = pYear;
+    let invoiceMonth = pMonth;
+
+    if (pDay > closingDay) {
+      invoiceMonth += 1;
+      if (invoiceMonth > 12) {
+        invoiceMonth = 1;
+        invoiceYear += 1;
+      }
+    }
+
+    if (dueDay < closingDay) {
+      invoiceMonth += 1;
+      if (invoiceMonth > 12) {
+        invoiceMonth = 1;
+        invoiceYear += 1;
+      }
+    }
+
+    const parentGroupId = `inst-card-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`;
+    const nowIso = new Date().toISOString();
+    const bills: any[] = [];
+
+    for (let i = 1; i <= installments; i++) {
+      const monthOffset = i - 1;
+      const targetMonthIndex = invoiceMonth + monthOffset;
+      const targetYear = invoiceYear + Math.floor((targetMonthIndex - 1) / 12);
+      const targetMonthNum = ((targetMonthIndex - 1) % 12) + 1;
+
+      const maxDaysInTarget = new Date(targetYear, targetMonthNum, 0).getDate();
+      const validDay = Math.min(dueDay, maxDaysInTarget);
+      const installmentDueDate = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`;
+
+      // Adjust last installment cents so sum is exact
+      let instVal = calcInstallmentAmount;
+      if (i === installments && installments > 1) {
+        const previousSum = calcInstallmentAmount * (installments - 1);
+        const remainder = Number((totalAmount - previousSum).toFixed(2));
+        if (remainder > 0) instVal = remainder;
+      }
+
+      bills.push({
+        id: `bill-card-${parentGroupId}-${i}`,
+        name: installments > 1 ? `${cleanDesc} (${i}/${installments})` : cleanDesc,
+        amount: instVal,
+        dueDate: installmentDueDate,
+        category: reqData.category || 'Cartão & Compras',
+        favored: `${cardName} •••• ${cardLast4}`,
+        barcode: '',
+        pixKey: '',
+        pixType: 'Pix Copia e Cola',
+        recurrence: installments > 1 ? 'Parcelada' : 'Única / Pontual',
+        installmentNumber: i,
+        totalInstallments: installments,
+        parentInstallmentId: parentGroupId,
+        splitHousehold: reqData.splitHousehold !== false,
+        splitDetails: [],
+        notes: `💳 Cartão: ${cardName} (${cardHolder}) •••• ${cardLast4} | Total: R$ ${totalAmount.toFixed(2).replace('.', ',')} em ${installments}x de R$ ${instVal.toFixed(2).replace('.', ',')}${reqData.notes ? ' | ' + reqData.notes : ''}`,
+        status: 'pending',
+        version: 1,
+        updatedAt: nowIso,
+        updatedByDevice: 'Open Finance Real-Time Card Sync',
+        isSynced: true,
+      });
+    }
+
+    return bills;
+  }
+
+  // POST /api/cards/purchase - Publish a card purchase into a household
+  app.post('/api/cards/purchase', (req, res) => {
+    const houseId = (req.body.house || req.query.house || 'minha-casa').toString().trim().toLowerCase();
+    const purchase = req.body.purchase || req.body;
+
+    if (!purchase || !purchase.totalAmount) {
+      return res.status(400).json({ error: 'Dados da compra incompletos (totalAmount obrigatório)' });
+    }
+
+    const generatedBills = generateCardPurchaseBills(purchase);
+
+    const store = loadHouseholds();
+    let household = store[houseId];
+    const nowIso = new Date().toISOString();
+
+    if (!household) {
+      household = {
+        id: houseId,
+        name: 'Minha Casa',
+        code: houseId.toUpperCase(),
+        bills: [],
+        revenues: [],
+        profiles: [],
+        devices: [],
+        lastUpdated: nowIso,
+      };
+    }
+
+    if (!Array.isArray(household.bills)) {
+      household.bills = [];
+    }
+
+    // Merge generated bills
+    household.bills.push(...generatedBills);
+    household.lastUpdated = nowIso;
+    store[houseId] = household;
+    saveHouseholds(store);
+
+    res.json({
+      success: true,
+      count: generatedBills.length,
+      totalAmount: purchase.totalAmount,
+      installments: purchase.installments || 1,
+      bills: generatedBills,
+      householdLastUpdated: nowIso,
+    });
+  });
+
+  // POST /api/cards/webhook - Live Open Finance & Webhook Receiver (Supports iOS Shortcuts / Android / Zapier / Pluggy)
+  app.post('/api/cards/webhook', (req, res) => {
+    const houseId = (req.body.house || req.query.house || 'minha-casa').toString().trim().toLowerCase();
+    const rawText = req.body.text || req.body.message || req.body.notification || req.body.body;
+
+    let purchaseData: any;
+
+    if (rawText && typeof rawText === 'string') {
+      const parsed = parseBankPushText(rawText);
+      purchaseData = {
+        ...parsed,
+        purchaseDate: req.body.date || new Date().toISOString().slice(0, 10),
+        dueDay: req.body.dueDay ? parseInt(req.body.dueDay, 10) : 15,
+        closingDay: req.body.closingDay ? parseInt(req.body.closingDay, 10) : 5,
+        cardHolder: req.body.cardHolder || 'Paula',
+      };
+    } else {
+      purchaseData = {
+        description: req.body.description || req.body.title || 'Compra no Cartão',
+        totalAmount: parseFloat(req.body.totalAmount || req.body.amount || '0'),
+        installments: parseInt(req.body.installments || req.body.installmentsCount || '1', 10),
+        installmentAmount: req.body.installmentAmount ? parseFloat(req.body.installmentAmount) : undefined,
+        purchaseDate: req.body.purchaseDate || new Date().toISOString().slice(0, 10),
+        dueDay: req.body.dueDay ? parseInt(req.body.dueDay, 10) : 15,
+        closingDay: req.body.closingDay ? parseInt(req.body.closingDay, 10) : 5,
+        cardName: req.body.cardName || req.body.institution || 'Cartão de Crédito',
+        cardLast4: req.body.cardLast4 || req.body.last4 || '0000',
+        cardHolder: req.body.cardHolder || 'Paula',
+        category: req.body.category,
+      };
+    }
+
+    if (!purchaseData.totalAmount || purchaseData.totalAmount <= 0) {
+      return res.status(400).json({
+        error: 'Valor da compra não identificado',
+        parsedData: purchaseData,
+      });
+    }
+
+    const generatedBills = generateCardPurchaseBills(purchaseData);
+
+    const store = loadHouseholds();
+    let household = store[houseId];
+    const nowIso = new Date().toISOString();
+
+    if (!household) {
+      household = {
+        id: houseId,
+        name: 'Minha Casa',
+        code: houseId.toUpperCase(),
+        bills: [],
+        revenues: [],
+        profiles: [],
+        devices: [],
+        lastUpdated: nowIso,
+      };
+    }
+
+    if (!Array.isArray(household.bills)) {
+      household.bills = [];
+    }
+
+    household.bills.push(...generatedBills);
+    household.lastUpdated = nowIso;
+    store[houseId] = household;
+    saveHouseholds(store);
+
+    res.json({
+      success: true,
+      message: `Compra de R$ ${purchaseData.totalAmount.toFixed(2).replace('.', ',')} em ${purchaseData.installments}x sincronizada com sucesso no app!`,
+      count: generatedBills.length,
+      purchase: purchaseData,
+      bills: generatedBills,
+    });
+  });
   const isProduction =
     process.env.NODE_ENV === 'production' ||
     (typeof __filename !== 'undefined' && __filename.endsWith('server.cjs'));

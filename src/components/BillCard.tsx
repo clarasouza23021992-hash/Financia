@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { 
   Copy, Check, Share2, Edit2, Trash2, CheckCircle2, 
-  QrCode, Barcode, FileText, Paperclip, Undo2, Eye
+  QrCode, Barcode, FileText, Paperclip, Undo2, Eye, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bill } from '../types/finance';
@@ -10,10 +10,11 @@ import { getCategoryInfo } from '../utils/categories';
 interface BillCardProps {
   bill: Bill;
   onEdit: (bill: Bill) => void;
-  onDelete: (id: string) => void;
+  onDelete: (bill: Bill) => void;
   onTogglePaid: (bill: Bill) => void;
   onViewReceipt: (bill: Bill) => void;
   onAttachReceipt: (bill: Bill) => void;
+  onMoveMonth?: (bill: Bill, targetMonth: string) => void;
 }
 
 export const BillCard: React.FC<BillCardProps> = ({
@@ -23,8 +24,10 @@ export const BillCard: React.FC<BillCardProps> = ({
   onTogglePaid,
   onViewReceipt,
   onAttachReceipt,
+  onMoveMonth,
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
+  const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
 
   const copyToClipboard = (text: string, fieldName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -117,13 +120,16 @@ export const BillCard: React.FC<BillCardProps> = ({
               </motion.span>
             )}
             {bill.status === 'pending' && (
-              <motion.span
+              <motion.button
+                type="button"
+                onClick={() => setIsMonthPickerOpen(!isMonthPickerOpen)}
                 key={`pending-${bill.dueDate}`}
                 initial={{ opacity: 0, scale: 0.88, y: -2 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.88, y: 2 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 ${
+                title="Clique para alterar o mês de vencimento"
+                className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 active-press hover:opacity-85 cursor-pointer ${
                   bill.dueDate.endsWith('17')
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'
                     : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
@@ -134,9 +140,9 @@ export const BillCard: React.FC<BillCardProps> = ({
                     <span>⏰</span> <span>Vence Hoje!</span>
                   </>
                 ) : (
-                  <span>Vence em {bill.dueDate.split('-').reverse().slice(0, 2).join('/')}</span>
+                  <span>Vence em {bill.dueDate.split('-').reverse().slice(0, 2).join('/')} 📅</span>
                 )}
-              </motion.span>
+              </motion.button>
             )}
             {bill.status === 'paid' && (
               <motion.span
@@ -341,7 +347,7 @@ export const BillCard: React.FC<BillCardProps> = ({
           </button>
         )}
 
-        {/* Secondary Icons (Share, Edit, Delete) */}
+        {/* Secondary Icons (Share, Move Month, Edit, Delete) */}
         <div className="flex items-center gap-1">
           <button
             onClick={handleShare}
@@ -350,6 +356,19 @@ export const BillCard: React.FC<BillCardProps> = ({
           >
             <Share2 className="w-4 h-4" />
           </button>
+          {onMoveMonth && (
+            <button
+              onClick={() => setIsMonthPickerOpen(!isMonthPickerOpen)}
+              title="Mudar mês de vencimento"
+              className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors active-press ${
+                isMonthPickerOpen
+                  ? 'bg-teal-600 text-white shadow-xs'
+                  : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'
+              }`}
+            >
+              <Calendar className="w-4 h-4" />
+            </button>
+          )}
           <button
             onClick={() => onEdit(bill)}
             title="Editar Conta"
@@ -358,7 +377,7 @@ export const BillCard: React.FC<BillCardProps> = ({
             <Edit2 className="w-4 h-4" />
           </button>
           <button
-            onClick={() => onDelete(bill.id)}
+            onClick={() => onDelete(bill)}
             title="Excluir Conta"
             className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/50 active-press"
           >
@@ -366,6 +385,59 @@ export const BillCard: React.FC<BillCardProps> = ({
           </button>
         </div>
       </div>
+
+      {/* Quick Month Switcher Popover Tray */}
+      {isMonthPickerOpen && onMoveMonth && (
+        <motion.div
+          initial={{ opacity: 0, height: 0 }}
+          animate={{ opacity: 1, height: 'auto' }}
+          exit={{ opacity: 0, height: 0 }}
+          className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80"
+        >
+          <div className="flex items-center justify-between mb-1.5">
+            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
+              <span>📅</span> Mover vencimento desta conta para:
+            </span>
+            <button
+              onClick={() => setIsMonthPickerOpen(false)}
+              className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1"
+            >
+              ✕
+            </button>
+          </div>
+          <div className="flex flex-wrap gap-1.5">
+            {[
+              { id: '2026-09', label: 'Set/26' },
+              { id: '2026-10', label: 'Out/26' },
+              { id: '2026-11', label: 'Nov/26' },
+              { id: '2026-12', label: 'Dez/26' },
+              { id: '2027-01', label: 'Jan/27' },
+              { id: '2027-02', label: 'Fev/27' },
+            ].map(m => {
+              const currentBillMonth = (bill.dueDate || '').substring(0, 7);
+              const isCurrent = currentBillMonth === m.id;
+              return (
+                <button
+                  key={m.id}
+                  onClick={() => {
+                    onMoveMonth(bill, m.id);
+                    setIsMonthPickerOpen(false);
+                  }}
+                  disabled={isCurrent}
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active-press ${
+                    isCurrent
+                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-default'
+                      : 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-200 dark:border-teal-800'
+                  }`}
+                >
+                  {m.label}
+                  {isCurrent && ' (Atual)'}
+                </button>
+              );
+            })}
+          </div>
+        </motion.div>
+      )}
     </div>
   );
 };

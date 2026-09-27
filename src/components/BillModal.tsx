@@ -2,13 +2,13 @@ import React, { useState, useEffect } from 'react';
 import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2 } from 'lucide-react';
 import { Bill, PixKeyType, RecurrenceType } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
-import { CATEGORIES_LIST, getCategoryInfo } from '../utils/categories';
+import { CATEGORIES_LIST, getCategoryInfo, inferCategoryFromName } from '../utils/categories';
 
 interface BillModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (
-    billData: Partial<Bill>,
+    billData: Partial<Bill> & { applyToFutureMonths?: boolean; previousName?: string },
     installmentConfig?: {
       totalInstallments: number;
       currentInstallment: number;
@@ -34,7 +34,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [category, setCategory] = useState('Moradia & Condomínio');
+  const [category, setCategory] = useState('Financiamentos & Empréstimos');
   const [favored, setFavored] = useState('');
   const [barcode, setBarcode] = useState('');
   const [pixKey, setPixKey] = useState('');
@@ -46,6 +46,8 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [receiptSize, setReceiptSize] = useState('');
   const [pixDetectedNotice, setPixDetectedNotice] = useState<string | null>(null);
   const [barcodeDetectedNotice, setBarcodeDetectedNotice] = useState<string | null>(null);
+  const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
+  const [applyToFutureMonths, setApplyToFutureMonths] = useState<boolean>(true);
 
   // Installment Tracking State (Parcelada)
   const [totalInstallments, setTotalInstallments] = useState<number>(10);
@@ -76,13 +78,15 @@ export const BillModal: React.FC<BillModalProps> = ({
       setValueIsPerInstallment(true);
       setPixDetectedNotice(null);
       setBarcodeDetectedNotice(null);
+      setCategoryNotice(null);
+      setApplyToFutureMonths(true);
     } else {
       // Default for new bill
       setName('');
       setAmount('');
       const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
       setDueDate(defaultDate);
-      setCategory('Moradia & Condomínio');
+      setCategory('Outras Despesas');
       setFavored('');
       setBarcode('');
       setPixKey('');
@@ -98,16 +102,42 @@ export const BillModal: React.FC<BillModalProps> = ({
       setValueIsPerInstallment(true);
       setPixDetectedNotice(null);
       setBarcodeDetectedNotice(null);
+      setCategoryNotice(null);
+      setApplyToFutureMonths(true);
     }
   }, [initialBill, isOpen]);
 
+  // Handler for typing name and auto-detecting category intelligently
+  const handleNameChange = (val: string) => {
+    setName(val);
+    const smart = inferCategoryFromName(val);
+    if (smart) {
+      setCategory(smart.name);
+      setCategoryNotice(`✨ Categoria identificada: ${smart.shortName || smart.name}`);
+    }
+  };
+
+  const handleFavoredChange = (val: string) => {
+    setFavored(val);
+    if (!name || name === 'Conta sem nome') {
+      const smart = inferCategoryFromName(val);
+      if (smart) {
+        setCategory(smart.name);
+        setCategoryNotice(`✨ Categoria identificada: ${smart.shortName || smart.name}`);
+      }
+    }
+  };
+
   // Handler for automatic Barcode parsing and filling all fields
   const applyBarcodeDetection = (rawBarcode: string) => {
-    setBarcode(rawBarcode);
-    const targetMonth = defaultMonth || (dueDate ? dueDate.substring(0, 7) : undefined);
+    if (!rawBarcode) return;
+    const cleanDigits = rawBarcode.replace(/[^\d]/g, '');
+    setBarcode(cleanDigits.length >= 20 ? cleanDigits : rawBarcode.trim());
+
+    const targetMonth = (dueDate ? dueDate.substring(0, 7) : defaultMonth);
     const parsed = parseBarcodeBoleto(rawBarcode, targetMonth);
     if (parsed.detected) {
-      if (parsed.amount) {
+      if (parsed.amount && parsed.amount > 0) {
         setAmount(parsed.amount.toFixed(2).replace('.', ','));
       }
       if (parsed.dueDate) {
@@ -122,7 +152,13 @@ export const BillModal: React.FC<BillModalProps> = ({
       if (parsed.category) {
         setCategory(parsed.category);
       }
-      setBarcodeDetectedNotice(parsed.message || '✨ Boleto identificado com sucesso! Campos preenchidos.');
+      if (parsed.recurrence) {
+        setRecurrence(parsed.recurrence);
+      }
+      if (parsed.fixedValueType) {
+        setFixedValueType(parsed.fixedValueType);
+      }
+      setBarcodeDetectedNotice(parsed.message || '✨ Boleto identificado com sucesso! Nome, Favorecido, Valor e Vencimento preenchidos.');
       setTimeout(() => setBarcodeDetectedNotice(null), 8000);
     }
   };
@@ -131,17 +167,13 @@ export const BillModal: React.FC<BillModalProps> = ({
     try {
       if (navigator.clipboard && navigator.clipboard.readText) {
         const text = await navigator.clipboard.readText();
-        if (text) {
-          applyBarcodeDetection(text);
+        if (text && text.trim()) {
+          applyBarcodeDetection(text.trim());
           return;
         }
       }
     } catch {
       // clipboard permission error
-    }
-    const manualPrompt = window.prompt('Cole aqui o código de barras ou linha digitável (47 ou 48 dígitos):');
-    if (manualPrompt) {
-      applyBarcodeDetection(manualPrompt);
     }
   };
 
@@ -240,16 +272,14 @@ export const BillModal: React.FC<BillModalProps> = ({
         setBarcode(processed.barcode);
       }
 
-      // Automatically populate due date from text/barcode/Pix
+      // Automatically populate due date from text/barcode/Pix ONLY if found or if dueDate is empty
       if (processed.dueDate) {
         setDueDate(processed.dueDate);
       } else if (parsed.dueDate) {
         setDueDate(parsed.dueDate);
-      } else if (!dueDate || dueDate.endsWith('-01')) {
+      } else if (!dueDate) {
         const targetMonth = defaultMonth || (new Date().toISOString().slice(0, 7));
         setDueDate(`${targetMonth}-10`);
-      } else if (defaultMonth && !dueDate.startsWith(defaultMonth)) {
-        setDueDate(`${defaultMonth}-10`);
       }
 
       const cleanEmpresa = processed.favored || parsed.favored;
@@ -338,6 +368,8 @@ export const BillModal: React.FC<BillModalProps> = ({
         installmentNumber: isParcelada ? summary.validCurrent : undefined,
         totalInstallments: isParcelada ? summary.validTotal : undefined,
         endMonth: isParcelada ? summary.shortEnd : undefined,
+        applyToFutureMonths,
+        previousName: initialBill?.name,
       },
       isParcelada
         ? {
@@ -397,16 +429,23 @@ export const BillModal: React.FC<BillModalProps> = ({
           </div>
           {/* Nome da Conta */}
           <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Nome da Conta / Despesa *
-            </label>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Nome da Conta / Despesa *
+              </label>
+              {categoryNotice && (
+                <span className="text-[11px] font-semibold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 animate-in fade-in">
+                  {categoryNotice}
+                </span>
+              )}
+            </div>
             <input
               type="text"
               required
               value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Financiamento Caixa, Conta de Luz Enel, Fatura Cartão"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              onChange={(e) => handleNameChange(e.target.value)}
+              placeholder="Ex: Financiamento da Casa, Conta de Luz Enel, Fatura Cartão"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             />
           </div>
 
@@ -429,18 +468,87 @@ export const BillModal: React.FC<BillModalProps> = ({
             </div>
           </div>
 
-          {/* Data de Vencimento */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Data de Vencimento *
-            </label>
+          {/* Data de Vencimento com Seletor Rápido de Mês */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Data de Vencimento *
+              </label>
+              {dueDate && (
+                <span className="text-[11px] font-semibold text-teal-600 dark:text-teal-400">
+                  {(() => {
+                    try {
+                      const [y, m, d] = dueDate.split('-');
+                      const dateObj = new Date(Number(y), Number(m) - 1, Number(d));
+                      const monthName = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+                      return `Mês: ${monthName.charAt(0).toUpperCase() + monthName.slice(1)}`;
+                    } catch {
+                      return '';
+                    }
+                  })()}
+                </span>
+              )}
+            </div>
+
             <input
               type="date"
               required
               value={dueDate}
               onChange={(e) => setDueDate(e.target.value)}
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             />
+
+            {/* Quick Month Selector Buttons */}
+            <div className="pt-1">
+              <div className="text-[11px] font-medium text-slate-500 dark:text-slate-400 mb-1">
+                📅 Trocar mês rapidamente (mantém o dia):
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {[
+                  { id: '2026-09', label: 'Set/26' },
+                  { id: '2026-10', label: 'Out/26' },
+                  { id: '2026-11', label: 'Nov/26' },
+                  { id: '2026-12', label: 'Dez/26' },
+                  { id: '2027-01', label: 'Jan/27' },
+                  { id: '2027-02', label: 'Fev/27' },
+                ].map(item => {
+                  const currentMonthId = (dueDate || '').substring(0, 7);
+                  const isSelected = currentMonthId === item.id;
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => {
+                        const currentDay = (dueDate && dueDate.split('-')[2]) ? dueDate.split('-')[2] : '10';
+                        const [y, m] = item.id.split('-').map(Number);
+                        const maxDays = new Date(y, m, 0).getDate();
+                        const safeDay = String(Math.min(parseInt(currentDay, 10), maxDays)).padStart(2, '0');
+                        setDueDate(`${item.id}-${safeDay}`);
+                      }}
+                      className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all active-press ${
+                        isSelected
+                          ? 'bg-teal-600 text-white shadow-xs'
+                          : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200/60 dark:border-slate-700/60'
+                      }`}
+                    >
+                      {item.label}
+                      {isSelected && ' ✓'}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Confirmation indicator if bill is in a different month */}
+            {dueDate && defaultMonth && !dueDate.startsWith(defaultMonth) && (
+              <div className="p-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
+                <span>💡</span>
+                <span>
+                  Esta conta será salva com vencimento em{' '}
+                  <strong>{dueDate.split('-').reverse().join('/')}</strong> (fora do mês atual).
+                </span>
+              </div>
+            )}
           </div>
 
           {/* Categoria */}
@@ -481,9 +589,9 @@ export const BillModal: React.FC<BillModalProps> = ({
             <input
               type="text"
               value={favored}
-              onChange={(e) => setFavored(e.target.value)}
-              placeholder="Ex: Enel, Sabesp, Caixa, Claro, Imobiliária Alfa"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+              onChange={(e) => handleFavoredChange(e.target.value)}
+              placeholder="Ex: Caixa Econômica, Enel, Sabesp, Claro, Imobiliária Alfa"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             />
           </div>
 
@@ -509,13 +617,15 @@ export const BillModal: React.FC<BillModalProps> = ({
               onPaste={(e) => {
                 const pasted = e.clipboardData.getData('text');
                 if (pasted) {
+                  e.preventDefault();
                   applyBarcodeDetection(pasted);
                 }
               }}
               onChange={(e) => {
                 const val = e.target.value;
                 setBarcode(val);
-                if (val.replace(/\D/g, '').length >= 44) {
+                const digits = val.replace(/\D/g, '');
+                if (digits.length >= 30) {
                   applyBarcodeDetection(val);
                 }
               }}
@@ -863,6 +973,31 @@ export const BillModal: React.FC<BillModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
             />
           </div>
+
+          {/* Sincronização Automática com Meses Futuros (Dívidas Recorrentes / Parceladas) */}
+          {(recurrence === 'Mensal Fixa' || recurrence === 'Parcelada' || initialBill?.recurrence === 'Mensal Fixa' || initialBill?.recurrence === 'Parcelada') && (
+            <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/70 shadow-xs">
+              <div className="flex items-start gap-2.5">
+                <input
+                  type="checkbox"
+                  id="applyToFutureMonths"
+                  checked={applyToFutureMonths}
+                  onChange={(e) => setApplyToFutureMonths(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 text-teal-600 rounded border-teal-300 focus:ring-teal-500 cursor-pointer"
+                />
+                <label htmlFor="applyToFutureMonths" className="text-xs text-slate-700 dark:text-slate-200 cursor-pointer">
+                  <span className="font-bold text-teal-900 dark:text-teal-200 block">
+                    🔁 Atualizar automaticamente nos próximos meses
+                  </span>
+                  <span className="text-[11px] text-teal-700 dark:text-teal-300 leading-snug block mt-0.5">
+                    {initialBill
+                      ? 'Ao alterar o nome, categoria, valor ou favorecido, todos os meses seguintes desta dívida serão atualizados automaticamente sem você precisar fazer nada!'
+                      : 'Esta dívida recorrente será replicada automaticamente nos próximos meses.'}
+                  </span>
+                </label>
+              </div>
+            </div>
+          )}
 
           {/* Action Buttons */}
           <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">

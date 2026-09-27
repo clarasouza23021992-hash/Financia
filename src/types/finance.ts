@@ -37,6 +37,7 @@ export interface Bill {
   installmentNumber?: number;
   totalInstallments?: number;
   parentInstallmentId?: string;
+  parentRecurringId?: string;
   endMonth?: string;
   isCarriedOver?: boolean;
   originalDueDate?: string;
@@ -114,6 +115,41 @@ export interface BankConnection {
   cardHolder?: string;
   closingDay?: number;
   dueDay?: number;
+  cardName?: string;
+  last4?: string;
+  brand?: string;
+  color?: string;
+}
+
+export interface CardPurchaseRequest {
+  institution?: string;
+  cardId?: string;
+  cardName?: string;
+  cardLast4?: string;
+  cardHolder?: string;
+  description: string;
+  totalAmount: number;
+  installments: number;
+  installmentAmount?: number;
+  purchaseDate?: string;
+  startMonth?: string;
+  dueDay?: number;
+  closingDay?: number;
+  category?: string;
+  splitHousehold?: boolean;
+  notes?: string;
+}
+
+export interface CardPurchaseResult {
+  bills: Bill[];
+  totalAmount: number;
+  installmentAmount: number;
+  installmentsCount: number;
+  cardName: string;
+  firstDueDate: string;
+  lastDueDate: string;
+  parentInstallmentId: string;
+  updatedConnection?: BankConnection;
 }
 
 export interface NotificationRule {

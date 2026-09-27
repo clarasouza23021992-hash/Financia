@@ -770,10 +770,10 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
                 </div>
                 <div>
                   <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                    Recuperador de Dados & Backups
+                    Gerenciador de Backups & Dados
                   </span>
                   <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                    Varredura profunda para restaurar contas ou carregar base do casal.
+                    Salvar backup com dívidas visíveis, apagar backups antigos ou restaurar base.
                   </span>
                 </div>
               </div>

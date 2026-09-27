@@ -1,4 +1,5 @@
 // Intelligent Brazilian Pix Parser (EMV QRCPS Copia e Cola & Standard Pix Keys)
+import { inferCategoryFromName } from './categories';
 
 export interface ParsedPixResult {
   detected: boolean;
@@ -96,7 +97,7 @@ export function sanitizeCompanyName(raw: string): string {
 
 // Helper: Extract due date from free text, barcodes, or Pix payloads
 export function extractDueDate(text: string, fallbackMonth?: string): string | undefined {
-  if (!text) return fallbackMonth ? `${fallbackMonth}-10` : undefined;
+  if (!text) return undefined;
 
   // 1. Explicit labels like "Vencimento: 15/10/2026", "Vence em: 2026-10-15", "Venc: 10/10"
   const explicitMatch = text.match(/(?:vencimento|vence\s*(?:em)?|venc\.?|data\s*de\s*vencimento|validade|limite|pagar\s*at[eé])[:\s]*(\d{1,2})[\/.-](\d{1,2})(?:[\/.-](\d{2,4}))?/i);
@@ -151,44 +152,38 @@ export function extractDueDate(text: string, fallbackMonth?: string): string | u
     }
   }
 
-  // Fallback to active month default (e.g. 10th of the month)
-  if (fallbackMonth) {
-    return `${fallbackMonth}-10`;
-  }
-
   return undefined;
 }
 
 // Categorize beneficiary based on name or keywords
 function inferCategoryAndBillName(companyName: string): { category: string; billName: string } {
-  const upper = companyName.toUpperCase();
-
-  if (upper.includes('ENEL') || upper.includes('CPFL') || upper.includes('LIGHT') || upper.includes('CEMIG') || upper.includes('ELEKTRO') || upper.includes('EQUATORIAL') || upper.includes('ENERGIA') || upper.includes('LUZ')) {
-    return { category: 'Energia Elétrica', billName: `Conta de Luz (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('SABESP') || upper.includes('SANEPAR') || upper.includes('COPASA') || upper.includes('EMBASA') || upper.includes('CORSAN') || upper.includes('AGUA') || upper.includes('ÁGUA') || upper.includes('SANEAMENTO')) {
-    return { category: 'Água & Saneamento', billName: `Conta de Água (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('COMGAS') || upper.includes('COMGÁS') || upper.includes('NATURGY') || upper.includes('GAS') || upper.includes('GÁS') || upper.includes('ULTRAGAZ') || upper.includes('LIQUIGAS') || upper.includes('LIQUIGÁS')) {
-    return { category: 'Gás', billName: `Conta de Gás (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('CONDOMINIO') || upper.includes('CONDOMÍNIO') || upper.includes('PREDIAL') || upper.includes('LELLO') || upper.includes('HABITATUS') || upper.includes('IMOBIL') || upper.includes('EDIFICIO') || upper.includes('EDIFÍCIO')) {
-    return { category: 'Moradia & Condomínio', billName: 'Taxa de Condomínio' };
-  }
-  if (upper.includes('CLARO') || upper.includes('VIVO') || upper.includes('TIM') || upper.includes('OI') || upper.includes('FIBRA') || upper.includes('INTERNET') || upper.includes('TELECOM')) {
-    return { category: 'Internet, TV & Telefonia', billName: `Internet / Telecom (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('CAIXA') || upper.includes('ITAU') || upper.includes('ITAÚ') || upper.includes('BRADESCO') || upper.includes('SANTANDER') || upper.includes('NUBANK') || upper.includes('BANCO') || upper.includes('FINANCIAMENTO') || upper.includes('EMPRESTIMO') || upper.includes('EMPRÉSTIMO')) {
-    return { category: 'Financiamentos & Empréstimos', billName: `Financiamento / Parcela (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('MERCADO') || upper.includes('SUPERMERCADO') || upper.includes('ASSAI') || upper.includes('ASSAÍ') || upper.includes('ATACADAO') || upper.includes('ATACADÃO') || upper.includes('CARREFOUR') || upper.includes('PAO DE ACUCAR') || upper.includes('PÃO DE AÇÚCAR')) {
-    return { category: 'Alimentação & Mercado', billName: `Mercado (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('DROGASIL') || upper.includes('DROGA RAIA') || upper.includes('FARMACIA') || upper.includes('FARMÁCIA') || upper.includes('UNIMED') || upper.includes('NOTREDAME') || upper.includes('SAUDE') || upper.includes('SAÚDE') || upper.includes('CLINICA') || upper.includes('CLÍNICA')) {
-    return { category: 'Saúde & Farmácia', billName: `Saúde / Farmácia (${toTitleCase(companyName)})` };
-  }
-  if (upper.includes('COLEGIO') || upper.includes('COLÉGIO') || upper.includes('ESCOLA') || upper.includes('FACULDADE') || upper.includes('UNIVERSIDADE') || upper.includes('EDUCACAO') || upper.includes('EDUCAÇÃO')) {
-    return { category: 'Educação', billName: `Mensalidade Escolar (${toTitleCase(companyName)})` };
+  const smartCat = inferCategoryFromName(companyName);
+  if (smartCat) {
+    let billName = `Conta - ${toTitleCase(companyName)}`;
+    if (smartCat.id === 'financiamento') {
+      billName = `Financiamento / Parcela (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'energia') {
+      billName = `Conta de Luz (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'agua') {
+      billName = `Conta de Água (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'gas') {
+      billName = `Conta de Gás (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'moradia') {
+      billName = `Moradia / Condomínio (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'internet') {
+      billName = `Internet / Telecom (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'cartao') {
+      billName = `Fatura do Cartão (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'alimentacao') {
+      billName = `Supermercado (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'saude') {
+      billName = `Saúde / Farmácia (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'educacao') {
+      billName = `Educação (${toTitleCase(companyName)})`;
+    } else if (smartCat.id === 'transporte') {
+      billName = `Transporte (${toTitleCase(companyName)})`;
+    }
+    return { category: smartCat.name, billName };
   }
 
   return {
@@ -405,6 +400,7 @@ export function parsePixInput(rawText: string): ParsedPixResult {
 // and automatically extracting and prefilling the due date.
 export function parseScannedBoletoOrPix(
   input: Partial<{
+    id: string;
     name: string;
     amount: number;
     dueDate: string;
@@ -418,6 +414,7 @@ export function parseScannedBoletoOrPix(
   }> | string,
   fallbackMonth?: string
 ): {
+  id?: string;
   name: string;
   amount: number;
   dueDate: string;
@@ -428,6 +425,7 @@ export function parseScannedBoletoOrPix(
   pixType?: string;
   notes?: string;
   recurrence?: string;
+  fixedValueType?: 'fixed_value' | 'variable_value';
   splitHousehold?: boolean;
 } {
   // If string input, parse it
@@ -450,14 +448,23 @@ export function parseScannedBoletoOrPix(
     const cleanNumbers = rawText.replace(/[^\d]/g, '');
     let detectedBarcode: string | undefined;
     if (cleanNumbers.length >= 44 && cleanNumbers.length <= 48) {
-      detectedBarcode = rawText;
-      // If 47-digit bank boleto, extract cents if amount is not set
-      if (cleanNumbers.length === 47 && !amount) {
-        const centsStr = cleanNumbers.substring(37);
-        const cents = parseInt(centsStr, 10);
-        if (!isNaN(cents) && cents > 0) {
-          amount = cents / 100;
-        }
+      detectedBarcode = cleanNumbers;
+      const barcodeParsed = parseBarcodeBoleto(rawText, fallbackMonth);
+      if (barcodeParsed.detected) {
+        return {
+          name: barcodeParsed.billName || 'Boleto Bancário',
+          amount: barcodeParsed.amount || amount,
+          dueDate: barcodeParsed.dueDate || `${fallbackMonth || '2026-09'}-10`,
+          category: barcodeParsed.category || 'Outras Despesas',
+          favored: barcodeParsed.favored || 'Beneficiário do Boleto',
+          barcode: detectedBarcode,
+          pixKey: pixResult.pixKey,
+          pixType: pixResult.pixType,
+          notes: barcodeParsed.message || 'Código de barras lido e identificado com sucesso.',
+          recurrence: barcodeParsed.recurrence || 'Mensal Fixa',
+          fixedValueType: barcodeParsed.fixedValueType,
+          splitHousehold: false,
+        };
       }
     }
 
@@ -540,6 +547,7 @@ export function parseScannedBoletoOrPix(
   }
 
   return {
+    id: typeof input === 'object' && input && 'id' in input ? (input as any).id : undefined,
     name: cleanName,
     amount: cleanAmount,
     dueDate: cleanDueDate,
@@ -579,25 +587,34 @@ export interface ParsedBarcodeResult {
   detected: boolean;
   amount?: number;
   dueDate?: string;
+  hasEncodedDueDate?: boolean;
   favored?: string;
   category?: string;
   billName?: string;
   bankName?: string;
   type?: 'boleto_bancario' | 'concessionaria' | 'outro';
+  recurrence?: 'Mensal Fixa' | 'Parcelada' | 'Única / Pontual';
+  fixedValueType?: 'fixed_value' | 'variable_value';
   message?: string;
 }
 
-// Automatic Barcode / Linha Digitável Parser
+// Automatic Barcode / Linha Digitável Parser - Extracts All Bill Details
 export function parseBarcodeBoleto(rawBarcode: string, fallbackMonth?: string): ParsedBarcodeResult {
+  if (!rawBarcode || typeof rawBarcode !== 'string') {
+    return { detected: false, message: 'Código de barras vazio.' };
+  }
+
   const clean = rawBarcode.replace(/[^\d]/g, '');
-  if (!clean || clean.length < 20) {
+  if (!clean || clean.length < 15) {
     return { detected: false, message: 'Código de barras muito curto.' };
   }
+
+  const effectiveMonth = fallbackMonth || new Date().toISOString().slice(0, 7);
 
   // Helper to convert Bacen factor to Date string
   const factorToDate = (factor: number): string | undefined => {
     if (isNaN(factor) || factor < 1000) return undefined;
-    // Base Bacen: 07/10/1997. Fatores acima de 1000.
+    // Base Bacen: 07/10/1997.
     // Ciclo 1: de 07/10/1997 até 21/02/2025 (fator 9999 atingido em 21/02/2025).
     // Ciclo 2: a partir de 22/02/2025 o fator reinicia em 1000.
     const base1 = new Date(Date.UTC(1997, 9, 7));
@@ -613,39 +630,80 @@ export function parseBarcodeBoleto(rawBarcode: string, fallbackMonth?: string): 
     return target1.toISOString().slice(0, 10);
   };
 
+  // Inspect any surrounding text for company names or explicit dates/amounts
+  const lowerText = rawBarcode.toLowerCase();
+  const textDateMatch = rawBarcode.match(/(\d{2})[\/\.-](\d{2})[\/\.-](\d{4})/);
+  const textDueDate = textDateMatch ? `${textDateMatch[3]}-${textDateMatch[2]}-${textDateMatch[1]}` : undefined;
+
+  let textAmount: number | undefined;
+  const textValMatch = rawBarcode.match(/R\$\s*([0-9.,]+)/i) || rawBarcode.match(/valor[:\s]+R?\$?\s*([0-9.,]+)/i);
+  if (textValMatch) {
+    const parsed = parseFloat(textValMatch[1].replace(/\./g, '').replace(',', '.'));
+    if (!isNaN(parsed) && parsed > 0) textAmount = parsed;
+  }
+
   // 1. BOLETO BANCÁRIO - Linha Digitável (47 dígitos)
   if (clean.length === 47 && !clean.startsWith('8')) {
     const bankCode = clean.substring(0, 3);
     const bankInfo = BRAZILIAN_BANKS[bankCode] || {
-      name: `Banco Código ${bankCode}`,
+      name: `Banco (Cód. ${bankCode})`,
       category: 'Financiamentos & Empréstimos',
-      defaultName: `Boleto Bancário (Banco ${bankCode})`,
+      defaultName: `Boleto Bancário (${bankCode})`,
     };
 
     // Fator de vencimento (posições 33 a 36 inclusive, 4 dígitos)
     const factorStr = clean.substring(33, 37);
     const factor = parseInt(factorStr, 10);
-    let calculatedDueDate = factorToDate(factor);
-
-    if (!calculatedDueDate && fallbackMonth) {
-      calculatedDueDate = `${fallbackMonth}-15`;
+    let calculatedDueDate = factorToDate(factor) || textDueDate;
+    if (!calculatedDueDate) {
+      calculatedDueDate = `${effectiveMonth}-10`;
     }
 
     // Valor (posições 37 a 46 inclusive, 10 dígitos com 2 casas decimais)
     const valueStr = clean.substring(37, 47);
     const cents = parseInt(valueStr, 10);
-    const amount = !isNaN(cents) && cents > 0 ? cents / 100 : undefined;
+    const amount = (!isNaN(cents) && cents > 0) ? cents / 100 : (textAmount || undefined);
+
+    let favored = bankInfo.name;
+    let billName = bankInfo.defaultName;
+    let category = bankInfo.category;
+
+    // Detect if text mentions specific service/company
+    if (lowerText.includes('condom')) {
+      billName = 'Taxa Condominial';
+      category = 'Moradia & Condomínio';
+      favored = 'Administradora de Condomínio';
+    } else if (lowerText.includes('aluguel') || lowerText.includes('imobil')) {
+      billName = 'Aluguel Residencial';
+      category = 'Moradia & Condomínio';
+      favored = 'Imobiliária / Locador';
+    } else if (lowerText.includes('unimed') || lowerText.includes('saúde') || lowerText.includes('saude') || lowerText.includes('plano')) {
+      billName = 'Plano de Saúde';
+      category = 'Saúde & Farmácia';
+      favored = 'Operadora de Saúde';
+    } else if (lowerText.includes('escola') || lowerText.includes('faculdade') || lowerText.includes('curso')) {
+      billName = 'Mensalidade Escolar';
+      category = 'Educação';
+      favored = 'Instituição de Ensino';
+    } else if (lowerText.includes('seguro')) {
+      billName = 'Seguro Residencial / Auto';
+      category = 'Transporte & Combustível';
+      favored = 'Seguradora';
+    }
 
     return {
       detected: true,
       type: 'boleto_bancario',
       amount,
       dueDate: calculatedDueDate,
-      favored: bankInfo.name,
-      category: bankInfo.category,
-      billName: bankInfo.defaultName,
+      hasEncodedDueDate: true,
+      favored,
+      category,
+      billName,
       bankName: bankInfo.name,
-      message: `✨ Boleto identificado: ${bankInfo.name}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''}${calculatedDueDate ? ` • Venc: ${calculatedDueDate.split('-').reverse().join('/')}` : ''}`,
+      recurrence: 'Mensal Fixa',
+      fixedValueType: amount && amount > 0 ? 'fixed_value' : 'variable_value',
+      message: `✨ Boleto identificado: ${billName} • ${favored}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''} • Vencimento: ${calculatedDueDate.split('-').reverse().join('/')}`,
     };
   }
 
@@ -653,59 +711,71 @@ export function parseBarcodeBoleto(rawBarcode: string, fallbackMonth?: string): 
   if (clean.length === 44 && !clean.startsWith('8')) {
     const bankCode = clean.substring(0, 3);
     const bankInfo = BRAZILIAN_BANKS[bankCode] || {
-      name: `Banco Código ${bankCode}`,
+      name: `Banco (Cód. ${bankCode})`,
       category: 'Financiamentos & Empréstimos',
-      defaultName: `Boleto Bancário (Banco ${bankCode})`,
+      defaultName: `Boleto Bancário (${bankCode})`,
     };
 
     const factorStr = clean.substring(5, 9);
     const factor = parseInt(factorStr, 10);
-    let calculatedDueDate = factorToDate(factor);
-
-    if (!calculatedDueDate && fallbackMonth) {
-      calculatedDueDate = `${fallbackMonth}-15`;
+    let calculatedDueDate = factorToDate(factor) || textDueDate;
+    if (!calculatedDueDate) {
+      calculatedDueDate = `${effectiveMonth}-10`;
     }
 
     const valueStr = clean.substring(9, 19);
     const cents = parseInt(valueStr, 10);
-    const amount = !isNaN(cents) && cents > 0 ? cents / 100 : undefined;
+    const amount = (!isNaN(cents) && cents > 0) ? cents / 100 : (textAmount || undefined);
+
+    let favored = bankInfo.name;
+    let billName = bankInfo.defaultName;
+    let category = bankInfo.category;
+
+    if (lowerText.includes('condom')) {
+      billName = 'Taxa Condominial';
+      category = 'Moradia & Condomínio';
+      favored = 'Administradora de Condomínio';
+    }
 
     return {
       detected: true,
       type: 'boleto_bancario',
       amount,
       dueDate: calculatedDueDate,
-      favored: bankInfo.name,
-      category: bankInfo.category,
-      billName: bankInfo.defaultName,
+      hasEncodedDueDate: true,
+      favored,
+      category,
+      billName,
       bankName: bankInfo.name,
-      message: `✨ Boleto identificado: ${bankInfo.name}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''}${calculatedDueDate ? ` • Venc: ${calculatedDueDate.split('-').reverse().join('/')}` : ''}`,
+      recurrence: 'Mensal Fixa',
+      fixedValueType: amount && amount > 0 ? 'fixed_value' : 'variable_value',
+      message: `✨ Boleto bancário reconhecido: ${billName} • ${favored}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''} • Vencimento: ${calculatedDueDate.split('-').reverse().join('/')}`,
     };
   }
 
   // 3. CONCESSIONÁRIAS E SERVIÇOS PÚBLICOS (Começam com 8 - 48 dígitos ou 44 dígitos)
   if (clean.startsWith('8') && (clean.length === 48 || clean.length === 44)) {
     const segment = clean.charAt(1);
-    let category = 'Água, Luz & Gás';
+    let category = 'Outras Despesas';
     let billName = 'Conta de Concessionária';
     let favored = 'Concessionária de Serviços Públicos';
 
     if (segment === '1') {
       category = 'Outras Despesas';
       billName = 'IPTU / Taxa Municipal';
-      favored = 'Prefeitura / Órgão Público';
+      favored = 'Prefeitura Municipal';
     } else if (segment === '2') {
-      category = 'Água, Luz & Gás';
-      billName = 'Conta de Água e Saneamento';
+      category = 'Água & Saneamento';
+      billName = 'Conta de Água e Saneamento (Sabesp)';
       favored = 'Companhia de Água e Esgoto (Sabesp)';
     } else if (segment === '3') {
-      category = 'Água, Luz & Gás';
-      billName = 'Conta de Luz / Energia Elétrica';
-      favored = 'Distribuidora de Energia Elétrica (Enel/CPFL/Light)';
+      category = 'Energia Elétrica (Luz)';
+      billName = 'Conta de Luz / Energia Elétrica (Enel)';
+      favored = 'Distribuidora de Energia (Enel/CPFL/Light)';
     } else if (segment === '4') {
-      category = 'Moradia & Condomínio';
-      billName = 'Internet / Telefonia Residencial';
-      favored = 'Operadora de Telecomunicações (Vivo/Claro/Tim)';
+      category = 'Internet, TV & Telefonia';
+      billName = 'Internet / Telefonia (Vivo/Claro)';
+      favored = 'Operadora de Telecomunicações';
     } else if (segment === '5') {
       category = 'Outras Despesas';
       billName = 'Taxa Governamental / GRU';
@@ -716,59 +786,102 @@ export function parseBarcodeBoleto(rawBarcode: string, fallbackMonth?: string): 
       favored = 'Administradora Residencial';
     } else if (segment === '7') {
       category = 'Transporte & Combustível';
-      billName = 'Multa de Trânsito / IPVA';
+      billName = 'IPVA / Multa de Trânsito';
       favored = 'Detran / Órgão de Trânsito';
     }
 
-    // Extração do valor em concessionárias (dígitos 4 a 14 ou 4 a 15)
-    let amount: number | undefined = undefined;
+    // Refine with text keywords if available
+    if (lowerText.includes('sabesp') || lowerText.includes('sanepar') || lowerText.includes('copasa') || lowerText.includes('água') || lowerText.includes('agua')) {
+      billName = 'Conta de Água e Esgoto';
+      favored = lowerText.includes('sabesp') ? 'Sabesp - Cia de Saneamento SP' : 'Companhia de Água e Saneamento';
+      category = 'Água & Saneamento';
+    } else if (lowerText.includes('enel') || lowerText.includes('cpfl') || lowerText.includes('light') || lowerText.includes('cemig') || lowerText.includes('luz') || lowerText.includes('energia')) {
+      billName = 'Conta de Luz / Energia Elétrica';
+      favored = lowerText.includes('enel') ? 'Enel Distribuição SP' : (lowerText.includes('cpfl') ? 'CPFL Energia' : 'Distribuidora de Energia Elétrica');
+      category = 'Energia Elétrica (Luz)';
+    } else if (lowerText.includes('comgás') || lowerText.includes('comgas') || lowerText.includes('gás') || lowerText.includes('gas')) {
+      billName = 'Conta de Gás Encanado';
+      favored = 'Comgás - Cia de Gás de SP';
+      category = 'Gás (Encanado / Botijão)';
+    } else if (lowerText.includes('vivo') || lowerText.includes('telefonica')) {
+      billName = 'Vivo Fibra Residencial';
+      favored = 'Telefônica Brasil S.A. (Vivo)';
+      category = 'Internet, TV & Telefonia';
+    } else if (lowerText.includes('claro') || lowerText.includes('net ')) {
+      billName = 'Claro Fibra / Net Residencial';
+      favored = 'Claro Brasil S.A.';
+      category = 'Internet, TV & Telefonia';
+    } else if (lowerText.includes('tim')) {
+      billName = 'TIM Ultrafibra';
+      favored = 'TIM S.A.';
+      category = 'Internet, TV & Telefonia';
+    }
+
+    // Extração do valor em concessionárias
+    let amount: number | undefined = textAmount;
+    let raw44 = clean;
     if (clean.length === 48) {
       // 4 blocos de 11 dígitos com 1 DV cada: remover os DVs nas posições 11, 23, 35, 47
-      const raw44 = clean.slice(0, 11) + clean.slice(12, 23) + clean.slice(24, 35) + clean.slice(36, 47);
-      const valStr = raw44.substring(4, 15);
-      const cents = parseInt(valStr, 10);
-      if (!isNaN(cents) && cents > 0) {
-        amount = cents / 100;
-      }
-    } else if (clean.length === 44) {
-      const valStr = clean.substring(4, 15);
-      const cents = parseInt(valStr, 10);
-      if (!isNaN(cents) && cents > 0) {
-        amount = cents / 100;
+      raw44 = clean.slice(0, 11) + clean.slice(12, 23) + clean.slice(24, 35) + clean.slice(36, 47);
+    }
+    
+    const valStr = raw44.substring(4, 15);
+    const cents = parseInt(valStr, 10);
+    if (!isNaN(cents) && cents > 0) {
+      amount = cents / 100;
+    }
+
+    // Extração de data de vencimento em concessionárias (campo livre ou texto)
+    let extractedDueDate: string | undefined = textDueDate;
+    if (!extractedDueDate) {
+      // Procura por data formato YYYYMMDD ou DDMMAAAA nos dígitos do campo livre (índice 15 a 43)
+      const freeField = raw44.slice(15);
+      const yyyymmdd = freeField.match(/(202[5-9])(0[1-9]|1[0-2])(0[1-9]|[12][0-9]|3[01])/);
+      if (yyyymmdd) {
+        extractedDueDate = `${yyyymmdd[1]}-${yyyymmdd[2]}-${yyyymmdd[3]}`;
+      } else {
+        const ddmmyyyy = freeField.match(/(0[1-9]|[12][0-9]|3[01])(0[1-9]|1[0-2])(202[5-9])/);
+        if (ddmmyyyy) {
+          extractedDueDate = `${ddmmyyyy[3]}-${ddmmyyyy[2]}-${ddmmyyyy[1]}`;
+        }
       }
     }
 
-    const dueDate = fallbackMonth ? `${fallbackMonth}-10` : undefined;
+    if (!extractedDueDate) {
+      extractedDueDate = `${effectiveMonth}-10`;
+    }
 
     return {
       detected: true,
       type: 'concessionaria',
       amount,
-      dueDate,
+      dueDate: extractedDueDate,
+      hasEncodedDueDate: true,
       favored,
       category,
       billName,
-      message: `✨ Concessionária identificada: ${billName}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''}`,
+      recurrence: 'Mensal Fixa',
+      fixedValueType: amount && amount > 0 ? 'fixed_value' : 'variable_value',
+      message: `✨ Concessionária reconhecida: ${billName} • ${favored}${amount ? ` • R$ ${amount.toFixed(2).replace('.', ',')}` : ''} • Vencimento: ${extractedDueDate.split('-').reverse().join('/')}`,
     };
   }
 
-  // 4. Fallback genérico para códigos numéricos parciais ou outros formatos
-  if (clean.length >= 30) {
-    const defaultDate = fallbackMonth ? `${fallbackMonth}-10` : new Date().toISOString().slice(0, 10);
-    return {
-      detected: true,
-      type: 'outro',
-      billName: 'Boleto Bancário',
-      favored: 'Beneficiário do Boleto',
-      category: 'Outras Despesas',
-      dueDate: defaultDate,
-      message: '✨ Linha digitável reconhecida. Complete os dados se necessário.',
-    };
-  }
+  // 4. Fallback genérico para códigos numéricos parciais (>= 20 dígitos)
+  const inferredDueDate = textDueDate || `${effectiveMonth}-10`;
+  const defaultBank = BRAZILIAN_BANKS[clean.slice(0, 3)]?.name || 'Beneficiário / Banco';
 
   return {
-    detected: false,
-    message: 'Código de barras recebido (formato livre).',
+    detected: true,
+    type: 'outro',
+    billName: 'Boleto Bancário',
+    favored: defaultBank,
+    category: 'Outras Despesas',
+    dueDate: inferredDueDate,
+    hasEncodedDueDate: true,
+    amount: textAmount,
+    recurrence: 'Mensal Fixa',
+    fixedValueType: textAmount && textAmount > 0 ? 'fixed_value' : 'variable_value',
+    message: `✨ Código de barras reconhecido! Vencimento: ${inferredDueDate.split('-').reverse().join('/')}${textAmount ? ` • R$ ${textAmount.toFixed(2).replace('.', ',')}` : ''}`,
   };
 }
 

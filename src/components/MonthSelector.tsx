@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Plus, Copy, CheckCircle2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2 } from 'lucide-react';
 import { Bill } from '../types/finance';
 
 export interface MonthOption {
@@ -41,14 +41,12 @@ interface MonthSelectorProps {
   selectedMonthId: string;
   onSelectMonth: (month: MonthOption) => void;
   bills: Bill[];
-  onReplicateBillsToMonth: (targetMonthId: string) => void;
 }
 
 export const MonthSelector: React.FC<MonthSelectorProps> = ({
   selectedMonthId,
   onSelectMonth,
   bills,
-  onReplicateBillsToMonth,
 }) => {
   const [monthsList, setMonthsList] = useState<MonthOption[]>(() => {
     if (typeof window !== 'undefined') {
@@ -116,22 +114,22 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
     <div className="px-4 py-2">
       <div className="bg-white dark:bg-[#131D38] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         {/* Header navigation bar */}
-        <div className="flex items-center justify-between mb-2.5">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold">
+        <div className="flex items-center justify-between gap-2 mb-2.5">
+          <div className="flex items-center gap-2 min-w-0">
+            <div className="w-7 h-7 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold flex-shrink-0">
               <Calendar className="w-4 h-4" />
             </div>
-            <div>
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block">
+            <div className="min-w-0">
+              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
                 Navegação de Meses
               </span>
-              <span className="text-xs font-extrabold text-slate-900 dark:text-white">
+              <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate block">
                 {currentMonthOption.label}
               </span>
             </div>
           </div>
 
-          <div className="flex items-center gap-1">
+          <div className="flex items-center gap-0.5 sm:gap-1 flex-shrink-0">
             <button
               onClick={handlePrev}
               disabled={safeIndex === 0}
@@ -140,8 +138,8 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
             >
               <ChevronLeft className="w-4 h-4" />
             </button>
-            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 px-1.5">
-              {safeIndex + 1} de {monthsList.length}
+            <span className="text-[11px] font-bold text-slate-600 dark:text-slate-300 px-1">
+              {safeIndex + 1}/{monthsList.length}
             </span>
             <button
               onClick={handleNext}
@@ -152,11 +150,12 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
             </button>
             <button
               onClick={handleCreateNextMonth}
-              className="ml-1 px-2 py-1 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-700 dark:text-teal-300 text-[10.5px] font-extrabold rounded-lg border border-teal-200 dark:border-teal-800 flex items-center gap-1 active-press"
+              className="ml-0.5 sm:ml-1 px-2 py-1 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-700 dark:text-teal-300 text-[10.5px] font-extrabold rounded-lg border border-teal-200 dark:border-teal-800 flex items-center gap-1 active-press"
               title="Adicionar mais um mês subsequente ao calendário"
             >
               <Plus className="w-3 h-3" />
-              <span>Criar Mês</span>
+              <span className="hidden sm:inline">Criar Mês</span>
+              <span className="sm:hidden">+ Mês</span>
             </button>
           </div>
         </div>
@@ -193,23 +192,6 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
             );
           })}
         </div>
-
-        {/* Action Prompt if current selected month has 0 bills */}
-        {currentMonthBillsCount === 0 && (
-          <div className="mt-2.5 pt-2.5 border-t border-slate-100 dark:border-slate-800/80 flex items-center justify-between gap-2 bg-amber-50/60 dark:bg-amber-950/20 p-2.5 rounded-xl">
-            <div className="text-[11px] text-amber-800 dark:text-amber-300 font-medium">
-              💡 Nenhuma conta lançada para <b>{currentMonthOption.shortLabel}</b> ainda.
-            </div>
-            <button
-              onClick={() => onReplicateBillsToMonth(selectedMonthId)}
-              className="flex-shrink-0 px-2.5 py-1 bg-teal-600 hover:bg-teal-700 text-white text-[11px] font-extrabold rounded-lg flex items-center gap-1 shadow-xs active-press"
-              title="Copiar contas fixas do mês anterior para este mês"
-            >
-              <Copy className="w-3 h-3" />
-              <span>Replicar Contas Fixas</span>
-            </button>
-          </div>
-        )}
       </div>
     </div>
   );

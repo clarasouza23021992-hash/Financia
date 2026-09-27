@@ -204,53 +204,295 @@ export function getCategoryInfo(categoryName: string): CategoryDefinition {
   const exact = CATEGORIES_LIST.find(c => c.name.toLowerCase() === lower || c.id === lower);
   if (exact) return exact;
 
-  // Specific keyword detection
-  if (lower.includes('gás') || lower.includes('gas') || lower.includes('comgás') || lower.includes('botijão')) {
-    return CATEGORIES_LIST.find(c => c.id === 'gas')!;
-  }
-  if (lower.includes('água') || lower.includes('agua') || lower.includes('saneamento') || lower.includes('sabesp') || lower.includes('esgoto')) {
-    return CATEGORIES_LIST.find(c => c.id === 'agua')!;
-  }
-  if (lower.includes('luz') || lower.includes('energia') || lower.includes('enel') || lower.includes('eletric') || lower.includes('cpfl')) {
-    return CATEGORIES_LIST.find(c => c.id === 'energia')!;
-  }
-  if (lower.includes('condom') || lower.includes('aluguel') || lower.includes('moradia')) {
-    return CATEGORIES_LIST.find(c => c.id === 'moradia')!;
-  }
-  if (lower.includes('internet') || lower.includes('fibra') || lower.includes('telefone') || lower.includes('claro') || lower.includes('vivo') || lower.includes('tim')) {
-    return CATEGORIES_LIST.find(c => c.id === 'internet')!;
-  }
-  if (lower.includes('mercado') || lower.includes('aliment') || lower.includes('feira') || lower.includes('açougue') || lower.includes('compras')) {
-    return CATEGORIES_LIST.find(c => c.id === 'alimentacao')!;
-  }
-  if (lower.includes('transporte') || lower.includes('combust') || lower.includes('gasolina') || lower.includes('uber') || lower.includes('carro')) {
-    return CATEGORIES_LIST.find(c => c.id === 'transporte')!;
-  }
-  if (lower.includes('cartão') || lower.includes('cartao') || lower.includes('fatura') || lower.includes('nubank')) {
-    return CATEGORIES_LIST.find(c => c.id === 'cartao')!;
-  }
-  if (lower.includes('financiamento') || lower.includes('empréstimo') || lower.includes('emprestimo') || lower.includes('caixa')) {
-    return CATEGORIES_LIST.find(c => c.id === 'financiamento')!;
-  }
-  if (lower.includes('saúde') || lower.includes('saude') || lower.includes('farmácia') || lower.includes('farmacia') || lower.includes('médic') || lower.includes('unimed')) {
-    return CATEGORIES_LIST.find(c => c.id === 'saude')!;
-  }
-  if (lower.includes('educa') || lower.includes('escola') || lower.includes('curso') || lower.includes('faculdade')) {
-    return CATEGORIES_LIST.find(c => c.id === 'educacao')!;
-  }
-  if (lower.includes('lazer') || lower.includes('streaming') || lower.includes('netflix') || lower.includes('spotify') || lower.includes('assinatura')) {
-    return CATEGORIES_LIST.find(c => c.id === 'lazer')!;
-  }
-  if (lower.includes('pet') || lower.includes('animal') || lower.includes('veterinário') || lower.includes('ração')) {
-    return CATEGORIES_LIST.find(c => c.id === 'pets')!;
-  }
-  if (lower.includes('manuten') || lower.includes('reforma') || lower.includes('conserto') || lower.includes('obra')) {
-    return CATEGORIES_LIST.find(c => c.id === 'manutencao')!;
-  }
-  if (lower.includes('iptu') || lower.includes('ipva') || lower.includes('imposto') || lower.includes('tributo')) {
-    return CATEGORIES_LIST.find(c => c.id === 'impostos')!;
-  }
+  // Use smart inference
+  const inferred = inferCategoryFromName(categoryName);
+  if (inferred) return inferred;
 
   // Fallback to "Outras Despesas"
   return CATEGORIES_LIST[CATEGORIES_LIST.length - 1];
+}
+
+// Intelligent Category Inference from Bill Name, Description or Favored
+export function inferCategoryFromName(text: string): CategoryDefinition | null {
+  if (!text || typeof text !== 'string') return null;
+  const raw = text.toLowerCase().trim();
+  const normalized = raw.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+
+  // 1. FINANCIAMENTOS & EMPRÉSTIMOS (Highest priority so "financiamento da casa" never misclassifies)
+  if (
+    normalized.includes('financiam') ||
+    normalized.includes('emprestim') ||
+    normalized.includes('consorcio') ||
+    normalized.includes('credito imobiliario') ||
+    normalized.includes('credito pessoal') ||
+    normalized.includes('habitacional') ||
+    normalized.includes('caixa habita') ||
+    normalized.includes('parcela da casa') ||
+    normalized.includes('prestacao da casa') ||
+    normalized.includes('mcmv') ||
+    normalized.includes('minha casa') ||
+    normalized.includes('bv financeira') ||
+    normalized.includes('banco pan') ||
+    normalized.includes('safra financ') ||
+    normalized.includes('bmg') ||
+    normalized.includes('consignado')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'financiamento') || null;
+  }
+
+  // 2. MORADIA & CONDOMÍNIO
+  if (
+    normalized.includes('condom') ||
+    normalized.includes('aluguel') ||
+    normalized.includes('locacao') ||
+    normalized.includes('imobiliari') ||
+    normalized.includes('predial') ||
+    normalized.includes('sindico') ||
+    normalized.includes('fundo de reserva') ||
+    normalized.includes('quinto andar') ||
+    normalized.includes('loft') ||
+    normalized.includes('taxa residenc')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'moradia') || null;
+  }
+
+  // 3. ENERGIA ELÉTRICA (LUZ)
+  if (
+    normalized.includes('energia') ||
+    normalized.includes('luz') ||
+    normalized.includes('eletric') ||
+    normalized.includes('enel') ||
+    normalized.includes('cpfl') ||
+    normalized.includes('light') ||
+    normalized.includes('cemig') ||
+    normalized.includes('elektro') ||
+    normalized.includes('equatorial') ||
+    normalized.includes('copel') ||
+    normalized.includes('energisa') ||
+    normalized.includes('coelba') ||
+    normalized.includes('neoenergia') ||
+    normalized.includes('edp') ||
+    normalized.includes('celesc') ||
+    normalized.includes('rge')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'energia') || null;
+  }
+
+  // 4. ÁGUA & SANEAMENTO
+  if (
+    normalized.includes('agua') ||
+    normalized.includes('saneamento') ||
+    normalized.includes('esgoto') ||
+    normalized.includes('sabesp') ||
+    normalized.includes('sanepar') ||
+    normalized.includes('copasa') ||
+    normalized.includes('embasa') ||
+    normalized.includes('corsan') ||
+    normalized.includes('cedae') ||
+    normalized.includes('caesb') ||
+    normalized.includes('hidrometro') ||
+    normalized.includes('saae') ||
+    normalized.includes('compesa')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'agua') || null;
+  }
+
+  // 5. GÁS (Notice word boundary check so "casa" NEVER matches gas!)
+  if (
+    /\bg[aá]s\b/i.test(raw) ||
+    normalized.includes('comgas') ||
+    normalized.includes('naturgy') ||
+    normalized.includes('botijao') ||
+    normalized.includes('ultragaz') ||
+    normalized.includes('liquigas') ||
+    normalized.includes('supergasbras') ||
+    normalized.includes('copagaz') ||
+    normalized.includes('gas encanado')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'gas') || null;
+  }
+
+  // 6. INTERNET, TV & TELEFONIA
+  if (
+    normalized.includes('internet') ||
+    normalized.includes('fibra') ||
+    normalized.includes('wifi') ||
+    normalized.includes('wi-fi') ||
+    normalized.includes('banda larga') ||
+    normalized.includes('telefone') ||
+    normalized.includes('telefonia') ||
+    normalized.includes('claro') ||
+    normalized.includes('vivo') ||
+    normalized.includes('tim') ||
+    normalized.includes('oi fibra') ||
+    normalized.includes('net virtua') ||
+    normalized.includes('sky') ||
+    normalized.includes('starlink') ||
+    normalized.includes('telecom')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'internet') || null;
+  }
+
+  // 7. CARTÃO DE CRÉDITO
+  if (
+    normalized.includes('cartao') ||
+    normalized.includes('fatura') ||
+    normalized.includes('nubank') ||
+    normalized.includes('itaucard') ||
+    normalized.includes('bradescard') ||
+    normalized.includes('c6 bank') ||
+    normalized.includes('mastercard') ||
+    normalized.includes('visa') ||
+    normalized.includes('elo') ||
+    normalized.includes('ourocard') ||
+    normalized.includes('credicard')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'cartao') || null;
+  }
+
+  // 8. ALIMENTAÇÃO & SUPERMERCADO
+  if (
+    normalized.includes('mercado') ||
+    normalized.includes('supermercado') ||
+    normalized.includes('aliment') ||
+    normalized.includes('feira') ||
+    normalized.includes('acougue') ||
+    normalized.includes('hortifruti') ||
+    normalized.includes('padaria') ||
+    normalized.includes('assai') ||
+    normalized.includes('atacadao') ||
+    normalized.includes('carrefour') ||
+    normalized.includes('pao de acucar') ||
+    normalized.includes('compras do mes')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'alimentacao') || null;
+  }
+
+  // 9. TRANSPORTE & COMBUSTÍVEL
+  if (
+    normalized.includes('combust') ||
+    normalized.includes('gasolina') ||
+    normalized.includes('etanol') ||
+    normalized.includes('diesel') ||
+    normalized.includes('posto') ||
+    normalized.includes('ipiranga') ||
+    normalized.includes('shell') ||
+    normalized.includes('uber') ||
+    normalized.includes('99app') ||
+    normalized.includes('taxi') ||
+    normalized.includes('estacionamento') ||
+    normalized.includes('pedagio') ||
+    normalized.includes('sem parar') ||
+    normalized.includes('veloe') ||
+    normalized.includes('seguro auto') ||
+    normalized.includes('mecanic') ||
+    normalized.includes('revisao') ||
+    normalized.includes('ipva') ||
+    normalized.includes('detran')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'transporte') || null;
+  }
+
+  // 10. SAÚDE & FARMÁCIA
+  if (
+    normalized.includes('saude') ||
+    normalized.includes('farmacia') ||
+    normalized.includes('droga') ||
+    normalized.includes('medic') ||
+    normalized.includes('unimed') ||
+    normalized.includes('notredame') ||
+    normalized.includes('intermedica') ||
+    normalized.includes('amil') ||
+    normalized.includes('bradesco saude') ||
+    normalized.includes('sulamerica') ||
+    normalized.includes('hapvida') ||
+    normalized.includes('plano de saude') ||
+    normalized.includes('consulta') ||
+    normalized.includes('exame') ||
+    normalized.includes('laboratorio') ||
+    normalized.includes('dentista') ||
+    normalized.includes('psicolog')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'saude') || null;
+  }
+
+  // 11. EDUCAÇÃO & CURSOS
+  if (
+    normalized.includes('educa') ||
+    normalized.includes('escola') ||
+    normalized.includes('colegio') ||
+    normalized.includes('curso') ||
+    normalized.includes('faculdade') ||
+    normalized.includes('universidade') ||
+    normalized.includes('mensalidade escolar') ||
+    normalized.includes('ingles') ||
+    normalized.includes('creche')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'educacao') || null;
+  }
+
+  // 12. LAZER & ASSINATURAS
+  if (
+    normalized.includes('streaming') ||
+    normalized.includes('netflix') ||
+    normalized.includes('spotify') ||
+    normalized.includes('amazon prime') ||
+    normalized.includes('disney') ||
+    normalized.includes('hbo') ||
+    normalized.includes('max') ||
+    normalized.includes('youtube') ||
+    normalized.includes('academia') ||
+    normalized.includes('smart fit') ||
+    normalized.includes('bluefit') ||
+    normalized.includes('gympass') ||
+    normalized.includes('assinatura') ||
+    normalized.includes('lazer')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'lazer') || null;
+  }
+
+  // 13. PETS & ANIMAIS
+  if (
+    normalized.includes('pet') ||
+    normalized.includes('animal') ||
+    normalized.includes('veterinari') ||
+    normalized.includes('racao') ||
+    normalized.includes('cobasi') ||
+    normalized.includes('petz') ||
+    normalized.includes('cachorro') ||
+    normalized.includes('gato')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'pets') || null;
+  }
+
+  // 14. MANUTENÇÃO & REFORMAS
+  if (
+    normalized.includes('manuten') ||
+    normalized.includes('reforma') ||
+    normalized.includes('conserto') ||
+    normalized.includes('obra') ||
+    normalized.includes('pedreiro') ||
+    normalized.includes('eletricista') ||
+    normalized.includes('encanador') ||
+    normalized.includes('pintor') ||
+    normalized.includes('leroy merlin') ||
+    normalized.includes('telhanorte')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'manutencao') || null;
+  }
+
+  // 15. IMPOSTOS & TRIBUTOS
+  if (
+    normalized.includes('iptu') ||
+    normalized.includes('darf') ||
+    normalized.includes('imposto') ||
+    normalized.includes('tributo') ||
+    normalized.includes('taxa municipal') ||
+    normalized.includes('receita federal') ||
+    normalized.includes('simples nacional')
+  ) {
+    return CATEGORIES_LIST.find(c => c.id === 'impostos') || null;
+  }
+
+  return null;
 }

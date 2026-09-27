@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { 
   FileDown, Table, TrendingUp, TrendingDown, Wallet, 
-  ArrowUpRight, ArrowDownRight, PieChart, Plus, Trash2, Calendar
+  ArrowUpRight, ArrowDownRight, PieChart, Plus, Trash2, Calendar,
+  CheckCircle2, Clock, AlertCircle, Receipt
 } from 'lucide-react';
 import { Bill, Revenue } from '../types/finance';
 import { exportFinancialPDF, exportFinancialCSV } from '../services/pdfExporter';
@@ -152,9 +153,12 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
       {/* Revenues List */}
       <div className="bg-white dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
         <div className="flex items-center justify-between mb-3">
-          <h3 className="text-xs font-bold text-slate-700 dark:text-slate-300 uppercase tracking-wider">
-            Receitas & Entradas Cadastradas ({revenues.length})
-          </h3>
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-emerald-500"></div>
+            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              Receitas & Entradas ({revenues.length})
+            </h3>
+          </div>
           <button
             onClick={onOpenNewRevenue}
             className="flex items-center gap-1 text-xs font-bold text-emerald-700 dark:text-emerald-400 hover:underline"
@@ -165,35 +169,112 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
         </div>
 
         <div className="space-y-2">
-          {revenues.map((rev) => (
-            <div 
-              key={rev.id}
-              className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
-            >
-              <div>
-                <div className="text-xs font-bold text-slate-900 dark:text-white">
-                  {rev.name}
-                </div>
-                <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
-                  <span>📅 {rev.date.split('-').reverse().join('/')}</span>
-                  <span>•</span>
-                  <span>👤 {rev.profileName}</span>
-                </div>
-              </div>
-              <div className="flex items-center gap-3">
-                <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                  + R$ {rev.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                </div>
-                <button
-                  onClick={() => onDeleteRevenue(rev.id)}
-                  className="text-slate-400 hover:text-rose-600 p-1"
-                  title="Excluir Receita"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
-              </div>
+          {revenues.length === 0 ? (
+            <div className="text-center py-4 text-xs text-slate-400">
+              Nenhuma receita registrada neste mês.
             </div>
-          ))}
+          ) : (
+            revenues.map((rev) => (
+              <div 
+                key={rev.id}
+                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+              >
+                <div>
+                  <div className="text-xs font-bold text-slate-900 dark:text-white">
+                    {rev.name}
+                  </div>
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                    <span>📅 {rev.date.split('-').reverse().join('/')}</span>
+                    <span>•</span>
+                    <span>👤 {rev.profileName}</span>
+                    <span>•</span>
+                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rev.category}</span>
+                  </div>
+                </div>
+                <div className="flex items-center gap-3">
+                  <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+                    + R$ {rev.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                  </div>
+                  <button
+                    onClick={() => onDeleteRevenue(rev.id)}
+                    className="text-slate-400 hover:text-rose-600 p-1"
+                    title="Excluir Receita"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+
+      {/* Bills / Debts List (Dívidas do Mês) */}
+      <div className="bg-white dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex items-center justify-between mb-3">
+          <div className="flex items-center gap-2">
+            <div className="w-2.5 h-2.5 rounded-full bg-rose-500"></div>
+            <h3 className="text-xs font-bold text-slate-800 dark:text-slate-200 uppercase tracking-wider">
+              Dívidas & Contas do Mês ({bills.length})
+            </h3>
+          </div>
+          <span className="text-xs font-extrabold text-rose-600 dark:text-rose-400">
+            Total: R$ {totalBills.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+          </span>
+        </div>
+
+        <div className="space-y-2">
+          {bills.length === 0 ? (
+            <div className="text-center py-4 text-xs text-slate-400">
+              Nenhuma dívida registrada neste mês.
+            </div>
+          ) : (
+            bills.map((bill) => {
+              const catInfo = getCategoryInfo(bill.category);
+              const isPaid = bill.status === 'paid';
+              const isOverdue = bill.status === 'overdue';
+
+              return (
+                <div 
+                  key={bill.id}
+                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+                >
+                  <div className="min-w-0 pr-2">
+                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+                      <span>{bill.name}</span>
+                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+                        isPaid
+                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+                          : isOverdue
+                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+                          : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+                      }`}>
+                        {isPaid ? 'Paga' : isOverdue ? 'Atrasada' : 'Pendente'}
+                      </span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                      <span>📅 Venc: {bill.dueDate.split('-').reverse().join('/')}</span>
+                      <span>•</span>
+                      <span className="truncate">{catInfo.name}</span>
+                      {bill.recurrence === 'Parcelada' && bill.installmentNumber && (
+                        <>
+                          <span>•</span>
+                          <span className="font-semibold text-teal-600 dark:text-teal-400">
+                            {bill.installmentNumber}/{bill.totalInstallments}
+                          </span>
+                        </>
+                      )}
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2 flex-shrink-0">
+                    <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
+                      - R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                    </div>
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       </div>
     </div>

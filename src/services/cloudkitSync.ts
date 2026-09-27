@@ -1,4 +1,5 @@
 import { Bill, Revenue, UserProfile, CloudDevice, SyncConflictLog, SyncLogEntry } from '../types/finance';
+import { inferCategoryFromName } from '../utils/categories';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
 const STORAGE_KEY_REVENUES = 'financas_cloudkit_revenues_v3';
@@ -48,71 +49,15 @@ export const MOCK_BILL_IDS = [
 
 export function isMockBill(b: Partial<Bill>): boolean {
   if (!b) return false;
-  // If user edited or created this bill with version > 1 or custom device, it's real!
-  if (b.version && b.version > 1) return false;
-  if (b.isEdited || b.lastEditedAt) return false;
-
-  const id = (b.id || '').toLowerCase();
-  const favored = (b.favored || '').toLowerCase();
-
-  // Only match the original static dummy placeholder records
-  if (id === 'bill-condominio' && favored.includes('administradora predial alfa')) return true;
-  if (id === 'bill-luz' && favored.includes('enel distribuição sp') && b.amount === 230) return true;
-  if (id === 'bill-gas' && favored.includes('comgás são paulo') && b.amount === 185) return true;
-  if (id === 'bill-gas-pago' && favored.includes('comgás são paulo')) return true;
-  if (id === 'bill-internet' && favored.includes('claro brasil') && b.amount === 149.9) return true;
-  if (id === 'bill-financiamento' && favored.includes('caixa') && b.amount === 1850) return true;
-  if (id === 'bill-mercado' && favored.includes('pão de açúcar') && b.amount === 720) return true;
-  if (id === 'bill-streaming' && favored.includes('netflix entretenimento') && b.amount === 55.9) return true;
-  if (id === 'bill-saude' && favored.includes('unimed') && b.amount === 940) return true;
-
-  return false;
+  return (b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true;
 }
 
-export const INITIAL_REVENUES: Revenue[] = [
-  {
-    id: 'rev-carlos-salario',
-    name: 'Salário Líquido (Carlos)',
-    amount: 6850.00,
-    date: '2026-10-05',
-    category: 'Salário & Renda',
-    recurrence: 'Mensal',
-    profileName: 'Carlos',
-    notes: 'Crédito em conta corrente Itaú.',
-    version: 2,
-    updatedAt: '2026-10-05T10:00:00.000Z',
-    updatedByDevice: 'Dispositivo Principal',
-    isSynced: true,
-  },
-  {
-    id: 'rev-paula-salario',
-    name: 'Salário Líquido (Paula)',
-    amount: 7240.00,
-    date: '2026-10-05',
-    category: 'Salário & Renda',
-    recurrence: 'Mensal',
-    profileName: 'Paula',
-    notes: 'Crédito em conta corrente Nubank.',
-    version: 2,
-    updatedAt: '2026-10-05T10:05:00.000Z',
-    updatedByDevice: 'Dispositivo Principal',
-    isSynced: true,
-  },
-  {
-    id: 'rev-rendimentos',
-    name: 'Rendimento CDB / Tesouro Selic',
-    amount: 345.80,
-    date: '2026-10-15',
-    category: 'Investimentos & Rendimentos',
-    recurrence: 'Mensal',
-    profileName: 'Carlos',
-    notes: 'Reserva de emergência do casal.',
-    version: 1,
-    updatedAt: '2026-10-15T09:00:00.000Z',
-    updatedByDevice: 'Dispositivo Principal',
-    isSynced: true,
-  },
-];
+export function isMockRevenue(r: Partial<Revenue>): boolean {
+  if (!r) return false;
+  return (r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true;
+}
+
+export const INITIAL_REVENUES: Revenue[] = [];
 
 class CloudKitSyncEngine {
   private channel: BroadcastChannel | null = null;
@@ -224,6 +169,7 @@ class CloudKitSyncEngine {
 
   // Generate couple household bills for specified or default months
   public generateDefaultBills(months: string[] = ['2026-09', '2026-10', '2026-11']): Bill[] {
+    return [];
     const activeDev = 'iPhone Carlos';
     const nowIso = new Date().toISOString();
     const result: Bill[] = [];
@@ -443,6 +389,7 @@ class CloudKitSyncEngine {
 
   // Generate couple household revenues for specified or default months
   public generateDefaultRevenues(months: string[] = ['2026-09', '2026-10', '2026-11']): Revenue[] {
+    return [];
     const activeDev = 'iPhone Carlos';
     const nowIso = new Date().toISOString();
     const result: Revenue[] = [];
@@ -498,7 +445,7 @@ class CloudKitSyncEngine {
 
   // Load Bills
   public getBills(): Bill[] {
-    if (typeof window === 'undefined') return this.generateDefaultBills();
+    if (typeof window === 'undefined') return [];
     let raw = localStorage.getItem(STORAGE_KEY_BILLS);
 
     // Fallback checks on older storage keys and permanent Safety Vault so user's real bills are NEVER lost!
@@ -514,26 +461,32 @@ class CloudKitSyncEngine {
       for (const k of fallbackKeys) {
         const legacy = localStorage.getItem(k);
         if (legacy && legacy !== 'null' && legacy !== 'undefined' && legacy !== '[]') {
-          raw = legacy;
-          localStorage.setItem(STORAGE_KEY_BILLS, legacy);
-          break;
+          try {
+            const parsed = JSON.parse(legacy);
+            const cleaned = Array.isArray(parsed) ? parsed.filter(b => !isMockBill(b)) : [];
+            if (cleaned.length > 0) {
+              raw = JSON.stringify(cleaned);
+              localStorage.setItem(STORAGE_KEY_BILLS, raw);
+              break;
+            }
+          } catch {}
         }
       }
     }
 
-    // If user has no bills stored, check safety vault again before initializing defaults
     if (!raw || raw === '[]') {
       const vaultData = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS);
       if (vaultData && vaultData !== '[]') {
-        raw = vaultData;
-        localStorage.setItem(STORAGE_KEY_BILLS, vaultData);
-      } else {
-        const defaultBills = this.generateDefaultBills();
-        raw = JSON.stringify(defaultBills);
-        localStorage.setItem(STORAGE_KEY_BILLS, raw);
-        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, raw);
-        return defaultBills;
+        try {
+          const parsed = JSON.parse(vaultData);
+          const cleaned = Array.isArray(parsed) ? parsed.filter(b => !isMockBill(b)) : [];
+          if (cleaned.length > 0) {
+            localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(cleaned));
+            return this.deduplicateBills(cleaned);
+          }
+        } catch {}
       }
+      return [];
     }
 
     try {
@@ -541,12 +494,9 @@ class CloudKitSyncEngine {
       // Strip only exact legacy mock bills
       const cleaned = parsed.filter(b => !isMockBill(b));
       
-      // If cleaned became empty, restore default couple bills immediately!
       if (cleaned.length === 0) {
-        const defaultBills = this.generateDefaultBills();
-        localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(defaultBills));
-        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(defaultBills));
-        return defaultBills;
+        localStorage.setItem(STORAGE_KEY_BILLS, '[]');
+        return [];
       }
 
       if (cleaned.length !== parsed.length) {
@@ -572,7 +522,7 @@ class CloudKitSyncEngine {
 
       return this.deduplicateBills(migrated);
     } catch {
-      return this.generateDefaultBills();
+      return [];
     }
   }
 
@@ -600,25 +550,444 @@ class CloudKitSyncEngine {
     return Array.from(map.values());
   }
 
-  // Deduplicate bills list keeping the richest / paid version
+  // Deduplicate bills list keeping the richest / paid version and recording deleted tombstones
   public deduplicateBills(billsList: Bill[]): Bill[] {
+    if (!Array.isArray(billsList)) return [];
+    const deleted = this.getDeletedBillIds();
+    const deletedSet = new Set(deleted);
     const map = new Map<string, Bill>();
+
     for (const b of billsList) {
-      if (isMockBill(b)) continue;
+      if (!b || !b.id || isMockBill(b) || deletedSet.has(b.id)) {
+        if (b?.id && !deletedSet.has(b.id) && isMockBill(b)) {
+          this.recordDeletedBill(b.id);
+          deletedSet.add(b.id);
+        }
+        continue;
+      }
+
       const cleanName = (b.name || '').trim().toLowerCase();
-      const key = `${cleanName}_${b.dueDate}_${Number(b.amount || 0).toFixed(2)}`;
+      const month = (b.dueDate || '').substring(0, 7);
+      const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
+      const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
+
       if (map.has(key)) {
         const existing = map.get(key)!;
+        let keepIncoming = false;
+
         if (b.status === 'paid' && existing.status !== 'paid') {
-          map.set(key, b);
+          keepIncoming = true;
+        } else if (existing.status === 'paid' && b.status !== 'paid') {
+          keepIncoming = false;
         } else if (b.receiptUrl && !existing.receiptUrl) {
+          keepIncoming = true;
+        } else if (existing.receiptUrl && !b.receiptUrl) {
+          keepIncoming = false;
+        } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
+          keepIncoming = true;
+        } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
+          keepIncoming = false;
+        } else {
+          const bVer = b.version || 1;
+          const eVer = existing.version || 1;
+          if (bVer > eVer) {
+            keepIncoming = true;
+          } else {
+            const bTime = new Date(b.updatedAt || 0).getTime();
+            const eTime = new Date(existing.updatedAt || 0).getTime();
+            if (bTime > eTime) keepIncoming = true;
+          }
+        }
+
+        if (keepIncoming) {
+          if (!existing.id.startsWith('rec_') && !existing.isProjected) {
+            this.recordDeletedBill(existing.id);
+            deletedSet.add(existing.id);
+          }
           map.set(key, b);
+        } else {
+          if (!b.id.startsWith('rec_') && !b.isProjected) {
+            this.recordDeletedBill(b.id);
+            deletedSet.add(b.id);
+          }
         }
       } else {
         map.set(key, b);
       }
     }
-    return Array.from(map.values());
+
+    // Cross-month cleanup:
+    // If a bill was rescheduled/moved (single 'Única / Pontual' or carried-over bill), eliminate earlier phantom ghost copies.
+    // CRITICAL: NEVER delete recurring bills ('Mensal Fixa') or installment bills ('Parcelada') across months!
+    const list = Array.from(map.values());
+    const finalList: Bill[] = [];
+
+    for (const b of list) {
+      // Recurring bills ('Mensal Fixa') and installment bills ('Parcelada') legitimately exist in multiple months
+      if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType || b.isProjected) {
+        finalList.push(b);
+        continue;
+      }
+
+      const bMonth = (b.dueDate || '').substring(0, 7);
+      const bBarcode = (b.barcode || '').replace(/\D/g, '');
+      const bName = b.name.trim().toLowerCase();
+
+      const hasLaterVersion = list.some(other => {
+        if (other.id === b.id) return false;
+        if (other.recurrence === 'Mensal Fixa' || other.recurrence === 'Parcelada') return false;
+        const otherMonth = (other.dueDate || '').substring(0, 7);
+        if (otherMonth <= bMonth) return false;
+        const otherBarcode = (other.barcode || '').replace(/\D/g, '');
+        if (bBarcode.length >= 10 && otherBarcode === bBarcode) return true;
+        return other.name.trim().toLowerCase() === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
+      });
+
+      if (hasLaterVersion) {
+        this.recordDeletedBill(b.id);
+        deletedSet.add(b.id);
+      } else {
+        finalList.push(b);
+      }
+    }
+
+    return finalList;
+  }
+
+  // Helper to infer expense category from bill title or favored
+  public guessCategoryFromName(name: string): string {
+    const smart = inferCategoryFromName(name);
+    if (smart) return smart.name;
+    return 'Outras Despesas';
+  }
+
+  // Ensure bills list is automatically populated for target month with all recurring and installment bills
+  public ensureRecurringBillsForMonth(targetMonthId: string): Bill[] {
+    return this.autoPropagateRecurringBills([targetMonthId]);
+  }
+
+  /**
+   * Automatically populates subsequent months with recurring and installment bills:
+   * 1. 'Mensal Fixa' with fixed value -> Populates all subsequent months with exact fixed amount.
+   * 2. 'Mensal Fixa' with variable value (or amount 0.00) -> Populates subsequent months with 0.00 ready to enter.
+   * 3. 'Parcelada' -> Populates each subsequent month with installment number (X/total) and installment amount.
+   *
+   * Completely automated and prevents duplicate entries.
+   */
+  public autoPropagateRecurringBills(specificMonths?: string[]): Bill[] {
+    if (typeof window === 'undefined') return this.getBills();
+
+    const allBills = this.getBills();
+    const activeDev = this.getActiveDevice().name;
+    const deletedSeriesSlugs = new Set(this.getDeletedSeriesSlugs());
+
+    // Target months range: all standard 16+ months plus any requested month
+    const defaultMonths = [
+      '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+      '2027-01', '2027-02', '2027-03', '2027-04', '2027-05',
+      '2027-06', '2027-07', '2027-08', '2027-09', '2027-10',
+      '2027-11', '2027-12'
+    ];
+    const targetMonthList = Array.from(new Set([
+      ...defaultMonths,
+      ...(specificMonths || []),
+      ...allBills.map(b => (b.dueDate || '').substring(0, 7)).filter(Boolean)
+    ])).sort();
+
+    // 1. Gather all master recurring bills (Mensal Fixa)
+    // Cluster bills into unique recurring series so editing a bill in one month never conflicts with old names
+    interface RecurringSeriesCluster {
+      master: Bill;
+      keys: Set<string>;
+    }
+    const seriesClusters: RecurringSeriesCluster[] = [];
+
+    allBills.forEach(b => {
+      const isRecurring = b.recurrence === 'Mensal Fixa' || 
+                          (b.recurrence as string) === 'Fixa' || 
+                          b.fixedValueType === 'fixed_value' || 
+                          b.fixedValueType === 'variable_value' ||
+                          (b as any).isRecurring === true;
+      if (!isMockBill(b) && isRecurring) {
+        const cleanName = b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const cleanSlug = cleanName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+        const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
+        const parentId = b.parentRecurringId;
+
+        // Check if b matches any existing cluster
+        let matchedCluster: RecurringSeriesCluster | undefined;
+        for (const cluster of seriesClusters) {
+          const keys = cluster.keys;
+          if (
+            (parentId && keys.has(parentId)) ||
+            keys.has(b.id) ||
+            (cleanBarcode.length >= 10 && keys.has(cleanBarcode)) ||
+            keys.has(cleanName) ||
+            keys.has(cleanSlug)
+          ) {
+            matchedCluster = cluster;
+            break;
+          }
+        }
+
+        if (!matchedCluster) {
+          const keys = new Set<string>();
+          keys.add(cleanName);
+          keys.add(cleanSlug);
+          if (b.id) keys.add(b.id);
+          if (parentId) keys.add(parentId);
+          if (cleanBarcode.length >= 10) keys.add(cleanBarcode);
+          seriesClusters.push({ master: b, keys });
+        } else {
+          // Merge identifiers into this cluster
+          matchedCluster.keys.add(cleanName);
+          matchedCluster.keys.add(cleanSlug);
+          if (b.id) matchedCluster.keys.add(b.id);
+          if (parentId) matchedCluster.keys.add(parentId);
+          if (cleanBarcode.length >= 10) matchedCluster.keys.add(cleanBarcode);
+
+          // Determine which bill should be the canonical master of this series
+          const cur = matchedCluster.master;
+          let shouldReplace = false;
+          if (b.isEdited && !cur.isEdited) {
+            shouldReplace = true;
+          } else if (!b.isEdited && cur.isEdited) {
+            shouldReplace = false;
+          } else {
+            const bTime = new Date(b.lastEditedAt || b.updatedAt || 0).getTime();
+            const curTime = new Date(cur.lastEditedAt || cur.updatedAt || 0).getTime();
+            if (bTime > curTime) {
+              shouldReplace = true;
+            } else if (bTime === curTime) {
+              const bMonth = (b.dueDate || '').substring(0, 7);
+              const curMonth = (cur.dueDate || '').substring(0, 7);
+              if (bMonth > curMonth) shouldReplace = true;
+            }
+          }
+
+          if (shouldReplace) {
+            matchedCluster.master = b;
+          }
+        }
+      }
+    });
+
+    // Filter out blacklisted series
+    const activeRecurringClusters = seriesClusters.filter(cluster => {
+      for (const k of cluster.keys) {
+        if (deletedSeriesSlugs.has(k)) return false;
+      }
+      return true;
+    });
+
+    // 2. Gather master installment bills (Parcelada)
+    const installmentGroups = new Map<string, Bill>();
+    allBills.forEach(b => {
+      if (!isMockBill(b) && (b.recurrence === 'Parcelada' || (b.totalInstallments || 1) > 1)) {
+        const cleanBaseName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const cleanSlug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+        if (deletedSeriesSlugs.has(cleanSlug) || deletedSeriesSlugs.has(cleanBaseName)) {
+          return;
+        }
+
+        const groupId = b.parentInstallmentId || cleanBaseName;
+        if (!installmentGroups.has(groupId)) {
+          installmentGroups.set(groupId, b);
+        } else {
+          const prev = installmentGroups.get(groupId)!;
+          if (b.isEdited && !prev.isEdited) {
+            installmentGroups.set(groupId, b);
+          } else {
+            const bTime = new Date(b.lastEditedAt || b.updatedAt || 0).getTime();
+            const prevTime = new Date(prev.lastEditedAt || prev.updatedAt || 0).getTime();
+            if (bTime > prevTime) {
+              installmentGroups.set(groupId, b);
+            }
+          }
+        }
+      }
+    });
+
+    let workingBills = [...allBills];
+    let hasChanges = false;
+
+    // Process each target month
+    for (const targetMonth of targetMonthList) {
+      const billsInMonth = workingBills.filter(b => (b.dueDate || '').startsWith(targetMonth));
+      const namesInMonth = new Set(billsInMonth.map(b => b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')));
+      const barcodesInMonth = new Set(
+        billsInMonth.map(b => (b.barcode || '').replace(/\D/g, '')).filter(bc => bc.length >= 10)
+      );
+
+      // A. Populate 'Mensal Fixa' (Com valor e Sem valor / Variável)
+      for (const cluster of activeRecurringClusters) {
+        const master = cluster.master;
+        const masterMonth = (master.dueDate || '').substring(0, 7);
+        // Only populate from master's start month onwards
+        if (targetMonth < masterMonth) continue;
+
+        const cleanName = master.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const cleanBarcode = (master.barcode || '').replace(/\D/g, '');
+
+        // Check if an instance already exists in this target month
+        const existingInstance = billsInMonth.find(b => {
+          if (b.parentRecurringId && (cluster.keys.has(b.parentRecurringId) || b.parentRecurringId === master.id)) return true;
+          if (cluster.keys.has(b.id)) return true;
+          const bBarcode = (b.barcode || '').replace(/\D/g, '');
+          if (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) return true;
+          const bCleanName = b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          return cluster.keys.has(bCleanName) || bCleanName === cleanName;
+        });
+
+        if (existingInstance) {
+          // Synchronize master changes to existing future instance
+          if (
+            existingInstance.name !== master.name ||
+            existingInstance.category !== master.category ||
+            existingInstance.favored !== master.favored ||
+            existingInstance.barcode !== master.barcode ||
+            existingInstance.pixKey !== master.pixKey
+          ) {
+            existingInstance.name = master.name;
+            existingInstance.category = master.category;
+            existingInstance.favored = master.favored;
+            existingInstance.barcode = master.barcode;
+            existingInstance.pixKey = master.pixKey;
+            existingInstance.pixType = master.pixType;
+            existingInstance.recurrence = master.recurrence;
+            existingInstance.fixedValueType = master.fixedValueType;
+            existingInstance.parentRecurringId = master.id;
+            hasChanges = true;
+          }
+          continue;
+        }
+
+        const alreadyExists = namesInMonth.has(cleanName) || 
+          (cleanBarcode.length >= 10 && barcodesInMonth.has(cleanBarcode));
+
+        if (!alreadyExists) {
+          const day = master.dueDate.split('-')[2] || '10';
+          const [yStr, mStr] = targetMonth.split('-');
+          const y = parseInt(yStr, 10);
+          const m = parseInt(mStr, 10);
+          const maxDays = new Date(y, m, 0).getDate();
+          const safeDay = String(Math.min(parseInt(day, 10), maxDays)).padStart(2, '0');
+          const targetDueDate = `${targetMonth}-${safeDay}`;
+
+          const isVariable = master.fixedValueType === 'variable_value' || (master.amount || 0) === 0;
+          const newAmount = isVariable ? 0 : (master.amount || 0);
+          const cleanSlug = cleanName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+          const newId = `rec_${cleanSlug}_${targetMonth}`;
+
+          this.unrecordDeletedBill(newId);
+
+          const newBill: Bill = {
+            ...master,
+            id: newId,
+            parentRecurringId: master.id,
+            dueDate: targetDueDate,
+            amount: newAmount,
+            fixedValueType: isVariable ? 'variable_value' : 'fixed_value',
+            status: 'pending',
+            paidAt: undefined,
+            paidBy: undefined,
+            receiptUrl: undefined,
+            receiptName: undefined,
+            receiptSize: undefined,
+            receiptType: undefined,
+            version: 1,
+            isEdited: false,
+            lastEditedAt: undefined,
+            isProjected: true,
+            updatedAt: new Date().toISOString(),
+            updatedByDevice: activeDev,
+            isSynced: true,
+          };
+
+          workingBills.push(newBill);
+          namesInMonth.add(cleanName);
+          if (cleanBarcode.length >= 10) barcodesInMonth.add(cleanBarcode);
+          hasChanges = true;
+        }
+      }
+
+      // B. Populate 'Parcelada'
+      for (const [_groupId, master] of installmentGroups.entries()) {
+        const totalInst = master.totalInstallments || 1;
+        const startInst = master.installmentNumber || 1;
+        const baseMonth = (master.dueDate || '').substring(0, 7);
+        const day = master.dueDate.split('-')[2] || '10';
+
+        const [y1, m1] = baseMonth.split('-').map(Number);
+        const [y2, m2] = targetMonth.split('-').map(Number);
+        const monthDiff = (y2 - y1) * 12 + (m2 - m1);
+        const targetInst = startInst + monthDiff;
+
+        if (targetInst >= 1 && targetInst <= totalInst) {
+          const baseCleanName = master.name.replace(/\s*\(\d+\/\d+\)/, '').trim();
+          const targetName = `${baseCleanName} (${targetInst}/${totalInst})`;
+          const cleanTargetName = targetName.toLowerCase();
+
+          const alreadyExists = workingBills.some(b => 
+            (b.dueDate || '').startsWith(targetMonth) &&
+            (
+              (b.parentInstallmentId && b.parentInstallmentId === (master.parentInstallmentId || master.id) && b.installmentNumber === targetInst) ||
+              b.name.trim().toLowerCase() === cleanTargetName
+            )
+          );
+
+          if (!alreadyExists) {
+            const [yStr, mStr] = targetMonth.split('-');
+            const y = parseInt(yStr, 10);
+            const m = parseInt(mStr, 10);
+            const maxDays = new Date(y, m, 0).getDate();
+            const safeDay = String(Math.min(parseInt(day, 10), maxDays)).padStart(2, '0');
+            const targetDueDate = `${targetMonth}-${safeDay}`;
+
+            const cleanSlug = baseCleanName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase().substring(0, 20);
+            const newId = `bill-inst-${cleanSlug}-${targetMonth}-${targetInst}`;
+
+            this.unrecordDeletedBill(newId);
+
+            const newInstBill: Bill = {
+              ...master,
+              id: newId,
+              name: targetName,
+              dueDate: targetDueDate,
+              amount: master.amount,
+              status: 'pending',
+              paidAt: undefined,
+              paidBy: undefined,
+              receiptUrl: undefined,
+              receiptName: undefined,
+              receiptSize: undefined,
+              receiptType: undefined,
+              installmentNumber: targetInst,
+              totalInstallments: totalInst,
+              parentInstallmentId: master.parentInstallmentId || master.id,
+              recurrence: 'Parcelada',
+              version: 1,
+              isEdited: false,
+              lastEditedAt: undefined,
+              isProjected: true,
+              updatedAt: new Date().toISOString(),
+              updatedByDevice: activeDev,
+              isSynced: true,
+            };
+
+            workingBills.push(newInstBill);
+            hasChanges = true;
+          }
+        }
+      }
+    }
+
+    if (hasChanges) {
+      this.saveBills(workingBills);
+      return this.getBills();
+    }
+
+    return workingBills;
   }
 
   // Save Bills preserving each bill's own updatedAt so modifying one bill doesn't alter timestamps of all other bills
@@ -661,111 +1030,6 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('BILLS_UPDATED', { count: realBills.length });
     this.syncWithServer();
     return realBills;
-  }
-
-  // Ensure recurring bills (Mensal Fixa) and unpaid debts (pendentes/atrasadas) propagate forward to target month automatically
-  public ensureRecurringBillsForMonth(targetMonthId: string): Bill[] {
-    const allBills = this.getBills();
-    const existingInTarget = allBills.filter(b => b.dueDate.startsWith(targetMonthId));
-    const existingNames = new Set(existingInTarget.map(b => b.name.trim().toLowerCase()));
-
-    // Get all 'Mensal Fixa' recurring bills
-    const recurringFixed = allBills.filter(b => b.recurrence === 'Mensal Fixa');
-    const seenFixed = new Map<string, Bill>();
-    for (const b of recurringFixed) {
-      const key = b.name.trim().toLowerCase();
-      if (!seenFixed.has(key)) {
-        seenFixed.set(key, b);
-      }
-    }
-
-    let changed = false;
-    const newBills: Bill[] = [];
-    const activeDev = this.getActiveDevice().name;
-
-    // 1. Propagate 'Mensal Fixa'
-    seenFixed.forEach((baseBill, nameKey) => {
-      if (!existingNames.has(nameKey)) {
-        const dayPart = (baseBill.dueDate.split('-')[2] || '10').padStart(2, '0');
-        const [y, m] = targetMonthId.split('-').map(Number);
-        const maxDays = new Date(y, m, 0).getDate();
-        const validDay = String(Math.min(parseInt(dayPart, 10), maxDays)).padStart(2, '0');
-
-        const isVariable = baseBill.fixedValueType === 'variable_value';
-        const newBill: Bill = {
-          ...baseBill,
-          id: `bill-${targetMonthId}-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
-          amount: isVariable ? 0 : baseBill.amount,
-          fixedValueType: baseBill.fixedValueType,
-          dueDate: `${targetMonthId}-${validDay}`,
-          status: 'pending',
-          paidAt: undefined,
-          paidBy: undefined,
-          receiptUrl: undefined,
-          receiptName: undefined,
-          receiptSize: undefined,
-          version: 1,
-          isEdited: false,
-          lastEditedAt: undefined,
-          updatedAt: undefined as any,
-          updatedByDevice: activeDev,
-          isSynced: true,
-        };
-        newBills.push(newBill);
-        existingNames.add(nameKey);
-        changed = true;
-      }
-    });
-
-    // 2. Rollover Unpaid Debts from previous months ("a divida não está indo para o próximo mês")
-    // If a bill from an earlier month (< targetMonthId) is not paid (pending or overdue),
-    // and hasn't been carried over to targetMonthId yet, carry it over!
-    const priorUnpaid = allBills.filter(b => {
-      const billMonth = b.dueDate.substring(0, 7);
-      return billMonth < targetMonthId && b.status !== 'paid';
-    });
-
-    for (const unpaid of priorUnpaid) {
-      const cleanName = unpaid.name.trim().toLowerCase();
-      // Check if target month already has this bill or an installment
-      const alreadyInTarget = existingInTarget.some(
-        b => b.id === unpaid.id || 
-             (b.parentInstallmentId && b.parentInstallmentId === unpaid.parentInstallmentId) ||
-             (b.name.trim().toLowerCase() === cleanName && !b.isCarriedOver) ||
-             (b.isCarriedOver && (b.originalDueDate === unpaid.dueDate || b.name.includes(unpaid.name)))
-      );
-
-      if (!alreadyInTarget) {
-        const [y, m] = targetMonthId.split('-').map(Number);
-        const dayPart = (unpaid.dueDate.split('-')[2] || '10').padStart(2, '0');
-        const maxDays = new Date(y, m, 0).getDate();
-        const validDay = String(Math.min(parseInt(dayPart, 10), maxDays)).padStart(2, '0');
-
-        const carriedBill: Bill = {
-          ...unpaid,
-          id: `bill-carried-${targetMonthId}-${unpaid.id}`,
-          dueDate: `${targetMonthId}-${validDay}`,
-          status: 'pending',
-          isCarriedOver: true,
-          originalDueDate: unpaid.dueDate,
-          version: 1,
-          isEdited: false,
-          lastEditedAt: undefined,
-          updatedAt: new Date().toISOString(),
-          updatedByDevice: activeDev,
-          isSynced: true,
-        };
-        newBills.push(carriedBill);
-        changed = true;
-      }
-    }
-
-    if (changed) {
-      const combined = [...allBills, ...newBills];
-      this.saveBills(combined);
-      return combined;
-    }
-    return allBills;
   }
 
   // Save bill with automatic generation of installments for Parcelada
@@ -916,21 +1180,57 @@ class CloudKitSyncEngine {
     return combined;
   }
 
-  // Add or Update Single Bill (Strictly isolates modification timestamp to edited bill)
+  // Add or Update Single Bill (Properly references unique ID to update instead of triggering accidental duplicate insert)
   public upsertBill(bill: Omit<Bill, 'version' | 'updatedAt' | 'updatedByDevice' | 'isSynced'> & Partial<Bill>): Bill {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
-    const bills = this.getBills();
+    let bills = this.getBills();
     const activeDev = this.getActiveDevice().name;
-    const existingIndex = bill.id ? bills.findIndex(b => b.id === bill.id) : -1;
     const nowIso = new Date().toISOString();
+    const newMonth = (bill.dueDate || '').substring(0, 7);
+    const cleanName = (bill.name || '').trim().toLowerCase();
+    const cleanBarcode = (bill.barcode || '').replace(/\D/g, '');
+
+    // Step 1: Identify existing bill using prioritized unique identity criteria:
+    // A. By explicit bill.id
+    // B. By exact barcode (>= 10 digits) across all bills
+    // C. By normalized name in the target month (target month placeholder, draft or duplicate)
+    // D. By normalized name in other months (moving bill forward or backward across months)
+    let existingIndex = -1;
+
+    if (bill.id) {
+      existingIndex = bills.findIndex(b => b.id === bill.id);
+    }
+
+    if (existingIndex < 0 && cleanBarcode.length >= 10) {
+      existingIndex = bills.findIndex(b => (b.barcode || '').replace(/\D/g, '') === cleanBarcode);
+    }
+
+    if (existingIndex < 0 && cleanName) {
+      // Check in target month first
+      existingIndex = bills.findIndex(b => {
+        const bMonth = (b.dueDate || '').substring(0, 7);
+        return bMonth === newMonth && b.name.trim().toLowerCase() === cleanName;
+      });
+    }
+
+    if (existingIndex < 0 && cleanName) {
+      // Check across other months for unpaid, pending, or carried-over bill being rescheduled
+      existingIndex = bills.findIndex(b => {
+        return b.name.trim().toLowerCase() === cleanName && (b.status !== 'paid' || (b.amount || 0) === 0 || b.id.startsWith('bill-carried-'));
+      });
+    }
 
     let savedBill: Bill;
     if (existingIndex >= 0) {
       const existing = bills[existingIndex];
+      const oldMonth = (existing.dueDate || '').substring(0, 7);
       const newVersion = (existing.version || 1) + 1;
+
+      // CRITICAL: Ensure existing bill's unique ID is referenced for update instead of triggering an insert
       savedBill = {
         ...existing,
         ...bill,
+        id: existing.id, // Strictly retain canonical unique ID
         version: newVersion,
         isEdited: true,
         lastEditedAt: nowIso,
@@ -939,10 +1239,115 @@ class CloudKitSyncEngine {
         isSynced: true,
       };
       bills[existingIndex] = savedBill;
+
+      // Clean up any phantom duplicates across months:
+      // 1. Any other bill with the same barcode
+      // 2. Any other bill in newMonth with the same name (e.g. preset/placeholder in target month)
+      // 3. Any other bill in oldMonth with the same name (if moved between months)
+      // 4. Any zero-amount or carried-over ghosts
+      const deletedIdsToRecord: string[] = [];
+      const isRecurring = savedBill.recurrence === 'Mensal Fixa' || savedBill.recurrence === 'Parcelada';
+
+      bills = bills.filter(b => {
+        if (b.id === savedBill.id) return true;
+        const bMonth = (b.dueDate || '').substring(0, 7);
+        const bName = (b.name || '').trim().toLowerCase();
+        const bBarcode = (b.barcode || '').replace(/\D/g, '');
+
+        // Never prune recurring or installment bills from other months!
+        if (isRecurring && bMonth !== newMonth) {
+          return true;
+        }
+
+        const isBarcodeDup = (cleanBarcode.length >= 10 && bBarcode === cleanBarcode && bMonth === newMonth);
+        const isNewMonthDup = (bMonth === newMonth && bName === cleanName);
+        const isOldMonthDup = (!isRecurring && oldMonth && newMonth && oldMonth !== newMonth && bMonth === oldMonth && bName === cleanName);
+        const isGhostDup = (!isRecurring && bName === cleanName && (b.id.startsWith('bill-carried-') || (b.amount || 0) === 0));
+
+        if (isBarcodeDup || isNewMonthDup || isOldMonthDup || isGhostDup) {
+          deletedIdsToRecord.push(b.id);
+          return false;
+        }
+        return true;
+      });
+
+      deletedIdsToRecord.forEach(id => this.recordDeletedBill(id));
+
+      // Propagate changes to subsequent months for recurring and installment bills
+      const applyToFutureMonths = (bill as any).applyToFutureMonths !== false;
+      const previousName = (bill as any).previousName || existing.name;
+
+      if (applyToFutureMonths && isRecurring) {
+        const currentMonth = (savedBill.dueDate || '').substring(0, 7);
+        const dayOfMonth = (savedBill.dueDate.split('-')[2] || '10');
+        const prevCleanName = (previousName || '').replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const newCleanBaseName = savedBill.name.replace(/\s*\(\d+\/\d+\)/, '').trim();
+        const masterId = savedBill.parentRecurringId || savedBill.id;
+        const parentInstId = savedBill.parentInstallmentId || (savedBill.recurrence === 'Parcelada' ? savedBill.id : undefined);
+
+        bills = bills.map(b => {
+          if (b.id === savedBill.id) return b;
+          const bMonth = (b.dueDate || '').substring(0, 7);
+          if (bMonth <= currentMonth) return b; // Only update subsequent months!
+
+          // Check if b belongs to this recurring series
+          const bBaseCleanName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+          const matchesSeries =
+            (b.parentRecurringId && (b.parentRecurringId === masterId || b.parentRecurringId === savedBill.id)) ||
+            (parentInstId && b.parentInstallmentId === parentInstId) ||
+            (prevCleanName && bBaseCleanName === prevCleanName) ||
+            (bBaseCleanName === newCleanBaseName.toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '')) ||
+            (cleanBarcode.length >= 10 && (b.barcode || '').replace(/\D/g, '') === cleanBarcode);
+
+          if (!matchesSeries) return b;
+
+          // Compute updated due date in that future month using the chosen day
+          const [yStr, mStr] = bMonth.split('-');
+          const y = parseInt(yStr, 10);
+          const m = parseInt(mStr, 10);
+          const maxDays = new Date(y, m, 0).getDate();
+          const safeDay = String(Math.min(parseInt(dayOfMonth, 10), maxDays)).padStart(2, '0');
+          const updatedDueDate = `${bMonth}-${safeDay}`;
+
+          // Preserve installment number if Parcelada
+          let updatedName = savedBill.name;
+          if (savedBill.recurrence === 'Parcelada' && b.installmentNumber) {
+            updatedName = `${newCleanBaseName} (${b.installmentNumber}/${b.totalInstallments || savedBill.totalInstallments || 10})`;
+          }
+
+          // Amount logic: if fixed and not paid, update amount
+          let updatedAmount = b.amount;
+          if (savedBill.fixedValueType === 'fixed_value' && b.status !== 'paid') {
+            updatedAmount = savedBill.amount;
+          }
+
+          return {
+            ...b,
+            name: updatedName,
+            category: savedBill.category,
+            favored: savedBill.favored,
+            barcode: savedBill.barcode,
+            pixKey: savedBill.pixKey,
+            pixType: savedBill.pixType,
+            recurrence: savedBill.recurrence,
+            fixedValueType: savedBill.fixedValueType,
+            notes: savedBill.notes,
+            amount: updatedAmount,
+            dueDate: updatedDueDate,
+            parentRecurringId: masterId,
+            parentInstallmentId: parentInstId || b.parentInstallmentId,
+            version: (b.version || 1) + 1,
+            updatedAt: nowIso,
+            updatedByDevice: activeDev,
+            isSynced: true,
+          };
+        });
+      }
     } else {
+      // Pure new bill creation (no existing record matched by ID, barcode, or name)
       savedBill = {
         ...bill,
-        id: bill.id || `bill-${Date.now()}`,
+        id: bill.id || `bill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         version: 1,
         isEdited: false,
         lastEditedAt: undefined,
@@ -951,10 +1356,41 @@ class CloudKitSyncEngine {
         isSynced: true,
       } as Bill;
       bills.unshift(savedBill);
+
+      const isRecurring = savedBill.recurrence === 'Mensal Fixa' || savedBill.recurrence === 'Parcelada';
+
+      // Clean up any previous month unpaid ghosts if adding into subsequent month (only for non-recurring single bills)
+      if (!isRecurring) {
+        const priorMonthMatches = bills.filter(b => {
+          if (b.id === savedBill.id) return false;
+          if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada') return false;
+          const bMonth = (b.dueDate || '').substring(0, 7);
+          if (bMonth >= newMonth) return false;
+          const bName = (b.name || '').trim().toLowerCase();
+          const bBarcode = (b.barcode || '').replace(/\D/g, '');
+          if (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) return true;
+          return bName === cleanName && (b.status !== 'paid' || (b.amount || 0) === 0 || b.id.startsWith('bill-carried-'));
+        });
+
+        if (priorMonthMatches.length > 0) {
+          priorMonthMatches.forEach(oldB => this.recordDeletedBill(oldB.id));
+          const prunedIds = new Set(priorMonthMatches.map(m => m.id));
+          bills = bills.filter(b => !prunedIds.has(b.id));
+        }
+      }
     }
 
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
+    let deduped = this.deduplicateBills(bills);
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
+
+    // If recurring or installment bill was updated/added, auto-propagate to subsequent months
+    if (savedBill.recurrence === 'Mensal Fixa' || savedBill.recurrence === 'Parcelada' || savedBill.fixedValueType !== undefined) {
+      deduped = this.autoPropagateRecurringBills();
+    }
+
     this.broadcastUpdate('BILL_UPSERTED', savedBill);
+    this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
     this.syncWithServer();
     return savedBill;
   }
@@ -999,6 +1435,12 @@ class CloudKitSyncEngine {
       deleted.push(id);
       localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(deleted));
     }
+  }
+
+  public unrecordDeletedBill(id: string): void {
+    if (typeof window === 'undefined' || !id) return;
+    const deleted = this.getDeletedBillIds().filter(d => d !== id);
+    localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(deleted));
   }
 
   // Deleted Revenue IDs (Tombstones for CloudKit Sync)
@@ -1051,19 +1493,180 @@ class CloudKitSyncEngine {
     return Array.from(map.values());
   }
 
-  // Delete Bill
+  // Delete Bill (single month instance)
   public deleteBill(id: string): void {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
     this.recordDeletedBill(id);
     const bills = this.getBills().filter(b => b.id !== id);
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(bills));
     this.broadcastUpdate('BILL_DELETED', { id });
     this.syncWithServer();
   }
 
+  // Slugs of recurring series permanently deleted by user across all months
+  public getDeletedSeriesSlugs(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('financas_deleted_series_slugs');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public recordDeletedSeriesSlug(slug: string): void {
+    if (typeof window === 'undefined' || !slug) return;
+    const slugs = this.getDeletedSeriesSlugs();
+    if (!slugs.includes(slug)) {
+      slugs.push(slug);
+      localStorage.setItem('financas_deleted_series_slugs', JSON.stringify(slugs));
+    }
+  }
+
+  // Delete all occurrences of a recurring/installment bill across ALL months (current and future)
+  public deleteBillSeries(bill: Bill): string[] {
+    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    const allBills = this.getBills();
+    const cleanBaseName = bill.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanBarcode = (bill.barcode || '').replace(/\D/g, '');
+    const masterId = bill.parentRecurringId || bill.id;
+    const parentInstId = bill.parentInstallmentId || (bill.recurrence === 'Parcelada' ? bill.id : undefined);
+
+    const deletedIds: string[] = [];
+    const remainingBills: Bill[] = [];
+
+    for (const b of allBills) {
+      const bBaseName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bBarcode = (b.barcode || '').replace(/\D/g, '');
+      const isMatch =
+        b.id === bill.id ||
+        (b.parentRecurringId && (b.parentRecurringId === masterId || b.parentRecurringId === bill.id)) ||
+        (parentInstId && b.parentInstallmentId === parentInstId) ||
+        (cleanBaseName && bBaseName === cleanBaseName) ||
+        (cleanBarcode.length >= 10 && bBarcode === cleanBarcode);
+
+      if (isMatch) {
+        deletedIds.push(b.id);
+        this.recordDeletedBill(b.id);
+      } else {
+        remainingBills.push(b);
+      }
+    }
+
+    if (cleanBaseName) {
+      const slug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      this.recordDeletedSeriesSlug(slug);
+      this.recordDeletedSeriesSlug(cleanBaseName);
+    }
+    if (cleanBarcode.length >= 10) {
+      this.recordDeletedSeriesSlug(cleanBarcode);
+    }
+
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(remainingBills));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(remainingBills));
+    this.broadcastUpdate('BILLS_SERIES_DELETED', { deletedIds, billName: bill.name });
+    this.syncWithServer();
+    return deletedIds;
+  }
+
+  // Check if a revenue item is actually an expense/debt by name or category
+  public isDebtExpense(item: { name: string; category?: string }): boolean {
+    if (!item || !item.name) return false;
+    const lowerName = item.name.toLowerCase().trim();
+    if (
+      lowerName.startsWith('conta ') ||
+      lowerName.startsWith('conta -') ||
+      lowerName.startsWith('conta de') ||
+      lowerName.startsWith('boleto') ||
+      lowerName.startsWith('fatura') ||
+      lowerName.includes('jupiter') ||
+      lowerName.includes('sabesp') ||
+      lowerName.includes('enel') ||
+      lowerName.includes('saneamento') ||
+      lowerName.includes('água') ||
+      lowerName.includes('agua') ||
+      lowerName.includes('luz') ||
+      lowerName.includes('energia') ||
+      lowerName.includes('iptu') ||
+      lowerName.includes('condom') ||
+      lowerName.includes('mensalidade') ||
+      lowerName.includes('financiamento') ||
+      lowerName.includes('parcela')
+    ) {
+      return true;
+    }
+    const expenseCategories = [
+      'Moradia & Condomínio',
+      'Água, Luz & Gás',
+      'Internet, TV & Telefonia',
+      'Outras Despesas',
+      'Transporte & Combustível',
+      'Saúde & Farmácia',
+      'Alimentação & Mercado',
+      'Cartão de Crédito',
+      'Financiamentos & Empréstimos'
+    ];
+    if (item.category && expenseCategories.includes(item.category)) {
+      return true;
+    }
+    return false;
+  }
+
+  /**
+   * Identifies any debts/bills that were accidentally stored in revenues
+   * (e.g., 'Conta - Jupiter_ti_2_servicos_em_', 'Conta de Água e Saneamento', etc.)
+   * and migrates them safely to bills, removing them from revenues.
+   */
+  public sanitizeAndMigrateMismatchedRevenues(): void {
+    if (typeof window === 'undefined') return;
+    const rawRevs = localStorage.getItem(STORAGE_KEY_REVENUES);
+    if (!rawRevs) return;
+
+    try {
+      const parsed: Revenue[] = JSON.parse(rawRevs);
+      if (!Array.isArray(parsed)) return;
+
+      const validRevenues: Revenue[] = [];
+      const billsToMigrate: Partial<Bill>[] = [];
+
+      for (const r of parsed) {
+        if (!r || !r.name) continue;
+        if (this.isDebtExpense(r)) {
+          billsToMigrate.push({
+            id: r.id.startsWith('bill-') ? r.id : `bill-migrated-${r.id}`,
+            name: r.name,
+            amount: Number(r.amount) || 0,
+            dueDate: r.date || '2026-10-10',
+            category: this.guessCategoryFromName(r.name),
+            favored: r.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() || r.name,
+            status: 'paid',
+            recurrence: 'Mensal Fixa',
+            fixedValueType: (Number(r.amount) || 0) > 0 ? 'fixed_value' : 'variable_value',
+            splitHousehold: true,
+            notes: 'Transferido automaticamente para Dívidas (estava em receitas)',
+          });
+        } else {
+          validRevenues.push(r);
+        }
+      }
+
+      if (billsToMigrate.length > 0) {
+        localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(validRevenues));
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(validRevenues));
+        billsToMigrate.forEach(b => {
+          this.upsertBill(b as any);
+        });
+      }
+    } catch (e) {
+      console.error('Error migrating mismatched revenues:', e);
+    }
+  }
+
   // Revenues
   public getRevenues(): Revenue[] {
-    if (typeof window === 'undefined') return this.generateDefaultRevenues();
+    if (typeof window === 'undefined') return [];
+    this.sanitizeAndMigrateMismatchedRevenues();
     let raw = localStorage.getItem(STORAGE_KEY_REVENUES);
 
     // Fallback checks on older keys and safety vault
@@ -1077,9 +1680,15 @@ class CloudKitSyncEngine {
       for (const k of fallbackKeys) {
         const legacy = localStorage.getItem(k);
         if (legacy && legacy !== 'null' && legacy !== 'undefined' && legacy !== '[]') {
-          raw = legacy;
-          localStorage.setItem(STORAGE_KEY_REVENUES, legacy);
-          break;
+          try {
+            const parsed = JSON.parse(legacy);
+            const cleaned = Array.isArray(parsed) ? parsed.filter(r => !isMockRevenue(r)) : [];
+            if (cleaned.length > 0) {
+              raw = JSON.stringify(cleaned);
+              localStorage.setItem(STORAGE_KEY_REVENUES, raw);
+              break;
+            }
+          } catch {}
         }
       }
     }
@@ -1087,22 +1696,23 @@ class CloudKitSyncEngine {
     if (!raw || raw === '[]') {
       const vaultData = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_REVENUES);
       if (vaultData && vaultData !== '[]') {
-        raw = vaultData;
-        localStorage.setItem(STORAGE_KEY_REVENUES, vaultData);
-      } else {
-        const defaultRevs = this.generateDefaultRevenues();
-        raw = JSON.stringify(defaultRevs);
-        localStorage.setItem(STORAGE_KEY_REVENUES, raw);
-        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, raw);
-        return defaultRevs;
+        try {
+          const parsed = JSON.parse(vaultData);
+          const cleaned = Array.isArray(parsed) ? parsed.filter(r => !isMockRevenue(r)) : [];
+          if (cleaned.length > 0) {
+            localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(cleaned));
+            return this.deduplicateRevenues(cleaned);
+          }
+        } catch {}
       }
+      return [];
     }
 
     try {
       const parsed: Revenue[] = JSON.parse(raw);
       const activeDeleted = this.getDeletedRevenueIds();
       let sanitized = parsed
-        .filter(r => r && r.id && !activeDeleted.includes(r.id))
+        .filter(r => r && r.id && !activeDeleted.includes(r.id) && !isMockRevenue(r))
         .map(r => ({
           ...r,
           name: r.name.replace(/Camila/g, 'Paula'),
@@ -1110,18 +1720,9 @@ class CloudKitSyncEngine {
           updatedByDevice: r.updatedByDevice?.replace(/Camila/g, 'Paula'),
         }));
 
-      // If aggressive tombstones wiped everything, unblock them
-      if (sanitized.length === 0 && parsed.length > 0) {
-        localStorage.setItem('financas_deleted_revenue_ids', '[]');
-        sanitized = parsed;
-      }
-
-      // If still empty, restore default revenues immediately!
       if (sanitized.length === 0) {
-        const defaultRevs = this.generateDefaultRevenues();
-        localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(defaultRevs));
-        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(defaultRevs));
-        return defaultRevs;
+        localStorage.setItem(STORAGE_KEY_REVENUES, '[]');
+        return [];
       }
 
       const deduped = this.deduplicateRevenues(sanitized);
@@ -1130,7 +1731,7 @@ class CloudKitSyncEngine {
       }
       return deduped;
     } catch {
-      return this.generateDefaultRevenues();
+      return [];
     }
   }
 
@@ -1145,65 +1746,248 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
   }
 
-  // Direct helper to edit and persist Carlos & Paula salaries
-  public updateCoupleSalaries(carlosAmount: number, paulaAmount: number, selectedMonthId?: string): Revenue[] {
+  // Direct helper to edit and persist Carlos & Paula salaries with automatic propagation to subsequent months
+  public updateCoupleSalaries(carlosAmount: number, paulaAmount: number, selectedMonthId: string = '2026-10'): Revenue[] {
     const rawRevenues = this.getRevenues();
     const activeDev = this.getActiveDevice().name;
-    const monthPrefix = selectedMonthId ? selectedMonthId : '2026-10';
-    const dateStr = `${monthPrefix}-05`;
+    const monthPrefix = selectedMonthId || '2026-10';
 
-    const carlosId = `rev-carlos-${monthPrefix}`;
-    const paulaId = `rev-paula-${monthPrefix}`;
+    const defaultMonths = [
+      '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+      '2027-01', '2027-02', '2027-03', '2027-04', '2027-05',
+      '2027-06', '2027-07', '2027-08', '2027-09', '2027-10',
+      '2027-11', '2027-12'
+    ];
+    const targetMonthList = Array.from(new Set([
+      ...defaultMonths,
+      monthPrefix,
+      ...rawRevenues.map(r => (r.date || '').substring(0, 7)).filter(Boolean)
+    ])).sort();
 
-    // Remove target IDs from deleted list
-    const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== carlosId && id !== paulaId);
-    localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
+    const futureMonths = targetMonthList.filter(m => m >= monthPrefix);
+    const nowIso = new Date().toISOString();
 
-    // Keep all non-matching revenues
-    const remainingRevenues = rawRevenues.filter(r => {
-      const isTargetCarlos = r.id === carlosId || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && (r.category === 'Salário & Renda') && (r.date || '').startsWith(monthPrefix));
-      const isTargetPaula = r.id === paulaId || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && (r.category === 'Salário & Renda') && (r.date || '').startsWith(monthPrefix));
-      return !isTargetCarlos && !isTargetPaula;
+    let updated = [...rawRevenues];
+
+    for (const m of futureMonths) {
+      const carlosId = `rev-carlos-${m}`;
+      const paulaId = `rev-paula-${m}`;
+      const dateStr = `${m}-05`;
+
+      // Remove any tombstone for these IDs
+      const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== carlosId && id !== paulaId);
+      localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
+
+      // Filter out existing Carlos & Paula instances in month m
+      updated = updated.filter(r => {
+        const isCarlos = r.id === carlosId || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
+        const isPaula = r.id === paulaId || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
+        return !isCarlos && !isPaula;
+      });
+
+      updated.push(
+        {
+          id: carlosId,
+          name: 'Salário Líquido (Carlos)',
+          amount: carlosAmount,
+          date: dateStr,
+          category: 'Salário & Renda',
+          recurrence: 'Mensal',
+          profileName: 'Carlos',
+          notes: 'Salário de Carlos',
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+        },
+        {
+          id: paulaId,
+          name: 'Salário Líquido (Paula)',
+          amount: paulaAmount,
+          date: dateStr,
+          category: 'Salário & Renda',
+          recurrence: 'Mensal',
+          profileName: 'Paula',
+          notes: 'Salário de Paula',
+          version: 2,
+          updatedAt: nowIso,
+          updatedByDevice: activeDev,
+          isSynced: true,
+        }
+      );
+    }
+
+    this.saveRevenues(updated);
+    this.syncWithServer();
+    return this.autoPropagateRecurringRevenues();
+  }
+
+  /**
+   * Automatically populates subsequent months with recurring revenues (Carlos, Paula, and other 'Mensal' entries)
+   */
+  public autoPropagateRecurringRevenues(specificMonths?: string[]): Revenue[] {
+    if (typeof window === 'undefined') return this.getRevenues();
+
+    const allRevenues = this.getRevenues();
+    const activeDev = this.getActiveDevice().name;
+
+    const defaultMonths = [
+      '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+      '2027-01', '2027-02', '2027-03', '2027-04', '2027-05',
+      '2027-06', '2027-07', '2027-08', '2027-09', '2027-10',
+      '2027-11', '2027-12'
+    ];
+    const targetMonthList = Array.from(new Set([
+      ...defaultMonths,
+      ...(specificMonths || []),
+      ...allRevenues.map(r => (r.date || '').substring(0, 7)).filter(Boolean)
+    ])).sort();
+
+    // 1. Group recurring revenues by series
+    interface RevenueSeriesCluster {
+      id: string; // 'carlos' | 'paula' | custom slug
+      master: Revenue;
+      startMonth: string;
+      dayOfMonth: string;
+    }
+    const seriesMap = new Map<string, RevenueSeriesCluster>();
+
+    // Check existing revenues
+    allRevenues.forEach(r => {
+      if (isMockRevenue(r)) return;
+      const isRecurring = r.recurrence === 'Mensal' || r.category === 'Salário & Renda' || r.id.startsWith('rev-carlos-') || r.id.startsWith('rev-paula-');
+      if (!isRecurring) return;
+
+      const rMonth = (r.date || '').substring(0, 7) || '2026-10';
+      const day = (r.date || '').split('-')[2] || '05';
+
+      let seriesKey = '';
+      const idRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
+      if (r.id.startsWith('rev-carlos-') || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda')) {
+        seriesKey = 'carlos';
+      } else if (r.id.startsWith('rev-paula-') || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda')) {
+        seriesKey = 'paula';
+      } else if (r.id.startsWith('rev-rec-')) {
+        seriesKey = idRoot;
+      } else {
+        const cleanName = r.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
+        seriesKey = `custom_${cleanName}_${(r.profileName || 'user').toLowerCase()}`;
+      }
+
+      const existing = seriesMap.get(seriesKey);
+      if (!existing) {
+        seriesMap.set(seriesKey, {
+          id: seriesKey,
+          master: r,
+          startMonth: rMonth,
+          dayOfMonth: day,
+        });
+      } else {
+        const eTime = new Date(existing.master.updatedAt || 0).getTime();
+        const rTime = new Date(r.updatedAt || 0).getTime();
+        const rVer = r.version || 1;
+        const eVer = existing.master.version || 1;
+        
+        if (rMonth < existing.startMonth) {
+          existing.startMonth = rMonth;
+        }
+
+        // Canonical master is the one with highest version or most recently edited timestamp
+        if (rVer > eVer || (rVer === eVer && rTime > eTime)) {
+          existing.master = r;
+          existing.dayOfMonth = day;
+        }
+      }
     });
 
     const nowIso = new Date().toISOString();
-    const carlosSalaryRev: Revenue = {
-      id: carlosId,
-      name: 'Salário Líquido (Carlos)',
-      amount: carlosAmount,
-      date: dateStr,
-      category: 'Salário & Renda',
-      recurrence: 'Mensal',
-      profileName: 'Carlos',
-      notes: 'Salário de Carlos',
-      version: 2,
-      updatedAt: nowIso,
-      updatedByDevice: activeDev,
-      isSynced: true,
-    };
+    let workingRevs = [...allRevenues];
+    let hasChanges = false;
 
-    const paulaSalaryRev: Revenue = {
-      id: paulaId,
-      name: 'Salário Líquido (Paula)',
-      amount: paulaAmount,
-      date: dateStr,
-      category: 'Salário & Renda',
-      recurrence: 'Mensal',
-      profileName: 'Paula',
-      notes: 'Salário de Paula',
-      version: 2,
-      updatedAt: nowIso,
-      updatedByDevice: activeDev,
-      isSynced: true,
-    };
+    for (const targetMonth of targetMonthList) {
+      for (const cluster of seriesMap.values()) {
+        if (targetMonth < cluster.startMonth) continue;
 
-    const updated = [carlosSalaryRev, paulaSalaryRev, ...remainingRevenues];
-    this.saveRevenues(updated);
-    this.syncWithServer();
-    return updated;
+        const master = cluster.master;
+        const masterMonth = (master.date || '').substring(0, 7) || cluster.startMonth;
+        const targetDate = `${targetMonth}-${cluster.dayOfMonth.padStart(2, '0')}`;
+
+        // Find existing revenue in targetMonth for this series
+        const existingIdx = workingRevs.findIndex(r => {
+          const m = (r.date || '').substring(0, 7);
+          if (m !== targetMonth) return false;
+          if (cluster.id === 'carlos') {
+            return r.id === `rev-carlos-${targetMonth}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
+          }
+          if (cluster.id === 'paula') {
+            return r.id === `rev-paula-${targetMonth}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
+          }
+          const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
+          if (rIdRoot && rIdRoot === cluster.id) return true;
+          const cleanName = r.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
+          return `custom_${cleanName}_${(r.profileName || 'user').toLowerCase()}` === cluster.id;
+        });
+
+        if (existingIdx >= 0) {
+          const item = workingRevs[existingIdx];
+          // For months from master's month onwards, ensure amount and details match master
+          if (targetMonth >= masterMonth && (item.amount !== master.amount || item.name !== master.name)) {
+            workingRevs[existingIdx] = {
+              ...item,
+              amount: master.amount,
+              name: master.name,
+              category: master.category,
+              profileName: master.profileName,
+              notes: master.notes,
+              version: (item.version || 1) + 1,
+              updatedAt: nowIso,
+            };
+            hasChanges = true;
+          }
+        } else {
+          // Create revenue for targetMonth
+          const newId = cluster.id === 'carlos' 
+            ? `rev-carlos-${targetMonth}`
+            : cluster.id === 'paula'
+            ? `rev-paula-${targetMonth}`
+            : `rev-rec-${cluster.id}-${targetMonth}`;
+
+          const cleanDeleted = this.getDeletedRevenueIds().filter(d => d !== newId);
+          localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
+
+          workingRevs.push({
+            id: newId,
+            name: master.name,
+            amount: master.amount,
+            date: targetDate,
+            category: master.category,
+            recurrence: 'Mensal',
+            profileName: master.profileName,
+            notes: master.notes || '',
+            version: 1,
+            updatedAt: nowIso,
+            updatedByDevice: activeDev,
+            isSynced: true,
+          });
+          hasChanges = true;
+        }
+      }
+    }
+
+    if (hasChanges) {
+      this.saveRevenues(workingRevs);
+      return this.getRevenues();
+    }
+
+    return workingRevs;
   }
 
-  public upsertRevenue(rev: Partial<Revenue> & { name: string; amount: number; date: string; category: string }): Revenue {
+  // Ensure revenues are populated for target month
+  public ensureRecurringRevenuesForMonth(targetMonthId: string): Revenue[] {
+    return this.autoPropagateRecurringRevenues([targetMonthId]);
+  }
+
+  public upsertRevenue(rev: Partial<Revenue> & { name: string; amount: number; date: string; category: string; applyToFutureMonths?: boolean }): Revenue {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
     const revenues = this.getRevenues();
     const activeDev = this.getActiveDevice().name;
@@ -1214,6 +1998,10 @@ class CloudKitSyncEngine {
     localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
 
     const existingIndex = revenues.findIndex(r => r.id === revId);
+    let prevName = '';
+    if (existingIndex >= 0) {
+      prevName = revenues[existingIndex].name || '';
+    }
     const nowIso = new Date().toISOString();
 
     let saved: Revenue;
@@ -1248,46 +2036,289 @@ class CloudKitSyncEngine {
       revenues.unshift(saved);
     }
 
-    const deduped = this.deduplicateRevenues(revenues);
+    let deduped = this.deduplicateRevenues(revenues);
+
+    // If recurring monthly revenue, propagate directly to all subsequent months
+    const shouldPropagate = rev.applyToFutureMonths !== false && (saved.recurrence === 'Mensal' || saved.category === 'Salário & Renda');
+    if (shouldPropagate) {
+      const savedMonth = (saved.date || '').substring(0, 7) || '2026-10';
+      const dayStr = (saved.date || '').split('-')[2] || '05';
+      const defaultMonths = [
+        '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
+        '2027-01', '2027-02', '2027-03', '2027-04', '2027-05',
+        '2027-06', '2027-07', '2027-08', '2027-09', '2027-10',
+        '2027-11', '2027-12',
+      ];
+      const targetMonths = Array.from(new Set([
+        ...defaultMonths,
+        ...deduped.map(r => (r.date || '').substring(0, 7)).filter(Boolean)
+      ])).filter(m => m >= savedMonth).sort();
+
+      const isCarlos = saved.id.startsWith('rev-carlos-') || ((saved.profileName === 'Carlos' || saved.name.toLowerCase().includes('carlos')) && saved.category === 'Salário & Renda');
+      const isPaula = saved.id.startsWith('rev-paula-') || ((saved.profileName === 'Paula' || saved.name.toLowerCase().includes('paula')) && saved.category === 'Salário & Renda');
+      const cleanName = saved.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
+      const prevCleanName = prevName ? prevName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-') : '';
+      const savedIdRoot = saved.id.replace(/-\d{4}-\d{2}$/, '');
+      const profLower = (saved.profileName || 'user').toLowerCase();
+
+      for (const m of targetMonths) {
+        if (m === savedMonth) continue;
+        const targetDate = `${m}-${dayStr.padStart(2, '0')}`;
+
+        const existingSubIdx = deduped.findIndex(r => {
+          if ((r.date || '').substring(0, 7) !== m) return false;
+          if (isCarlos) {
+            return r.id === `rev-carlos-${m}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
+          }
+          if (isPaula) {
+            return r.id === `rev-paula-${m}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
+          }
+          const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
+          if (savedIdRoot && rIdRoot === savedIdRoot) return true;
+          const rClean = r.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
+          const matchesName = rClean === cleanName || (prevCleanName && rClean === prevCleanName);
+          return matchesName && (r.profileName || 'user').toLowerCase() === profLower;
+        });
+
+        if (existingSubIdx >= 0) {
+          deduped[existingSubIdx] = {
+            ...deduped[existingSubIdx],
+            amount: saved.amount,
+            name: saved.name,
+            category: saved.category,
+            profileName: saved.profileName,
+            notes: saved.notes,
+            version: (deduped[existingSubIdx].version || 1) + 1,
+            updatedAt: nowIso,
+          };
+        } else {
+          const subId = isCarlos 
+            ? `rev-carlos-${m}`
+            : isPaula
+            ? `rev-paula-${m}`
+            : `rev-rec-${cleanName}-${profLower}-${m}`;
+
+          const cleanDel = this.getDeletedRevenueIds().filter(d => d !== subId);
+          localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDel));
+
+          deduped.push({
+            id: subId,
+            name: saved.name,
+            amount: saved.amount,
+            date: targetDate,
+            category: saved.category,
+            recurrence: 'Mensal',
+            profileName: saved.profileName,
+            notes: saved.notes || '',
+            version: 1,
+            updatedAt: nowIso,
+            updatedByDevice: activeDev,
+            isSynced: true,
+          });
+        }
+      }
+    }
+
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(deduped));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(deduped));
+
+    if (shouldPropagate) {
+      deduped = this.autoPropagateRecurringRevenues();
+    }
+
     this.broadcastUpdate('REVENUE_UPSERTED', saved);
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
     this.syncWithServer();
     return saved;
   }
 
-  public saveRevenue(rev: Partial<Revenue> & { name: string; amount: number; date: string; category: string }): Revenue {
+  public saveRevenue(rev: Partial<Revenue> & { name: string; amount: number; date: string; category: string; applyToFutureMonths?: boolean }): Revenue {
     return this.upsertRevenue(rev);
   }
 
-  // Ensure default data if empty and clear any corrupt tombstones
+  /**
+   * Purges old backups, legacy cache keys, and historical deleted debts permanently.
+   * Keeps only the active clean bills and revenues currently visible in the app.
+   */
+  public purgeOldBackupsAndLegacyDebts(): {
+    purgedKeys: string[];
+    purgedDebtsCount: number;
+    activeBillsCount: number;
+    activeRevenuesCount: number;
+  } {
+    if (typeof window === 'undefined') {
+      return { purgedKeys: [], purgedDebtsCount: 0, activeBillsCount: 0, activeRevenuesCount: 0 };
+    }
+
+    const legacyKeyPatterns = [
+      'financas_cloudkit_bills_v2',
+      'financas_cloudkit_bills_v1',
+      'financas_cloudkit_bills',
+      'household_bills',
+      'financas_bills_backup',
+      'financas_cloudkit_revenues_v2',
+      'financas_cloudkit_revenues_v1',
+      'financas_cloudkit_revenues',
+      'financas_deleted_series_slugs',
+      'financas_deleted_bill_ids',
+      'financas_deleted_revenue_ids',
+    ];
+
+    const purgedKeys: string[] = [];
+
+    // Find and delete matching legacy keys from localStorage
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const key = localStorage.key(i);
+      if (key) {
+        const isLegacyMatch =
+          legacyKeyPatterns.includes(key) ||
+          key.includes('backup') ||
+          key.includes('vault_old') ||
+          (key.startsWith('financas_') && (key.includes('_v1') || key.includes('_v2')));
+        if (isLegacyMatch) {
+          localStorage.removeItem(key);
+          purgedKeys.push(key);
+        }
+      }
+    }
+
+    // Keep ONLY real, active, non-mock bills currently in the app
+    const activeBills = this.getBills().filter(b => !isMockBill(b));
+    const activeRevenues = this.getRevenues().filter(r => !isMockRevenue(r));
+
+    // Overwrite main storage and safety vaults with strictly the clean active dataset
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(activeBills));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(activeBills));
+    localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(activeRevenues));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(activeRevenues));
+
+    // Reset deleted tombstones so they start clean
+    localStorage.setItem('financas_deleted_bill_ids', '[]');
+    localStorage.setItem('financas_deleted_series_slugs', '[]');
+    localStorage.setItem('financas_deleted_revenue_ids', '[]');
+
+    // Sync clean state to server with forceReplace
+    try {
+      const houseId = this.getHouseholdId();
+      fetch(`/api/household/${encodeURIComponent(houseId)}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bills: activeBills,
+          revenues: activeRevenues,
+          forceReplace: true,
+          deletedBillIds: [],
+          deletedRevenueIds: [],
+          device: this.getCurrentDeviceInfo(),
+        }),
+      }).catch(() => {});
+    } catch {}
+
+    this.broadcastUpdate('BILLS_UPDATED', { count: activeBills.length });
+    this.broadcastUpdate('REVENUES_UPDATED', { count: activeRevenues.length });
+
+    return {
+      purgedKeys,
+      purgedDebtsCount: purgedKeys.length,
+      activeBillsCount: activeBills.length,
+      activeRevenuesCount: activeRevenues.length,
+    };
+  }
+
+  /**
+   * Exports backup file containing ONLY the debts visible in the app
+   * (can be scoped to current month or all active visible debts).
+   */
+  public exportVisibleDebtsBackup(options?: {
+    monthId?: string;
+    monthLabel?: string;
+    scope?: 'current_month' | 'all_visible';
+  }): { count: number; totalAmount: number; filename: string } {
+    const allBills = this.getBills().filter(b => !isMockBill(b));
+    const allRevs = this.getRevenues().filter(r => !isMockRevenue(r));
+    const profiles = this.getProfiles();
+
+    let targetBills: Bill[] = [];
+    let targetRevs: Revenue[] = [];
+    let filename = '';
+    const nowIso = new Date().toISOString();
+    const dateStamp = nowIso.slice(0, 10);
+
+    if (options?.scope === 'current_month' && options?.monthId) {
+      const mId = options.monthId;
+      targetBills = allBills.filter(b => (b.dueDate || '').startsWith(mId));
+      targetRevs = allRevs.filter(r => (r.date || '').startsWith(mId));
+      filename = `backup_dividas_visiveis_${mId}_${dateStamp}.json`;
+    } else {
+      targetBills = allBills;
+      targetRevs = allRevs;
+      filename = `backup_dividas_ativas_visiveis_${dateStamp}.json`;
+    }
+
+    const totalAmount = targetBills.reduce((sum, b) => sum + (b.amount || 0), 0);
+    const totalRevenuesAmount = targetRevs.reduce((sum, r) => sum + (r.amount || 0), 0);
+
+    const backupData = {
+      backupType: 'visible_debts_backup',
+      scope: options?.scope || 'all_visible',
+      monthId: options?.monthId,
+      monthLabel: options?.monthLabel,
+      exportedAt: nowIso,
+      version: '1.0',
+      householdId: this.getHouseholdId(),
+      summary: {
+        totalBills: targetBills.length,
+        totalBillsAmount: totalAmount,
+        totalRevenues: targetRevs.length,
+        totalRevenuesAmount,
+      },
+      bills: targetBills,
+      revenues: targetRevs,
+      profiles,
+    };
+
+    if (typeof window !== 'undefined') {
+      const blob = new Blob([JSON.stringify(backupData, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    return {
+      count: targetBills.length,
+      totalAmount,
+      filename,
+    };
+  }
+
+  // Ensure user data is preserved and any fictitious data is purged
   public ensureDefaultDataIfEmpty(): boolean {
     if (typeof window === 'undefined') return false;
 
     // Purge any corrupted tombstones that might hide newly created items
     localStorage.removeItem('financas_deleted_revenue_ids');
 
-    let changed = false;
-    let currentBills = this.getBills();
-    if (currentBills.length === 0) {
-      currentBills = this.generateDefaultBills();
-      this.saveBills(currentBills);
-      changed = true;
+    // Purge mock bills and mock revenues if any exist in local storage
+    const bills = this.getBills();
+    const cleanBills = bills.filter(b => !isMockBill(b));
+    if (cleanBills.length !== bills.length) {
+      localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(cleanBills));
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(cleanBills));
     }
 
-    let currentRevs = this.getRevenues();
-    if (currentRevs.length === 0) {
-      currentRevs = this.generateDefaultRevenues();
-      this.saveRevenues(currentRevs);
-      changed = true;
+    const revs = this.getRevenues();
+    const cleanRevs = revs.filter(r => !isMockRevenue(r));
+    if (cleanRevs.length !== revs.length) {
+      localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(cleanRevs));
+      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(cleanRevs));
     }
 
-    if (changed) {
-      this.syncWithServer();
-      this.broadcastUpdate('SYNC_COMPLETED');
-    }
-    return changed;
+    return false;
   }
 
   public deleteRevenue(id: string): void {
@@ -1901,10 +2932,24 @@ class CloudKitSyncEngine {
       const cleanDeleted = this.getDeletedBillIds().filter(id => !recoveredIds.has(id));
       localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
 
+      // Clear series slugs for recovered recurring bills so they can continue to propagate
+      const recoveredSlugs = new Set<string>();
+      allRecoveredBills.forEach(b => {
+        const cleanBaseName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+        const slug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+        recoveredSlugs.add(cleanBaseName);
+        recoveredSlugs.add(slug);
+        const cleanBc = (b.barcode || '').replace(/\D/g, '');
+        if (cleanBc.length >= 10) recoveredSlugs.add(cleanBc);
+      });
+      const cleanSeriesSlugs = this.getDeletedSeriesSlugs().filter(s => !recoveredSlugs.has(s));
+      localStorage.setItem('financas_deleted_series_slugs', JSON.stringify(cleanSeriesSlugs));
+
       const existingBills = this.getBills();
       const merged = this.deduplicateBills(this.mergeBillsLists(existingBills, allRecoveredBills));
       localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(merged));
       localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(merged));
+      this.autoPropagateRecurringBills();
       this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
     }
 
@@ -1949,7 +2994,7 @@ class CloudKitSyncEngine {
         name: 'Taxa de Condomínio',
         amount: 580.00,
         dueDate: `${month}-10`,
-        category: 'Habitação & Moradia',
+        category: 'Moradia & Condomínio',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Administradora do Condomínio',
@@ -1973,7 +3018,7 @@ class CloudKitSyncEngine {
         name: 'Energia Elétrica (Enel)',
         amount: 245.60,
         dueDate: `${month}-15`,
-        category: 'Habitação & Moradia',
+        category: 'Energia Elétrica (Luz)',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Enel Distribuição',
@@ -1997,7 +3042,7 @@ class CloudKitSyncEngine {
         name: 'Gás Encanado (Comgás)',
         amount: 85.40,
         dueDate: `${month}-18`,
-        category: 'Habitação & Moradia',
+        category: 'Gás (Encanado / Botijão)',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Comgás',
@@ -2021,7 +3066,7 @@ class CloudKitSyncEngine {
         name: 'Internet Fibra Óptica',
         amount: 139.90,
         dueDate: `${month}-20`,
-        category: 'Internet & Telefone',
+        category: 'Internet, TV & Telefonia',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Claro Fibra / Vivo',
@@ -2045,7 +3090,7 @@ class CloudKitSyncEngine {
         name: 'Financiamento Imobiliário / Aluguel',
         amount: 2450.00,
         dueDate: `${month}-10`,
-        category: 'Habitação & Moradia',
+        category: 'Financiamentos & Empréstimos',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Caixa Econômica / Locador',
@@ -2069,7 +3114,7 @@ class CloudKitSyncEngine {
         name: 'Supermercado & Feira do Mês',
         amount: 1650.00,
         dueDate: `${month}-08`,
-        category: 'Alimentação & Mercado',
+        category: 'Alimentação & Supermercado',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Supermercado Principal',
@@ -2093,7 +3138,7 @@ class CloudKitSyncEngine {
         name: 'Plano de Saúde Familiar',
         amount: 980.00,
         dueDate: `${month}-25`,
-        category: 'Saúde & Cuidados',
+        category: 'Saúde & Farmácia',
         status: 'pending',
         recurrence: 'Mensal Fixa',
         favored: 'Operadora de Saúde',
@@ -2117,7 +3162,7 @@ class CloudKitSyncEngine {
         name: 'Streaming & Assinaturas',
         amount: 69.90,
         dueDate: `${month}-12`,
-        category: 'Lazer & Entretenimento',
+        category: 'Lazer & Assinaturas',
         status: 'paid',
         paidAt: `${month}-05T12:00:00.000Z`,
         paidBy: 'Carlos',
@@ -2145,8 +3190,21 @@ class CloudKitSyncEngine {
     const cleanDeleted = this.getDeletedBillIds().filter(id => !presetIds.includes(id));
     localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
 
+    // Clear series slugs for preset bills so they propagate properly
+    const presetNames = presetBills.map(b => b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
+    const cleanSlugs = this.getDeletedSeriesSlugs().filter(s => {
+      return !presetNames.some(pn => {
+        const slug = pn.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+        return s === slug || s === pn;
+      });
+    });
+    localStorage.setItem('financas_deleted_series_slugs', JSON.stringify(cleanSlugs));
+
     // Save bills to main storage and safety vault
     this.saveBills(presetBills);
+
+    // Auto-propagate across all months
+    this.autoPropagateRecurringBills();
 
     // Save revenues (Carlos R$ 6850, Paula R$ 7240, Rendimentos R$ 345,80)
     const revenues = this.updateCoupleSalaries(6850, 7240, month);

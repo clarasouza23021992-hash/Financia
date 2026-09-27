@@ -195,7 +195,7 @@ class BankSyncService {
               favored: memo,
               category: this.guessCategory(memo),
               status: 'paid',
-              splitHousehold: false,
+              splitHousehold: true,
               recurrence: 'Única / Pontual',
               notes: 'Importado via Extrato OFX do Banco',
             });
@@ -233,7 +233,7 @@ class BankSyncService {
                 favored: memo,
                 category: this.guessCategory(memo),
                 status: 'paid',
-                splitHousehold: false,
+                splitHousehold: true,
                 recurrence: 'Única / Pontual',
                 notes: 'Importado de extrato bancário CSV',
               });
@@ -411,7 +411,7 @@ class BankSyncService {
       closingDay: matchedCard?.closingDay || 5,
       dueDay: matchedCard?.dueDay || 15,
       category: this.guessCategory(description),
-      splitHousehold: false,
+      splitHousehold: true,
       purchaseDate: new Date().toISOString().slice(0, 10),
     };
   }
@@ -440,7 +440,7 @@ class BankSyncService {
 
     const cardName = card?.institution || request.cardName || request.institution || 'Cartão de Crédito';
     const cardLast4 = request.cardLast4 || (card?.accountNumber?.match(/\d{4}/)?.[0] || '0000');
-    const cardHolder = card?.cardHolder || request.cardHolder || 'Titular';
+    const cardHolder = card?.cardHolder || request.cardHolder || 'Paula';
     const closingDay = request.closingDay || card?.closingDay || 5;
     const dueDay = request.dueDay || card?.dueDay || 15;
     const cleanDesc = (request.description || 'Compra no Cartão').trim();
@@ -511,7 +511,7 @@ class BankSyncService {
         installmentNumber: i,
         totalInstallments: installments,
         parentInstallmentId: parentGroupId,
-        splitHousehold: false,
+        splitHousehold: request.splitHousehold !== false,
         splitDetails: [],
         notes: `💳 Cartão: ${cardName} (${cardHolder}) •••• ${cardLast4} | Total: R$ ${totalAmount.toFixed(2).replace('.', ',')} em ${installments}x de R$ ${instVal.toFixed(2).replace('.', ',')}${request.notes ? ' | ' + request.notes : ''}`,
         status: 'pending',

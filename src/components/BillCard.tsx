@@ -43,7 +43,8 @@ export const BillCard: React.FC<BillCardProps> = ({
       `📅 Vencimento: ${bill.dueDate}\n` +
       `🏢 Favorecido: ${bill.favored}\n` +
       (bill.pixKey ? `🔑 Chave Pix (${bill.pixType}): ${bill.pixKey}\n` : '') +
-      (bill.barcode ? `📄 Código de Barras: ${bill.barcode}\n` : '');
+      (bill.barcode ? `📄 Código de Barras: ${bill.barcode}\n` : '') +
+      `👥 Divisão: Carlos 50% e Paula 50%`;
 
     if (navigator.share) {
       navigator.share({ title: bill.name, text: shareText }).catch(() => {});

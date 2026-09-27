@@ -176,7 +176,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
         closingDay: card?.closingDay || 5,
         dueDay: card?.dueDay || 15,
         category: purchaseCategory,
-        splitHousehold: false,
+        splitHousehold: true,
       });
 
       setLastPublishedResult(result);

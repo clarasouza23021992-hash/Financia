@@ -59,8 +59,6 @@ export interface Revenue {
   updatedAt: string;
   updatedByDevice: string;
   isSynced: boolean;
-  isUserFilled?: boolean;
-  userCustomized?: boolean;
 }
 
 export interface UserProfile {
@@ -70,7 +68,6 @@ export interface UserProfile {
   splitShare: number; // e.g. 50
   splitPercentage?: number;
   phone?: string;
-  email?: string;
   color: string;
   avatar: string;
 }

@@ -29,40 +29,27 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   // Real revenues only, excluding any mock records
   const realRevenues = revenues.filter(r => !isMockRevenue(r));
 
-  // Identify Resident 1 and Resident 2 salaries dynamically
-  const carlosRevenues = realRevenues.filter(r => {
-    const profLower = (r.profileName || '').toLowerCase();
-    const nameLower = (r.name || '').toLowerCase();
-    return (
-      r.id.startsWith('rev-carlos-') ||
-      r.id.startsWith('rev-p1-') ||
-      profLower.includes('carlos') ||
-      nameLower.includes('carlos') ||
-      profLower === userProfileName.toLowerCase() ||
-      nameLower.includes(userProfileName.toLowerCase()) ||
-      profLower.includes('você') ||
-      profLower.includes('voce') ||
-      nameLower.includes('meu')
-    );
-  });
-
-  const paulaRevenues = realRevenues.filter(r => {
-    const profLower = (r.profileName || '').toLowerCase();
-    const nameLower = (r.name || '').toLowerCase();
-    return (
-      r.id.startsWith('rev-paula-') ||
-      r.id.startsWith('rev-clara-') ||
-      r.id.startsWith('rev-p2-') ||
-      profLower.includes('clara') ||
-      nameLower.includes('clara') ||
-      profLower.includes('paula') ||
-      nameLower.includes('paula') ||
-      profLower.includes('esposa') ||
-      nameLower.includes('esposa') ||
-      profLower === spouseProfileName.toLowerCase() ||
-      nameLower.includes(spouseProfileName.toLowerCase())
-    );
-  });
+  // Identify You and Wife's salaries dynamically
+  const carlosRevenues = realRevenues.filter(
+    r =>
+      r.profileName === userProfileName ||
+      r.profileName === 'Carlos' ||
+      r.profileName === 'Você' ||
+      r.name.toLowerCase().includes(userProfileName.toLowerCase()) ||
+      r.name.toLowerCase().includes('carlos') ||
+      r.name.toLowerCase().includes('meu')
+  );
+  const paulaRevenues = realRevenues.filter(
+    r =>
+      r.profileName === spouseProfileName ||
+      r.profileName === 'Paula' ||
+      r.profileName === 'Esposa' ||
+      r.profileName === 'Camila' ||
+      r.name.toLowerCase().includes(spouseProfileName.toLowerCase()) ||
+      r.name.toLowerCase().includes('paula') ||
+      r.name.toLowerCase().includes('esposa') ||
+      r.name.toLowerCase().includes('camila')
+  );
 
   // Helper to reliably sum all revenues for the family member
   const calculateMemberTotal = (memberRevs: typeof realRevenues) => {
@@ -111,10 +98,10 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               </div>
               <div>
                 <span className="text-[11px] font-bold tracking-wider text-teal-300 uppercase">
-                  Receita dos Moradores • {selectedMonth}
+                  Receita do Casal • {selectedMonth}
                 </span>
                 <p className="text-[12px] font-semibold text-slate-200">
-                  Rendas e Salários Somados
+                  Salários da Casa Somados
                 </p>
               </div>
             </div>
@@ -124,10 +111,10 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                 id="btn-edit-couple-salaries"
                 onClick={onEditSalaries}
                 className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/30 active-press"
-                title="Editar os salários e rendas"
+                title="Editar os salários do casal"
               >
                 <Edit3 className="w-3.5 h-3.5 text-teal-300" />
-                <span>Editar Rendas</span>
+                <span>Editar Salários</span>
               </button>
 
               <button
@@ -140,19 +127,19 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
             </div>
           </div>
 
-          {/* Individual Contributions Grid */}
-          <div className={`grid ${spouseProfileName ? 'grid-cols-2' : 'grid-cols-1'} gap-2 text-xs`}>
-            {/* Resident 1 Salary */}
+          {/* Individual Contributions Grid (Você & Esposa) */}
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            {/* Você Salary */}
             <button
               onClick={onEditSalaries}
               className="bg-white/5 hover:bg-white/10 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-blue-400/40 text-left flex items-center justify-between group active-press"
-              title="Clique para editar este valor"
+              title="Clique para editar o seu salário"
             >
               <div className="flex items-center gap-2">
-                <span className="text-lg">👤</span>
+                <span className="text-lg">👨🏻‍💻</span>
                 <div>
                   <div className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
-                    <span>{userProfileName || 'Morador 1'}</span>
+                    <span>{userProfileName || 'Você'}</span>
                     <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <div className="font-extrabold text-blue-300 text-sm">{formatBRL(carlosSalary)}</div>
@@ -160,25 +147,24 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               </div>
             </button>
 
-            {/* Resident 2 Salary */}
-            {spouseProfileName && (
-              <button
-                onClick={onEditSalaries}
-                className="bg-white/5 hover:bg-white/10 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-pink-400/40 text-left flex items-center justify-between group active-press"
-                title="Clique para editar este valor"
-              >
-                <div className="flex items-center gap-2">
-                  <span className="text-lg">👤</span>
-                  <div>
-                    <div className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
-                      <span>{spouseProfileName}</span>
-                      <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
-                    </div>
-                    <div className="font-extrabold text-pink-300 text-sm">{formatBRL(paulaSalary)}</div>
+            {/* Esposa Salary */}
+            <button
+              onClick={onEditSalaries}
+              className="bg-white/5 hover:bg-white/10 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-pink-400/40 text-left flex items-center justify-between group active-press"
+              title="Clique para editar o salário da esposa"
+            >
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👩🏻‍💼</span>
+                <div>
+                  <div className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
+                    <span>{spouseProfileName || 'Esposa'}</span>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isWifeConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
+                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
+                  <div className="font-extrabold text-pink-300 text-sm">{formatBRL(paulaSalary)}</div>
                 </div>
-              </button>
-            )}
+              </div>
+            </button>
           </div>
 
           {/* HIGHLIGHTED FINANCIAL EQUATION: [RECEITA SOMADA] - [VALOR DA DÍVIDA] = [TOTAL QUE VAI SOBRAR OU FALTAR] */}
@@ -189,9 +175,9 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                 Balanço Mensal do Lar:
               </span>
               <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${
-                isSurplus 
-                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-400/30' 
-                  : 'bg-rose-500/20 text-rose-300 border border-rose-400/30'
+                isSurplus
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
               }`}>
                 {isSurplus ? (
                   <>
@@ -213,7 +199,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                 <div className="text-[10px] font-bold text-teal-300 uppercase tracking-wider flex items-center justify-between">
                   <span>Receita Somada</span>
-                  <span className="text-white/60 font-normal truncate max-w-[140px]">{userProfileName}{spouseProfileName ? ` + ${spouseProfileName}` : ''}</span>
+                  <span className="text-white/60 font-normal">Você + Esposa</span>
                 </div>
                 <div className="text-lg font-black text-white mt-0.5 tracking-tight">
                   {formatBRL(grandTotalRevenue)}
@@ -230,17 +216,17 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                 </div>
               </div>
 
-              {/* 2. Dívida Deste Mês */}
+              {/* 2. Valor da Dívida */}
               <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                 <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
-                  <span>Dívida Deste Mês</span>
-                  <span className="text-white/60 font-normal">{bills.length} {bills.length === 1 ? 'conta' : 'contas'}</span>
+                  <span>Valor da Dívida</span>
+                  <span className="text-white/60 font-normal">{bills.length} contas</span>
                 </div>
                 <div className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">
                   {formatBRL(totalBillsAmount)}
                 </div>
                 <div className="text-[10px] text-slate-400 mt-0.5">
-                  Total de Dívidas de {selectedMonth}
+                  Total de Despesas e Contas do Mês
                 </div>
               </div>
             </div>

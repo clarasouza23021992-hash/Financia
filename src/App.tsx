@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
-  Search, Filter, Plus, FileText, Landmark, TrendingUp, 
+  Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
-  ShieldCheck, Share2, Sparkles, SlidersHorizontal, Building2, CreditCard, Upload,
-  RefreshCw, Smartphone, Zap, ScanLine
+  ShieldCheck, Share2, Sparkles, SlidersHorizontal,
+  RefreshCw, ScanLine
 } from 'lucide-react';
-import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog, CardPurchaseResult } from './types/finance';
+import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog } from './types/finance';
 import { cloudkit, isMockBill } from './services/cloudkitSync';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
@@ -14,7 +14,6 @@ import { BillModal } from './components/BillModal';
 import { RevenueModal } from './components/RevenueModal';
 import { CashFlowReport } from './components/CashFlowReport';
 import { CloudKitSyncDrawer } from './components/CloudKitSyncDrawer';
-import { BankSyncModal, BankModalTab } from './components/BankSyncModal';
 import { BoletoScannerModal } from './components/BoletoScannerModal';
 import { ProfilesModal } from './components/ProfilesModal';
 import { ReceiptViewerModal } from './components/ReceiptViewerModal';
@@ -50,7 +49,7 @@ export default function App() {
   }, [devices, activeDeviceId]);
 
   // App Navigation, Months & Filters
-  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow' | 'bank'>('bills');
+  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow'>('bills');
   const [selectedMonth, setSelectedMonth] = useState<MonthOption>({
     id: '2026-10',
     label: 'Outubro de 2026',
@@ -79,8 +78,6 @@ export default function App() {
   const [isEditSalariesModalOpen, setIsEditSalariesModalOpen] = useState(false);
 
   const [isCloudDrawerOpen, setIsCloudDrawerOpen] = useState(false);
-  const [isBankModalOpen, setIsBankModalOpen] = useState(false);
-  const [bankModalTab, setBankModalTab] = useState<BankModalTab>('card_purchase');
   const [isBoletoScannerOpen, setIsBoletoScannerOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -143,16 +140,10 @@ export default function App() {
       } else if (event.type === 'PROFILES_UPDATED') {
         setProfiles(cloudkit.getProfiles());
       } else if (event.type === 'SYNC_COMPLETED') {
-        const nextBills = cloudkit.getBills();
-        const nextRevs = cloudkit.getRevenues();
-        const nextProfiles = cloudkit.getProfiles();
-        const nextDevices = cloudkit.getDevices();
-
-        // Only update states if contents actually changed to avoid re-render thrashing
-        setBills(prev => JSON.stringify(prev) !== JSON.stringify(nextBills) ? nextBills : prev);
-        setRevenues(prev => JSON.stringify(prev) !== JSON.stringify(nextRevs) ? nextRevs : prev);
-        setProfiles(prev => JSON.stringify(prev) !== JSON.stringify(nextProfiles) ? nextProfiles : prev);
-        setDevices(prev => JSON.stringify(prev) !== JSON.stringify(nextDevices) ? nextDevices : prev);
+        setBills(cloudkit.getBills());
+        setRevenues(cloudkit.getRevenues());
+        setProfiles(cloudkit.getProfiles());
+        setDevices(cloudkit.getDevices());
       }
     });
 
@@ -230,35 +221,23 @@ export default function App() {
 
   // Salaries of Resident 1 and Resident 2 (Editable by user)
   const carlosCurrentSalary = useMemo(() => {
-    const userPName = profiles[0]?.name || 'Morador 1';
-    const r = currentMonthRevenues.find(x => {
-      const nameLower = (x.name || '').toLowerCase();
-      const profLower = (x.profileName || '').toLowerCase();
-      return (
-        x.id.startsWith('rev-carlos-') ||
-        x.id.startsWith('rev-p1-') ||
-        profLower === userPName.toLowerCase() ||
-        nameLower.includes(userPName.toLowerCase()) ||
-        nameLower.includes('salário') ||
-        nameLower.includes('salario')
-      );
-    });
+    const userPName = profiles[0]?.name || 'Carlos';
+    const r = currentMonthRevenues.find(x => 
+      x.profileName === userPName || 
+      x.profileName === 'Carlos' || 
+      x.name.toLowerCase().includes(userPName.toLowerCase())
+    );
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
   const paulaCurrentSalary = useMemo(() => {
-    const spousePName = profiles[1]?.name || '';
-    if (!spousePName) return 0;
-    const r = currentMonthRevenues.find(x => {
-      const nameLower = (x.name || '').toLowerCase();
-      const profLower = (x.profileName || '').toLowerCase();
-      return (
-        x.id.startsWith('rev-paula-') ||
-        x.id.startsWith('rev-p2-') ||
-        profLower === spousePName.toLowerCase() ||
-        nameLower.includes(spousePName.toLowerCase())
-      );
-    });
+    const spousePName = profiles[1]?.name || 'Paula';
+    const r = currentMonthRevenues.find(x => 
+      x.profileName === spousePName || 
+      x.profileName === 'Paula' || 
+      x.profileName === 'Esposa' || 
+      x.name.toLowerCase().includes(spousePName.toLowerCase())
+    );
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
@@ -267,11 +246,11 @@ export default function App() {
     return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
   }, [currentMonthRevenues]);
 
-  // Handler to edit and save salaries
+  // Handler to edit and save Carlos & Paula salaries
   const handleSaveCoupleSalaries = (carlosAmount: number, paulaAmount: number) => {
     cloudkit.updateCoupleSalaries(carlosAmount, paulaAmount, selectedMonth.id);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Valores de renda salvos com sucesso!`);
+    showTemporaryToast(`Salários atualizados: Carlos (R$ ${carlosAmount.toFixed(2)}) e Paula (R$ ${paulaAmount.toFixed(2)})`);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
@@ -463,7 +442,7 @@ export default function App() {
         status: 'paid',
         recurrence: 'Mensal Fixa',
         fixedValueType: revData.amount > 0 ? 'fixed_value' : 'variable_value',
-        splitHousehold: false,
+        splitHousehold: true,
       };
       cloudkit.saveBill(billData);
       setBills(cloudkit.getBills());
@@ -500,13 +479,10 @@ export default function App() {
     const total = pending.reduce((sum, b) => sum + b.amount, 0);
     const half = total / 2;
 
-    const user1Name = profiles[0]?.name || 'Morador 1';
-    const user2Name = profiles[1]?.name || 'Morador 2';
-
     let text = `*Resumo de Contas do Lar - Finanças da Minha Casa*\n`;
     text += `📅 Mês: ${selectedMonth.label}\n`;
     text += `💰 Total Pendente: R$ ${total.toFixed(2).replace('.', ',')}\n`;
-    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (${user1Name} & ${user2Name})\n\n`;
+    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (Carlos & Paula)\n\n`;
     text += `*Contas a pagar:*\n`;
     pending.forEach((b, i) => {
       text += `${i + 1}. ${b.name} - R$ ${b.amount.toFixed(2).replace('.', ',')} (Vence: ${b.dueDate})\n`;
@@ -556,47 +532,6 @@ export default function App() {
     setProfiles(newProfiles);
     cloudkit.saveProfiles(newProfiles);
     showTemporaryToast('Nome de usuário e moradores atualizados com sucesso!');
-  };
-
-  // Import bank transactions
-  const handleImportBankTransactions = (newBills: Partial<Bill>[], newRevenues: Partial<Revenue>[]) => {
-    const validRevenues: Partial<Revenue>[] = [];
-    const extraBills: Partial<Bill>[] = [];
-
-    newRevenues.forEach(r => {
-      if (cloudkit.isDebtExpense(r as any)) {
-        extraBills.push({
-          name: r.name,
-          amount: Math.abs(r.amount || 0),
-          dueDate: r.date || `${selectedMonth.id}-10`,
-          category: cloudkit.guessCategoryFromName(r.name || ''),
-          favored: r.name ? r.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() : 'Despesa Bancária',
-          status: 'paid',
-          recurrence: 'Mensal Fixa',
-          fixedValueType: (r.amount || 0) > 0 ? 'fixed_value' : 'variable_value',
-          splitHousehold: false,
-          notes: 'Importado via Extrato (classificado como Dívida)',
-        });
-      } else {
-        validRevenues.push(r);
-      }
-    });
-
-    const allBillsToSave = [...newBills, ...extraBills];
-    allBillsToSave.forEach(b => cloudkit.saveBill(b));
-    validRevenues.forEach(r => cloudkit.saveRevenue(r as any));
-    setBills(cloudkit.getBills());
-    setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Importação concluída: ${allBillsToSave.length} despesas salvas em Dívidas e ${validRevenues.length} receitas registradas!`);
-  };
-
-  // Handle credit card purchase published
-  const handlePurchasePublished = (result: CardPurchaseResult) => {
-    setBills(cloudkit.getBills());
-    const firstDueDateDisplay = result.firstDueDate ? result.firstDueDate.split('-').reverse().join('/') : '';
-    showTemporaryToast(
-      `💳 Compra registrada! ${result.installmentsCount} parcelas de R$ ${result.installmentAmount.toFixed(2).replace('.', ',')} agendadas no app (1ª em ${firstDueDateDisplay}).`
-    );
   };
 
   // Boleto / Pix AI Scanner completed
@@ -775,42 +710,15 @@ export default function App() {
               </div>
             </div>
 
-            {/* Quick Actions Row: Compra no Cartão & Notificação Push */}
-            <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => {
-                  setBankModalTab('card_purchase');
-                  setIsBankModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white font-extrabold text-xs shadow-xs active-press whitespace-nowrap transition-all"
-              >
-                <CreditCard className="w-3.5 h-3.5" />
-                <span>💳 Compra no Cartão</span>
-                <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded-full font-black uppercase tracking-wider">
-                  Parcelas Auto
-                </span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => {
-                  setBankModalTab('live_sync');
-                  setIsBankModalOpen(true);
-                }}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold text-xs border border-slate-200/80 dark:border-slate-700/80 active-press whitespace-nowrap transition-all"
-              >
-                <Smartphone className="w-3.5 h-3.5 text-purple-500" />
-                <span>Colar Push do Banco</span>
-              </button>
-
+            {/* Quick Actions Row */}
+            <div className="px-4 py-1 flex items-center gap-2">
               <button
                 type="button"
                 onClick={() => setIsBoletoScannerOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all"
+                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
               >
                 <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                <span>Escanear Boleto/Pix</span>
+                <span>Escanear Boleto / Pix com IA</span>
               </button>
             </div>
 
@@ -954,92 +862,17 @@ export default function App() {
             onDeleteRevenue={handleDeleteRevenue}
           />
         )}
-
-        {/* Tab 3: Bank & Open Finance Integration */}
-        {currentTab === 'bank' && (
-          <div className="p-4 space-y-4">
-            <div className="bg-[#0A1128] text-white p-5 rounded-3xl shadow-lg relative overflow-hidden">
-              <div className="relative z-10">
-                <div className="flex items-center gap-2 text-xs font-bold text-[#00E5B5] uppercase tracking-wider mb-1">
-                  <ShieldCheck className="w-4 h-4" />
-                  <span>Conexão Bancária Criptografada</span>
-                </div>
-                <h2 className="text-lg font-black tracking-tight mb-1">
-                  Open Finance Brasil & Cartões de Crédito
-                </h2>
-                <p className="text-xs text-slate-300 leading-relaxed max-w-md mb-4">
-                  Cadastre suas contas bancárias reais (Itaú, Nubank, Bradesco, Santander, etc.) e cartões de crédito da Paula e do Carlos. Todos os dados fictícios foram removidos.
-                </p>
-                <div className="flex flex-wrap items-center gap-2.5">
-                  <button
-                    onClick={() => setIsBankModalOpen(true)}
-                    className="px-4 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-extrabold text-xs rounded-xl active-press shadow-md flex items-center gap-1.5"
-                  >
-                    <Building2 className="w-4 h-4" />
-                    <span>Gerenciar Contas & Cartões Reais</span>
-                  </button>
-                </div>
-              </div>
-              <div className="absolute right-2 bottom-2 text-slate-800 pointer-events-none opacity-40">
-                <Landmark className="w-36 h-36" />
-              </div>
-            </div>
-
-            {/* Quick action cards */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div className="bg-white dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="w-8 h-8 rounded-xl bg-purple-50 dark:bg-purple-950/40 text-purple-600 dark:text-purple-400 flex items-center justify-center mb-2 font-bold">
-                    <CreditCard className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
-                    Cartões de Crédito da Família
-                  </h3>
-                  <p className="text-[11.5px] text-slate-500 dark:text-slate-400 mb-3">
-                    Acompanhe limites disponíveis, dias de fechamento e o vencimento das faturas da Paula e do Carlos.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsBankModalOpen(true)}
-                  className="w-full py-2 bg-purple-50 dark:bg-purple-950/40 hover:bg-purple-100 text-purple-700 dark:text-purple-300 font-bold text-xs rounded-xl active-press transition-colors"
-                >
-                  Configurar Cartões de Crédito
-                </button>
-              </div>
-
-              <div className="bg-white dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs flex flex-col justify-between">
-                <div>
-                  <div className="w-8 h-8 rounded-xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mb-2 font-bold">
-                    <Upload className="w-4 h-4" />
-                  </div>
-                  <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
-                    Importação de Extrato (OFX / CSV)
-                  </h3>
-                  <p className="text-[11.5px] text-slate-500 dark:text-slate-400 mb-3">
-                    Exporte o arquivo OFX ou CSV no seu aplicativo de banco e carregue diretamente para lançar despesas reais.
-                  </p>
-                </div>
-                <button
-                  onClick={() => setIsBankModalOpen(true)}
-                  className="w-full py-2 bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 text-teal-800 dark:text-teal-200 font-bold text-xs rounded-xl active-press transition-colors"
-                >
-                  Importar Extrato OFX / CSV
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
           </PullToRefresh>
         </div>
       </main>
 
       {/* Native Bottom Tab Bar Navigation */}
-      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-1 sm:px-4 py-1 sm:py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg">
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-0.5 sm:gap-1">
-          {/* Tab 1: Contas */}
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 py-1 sm:py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
+          {/* Tab 1: Contas / Dívidas */}
           <button
             onClick={() => setCurrentTab('bills')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl transition-all active-press ${
               currentTab === 'bills'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
                 : 'text-slate-400 hover:text-slate-600'
@@ -1053,58 +886,41 @@ export default function App() {
                 </span>
               )}
             </div>
-            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Dívidas</span>
+            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Dívidas</span>
           </button>
 
           {/* Tab 2: Fluxo de Caixa */}
           <button
             onClick={() => setCurrentTab('cashflow')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl transition-all active-press ${
               currentTab === 'cashflow'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <TrendingUp className="w-5 h-5" />
-            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
+            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Fluxo</span>
           </button>
 
-          {/* Tab 3: Cartões & Sync */}
-          <button
-            onClick={() => {
-              setCurrentTab('bank');
-              setBankModalTab('card_purchase');
-              setIsBankModalOpen(true);
-            }}
-            className={`flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl transition-all active-press ${
-              currentTab === 'bank'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
-                : 'text-slate-400 hover:text-slate-600'
-            }`}
-          >
-            <CreditCard className="w-5 h-5 text-purple-500" />
-            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Cartões & Sync</span>
-          </button>
-
-          {/* Tab 4: CloudKit Sync Drawer */}
+          {/* Tab 3: CloudKit Sync Drawer */}
           <button
             onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <div className="relative">
               <Cloud className="w-5 h-5 text-teal-600 dark:text-teal-400" />
               <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
-            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">iCloud Sync</span>
+            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">iCloud Sync</span>
           </button>
 
-          {/* Tab 5: Moradores & Configurações */}
+          {/* Tab 4: Moradores & Configurações */}
           <button
             onClick={() => setIsProfilesModalOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-1.5 sm:px-3 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <Users className="w-5 h-5" />
-            <span className="text-[9px] sm:text-[10px] tracking-tight whitespace-nowrap">Moradores</span>
+            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Moradores</span>
           </button>
         </div>
       </nav>
@@ -1139,7 +955,7 @@ export default function App() {
             category: cloudkit.guessCategoryFromName(name || ''),
             recurrence: 'Mensal Fixa',
             fixedValueType: parseFloat(amount || '') > 0 ? 'fixed_value' : 'variable_value',
-            splitHousehold: false,
+            splitHousehold: true,
           } as any);
           setIsBillModalOpen(true);
         }}
@@ -1152,8 +968,8 @@ export default function App() {
         paulaCurrentSalary={paulaCurrentSalary}
         selectedMonth={selectedMonth.label}
         onSaveSalaries={handleSaveCoupleSalaries}
-        userLabel={profiles[0]?.name ? `Renda (${profiles[0].name})` : 'Minha Renda'}
-        spouseLabel={profiles[1]?.name ? `Renda (${profiles[1].name})` : 'Segunda Renda'}
+        userLabel={`Meu Salário (${profiles[0]?.name || 'Você'})`}
+        spouseLabel={`Salário de ${profiles[1]?.name || 'Esposa'}`}
       />
 
       <CloudKitSyncDrawer
@@ -1169,14 +985,6 @@ export default function App() {
         onOpenDataRecovery={() => setIsDataRecoveryModalOpen(true)}
         onUpdateDevice={handleUpdateDevice}
         onRemoveDevice={handleRemoveDevice}
-      />
-
-      <BankSyncModal
-        isOpen={isBankModalOpen}
-        onClose={() => setIsBankModalOpen(false)}
-        onImportTransactions={handleImportBankTransactions}
-        onPurchasePublished={handlePurchasePublished}
-        initialTab={bankModalTab}
       />
 
       <BoletoScannerModal

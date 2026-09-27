@@ -5,11 +5,10 @@ import { Bill } from '../types/finance';
 interface KpiCardsProps {
   bills: Bill[];
   totalRevenue?: number;
-  selectedMonthName?: string;
   onSelectFilter?: (status: string) => void;
 }
 
-export const KpiCards: React.FC<KpiCardsProps> = ({ bills, selectedMonthName, onSelectFilter }) => {
+export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => {
   const totalAmount = bills.reduce((acc, b) => acc + b.amount, 0);
   const totalCount = bills.length;
 
@@ -23,7 +22,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, selectedMonthName, on
 
   return (
     <div className="grid grid-cols-2 gap-3 px-4 py-2">
-      {/* 1. DÍVIDA DESTE MÊS */}
+      {/* 1. TOTAL DO MÊS */}
       <div 
         id="kpi-card-total-month"
         onClick={() => onSelectFilter?.('all')}
@@ -31,7 +30,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, selectedMonthName, on
       >
         <div className="flex items-center justify-between mb-2">
           <span className="text-[10.5px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
-            DÍVIDA DESTE MÊS
+            TOTAL DO MÊS
           </span>
           <div className="w-6 h-6 rounded-lg bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-slate-500">
             <Calendar className="w-3.5 h-3.5" />
@@ -42,7 +41,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, selectedMonthName, on
             {formatCurrency(totalAmount)}
           </div>
           <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
-            {totalCount} {totalCount === 1 ? 'dívida' : 'dívidas'} • {selectedMonthName || 'Mês'}
+            {totalCount} {totalCount === 1 ? 'dívida deste mês' : 'dívidas deste mês'}
           </div>
         </div>
       </div>

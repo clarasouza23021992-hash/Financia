@@ -76,7 +76,7 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
           <div className="bg-emerald-50/70 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40">
             <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
               <ArrowUpRight className="w-3 h-3" />
-              <span>Receitas do Mês</span>
+              <span>Receitas</span>
             </div>
             <div className="text-sm font-extrabold text-emerald-800 dark:text-emerald-300 mt-0.5">
               R$ {totalRevenues.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
@@ -86,7 +86,7 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
           <div className="bg-rose-50/70 dark:bg-rose-950/30 p-2.5 rounded-xl border border-rose-200/80 dark:border-rose-900/40">
             <div className="flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase">
               <ArrowDownRight className="w-3 h-3" />
-              <span>Dívidas do Mês</span>
+              <span>Dívidas</span>
             </div>
             <div className="text-sm font-extrabold text-rose-800 dark:text-rose-300 mt-0.5">
               R$ {totalBills.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}

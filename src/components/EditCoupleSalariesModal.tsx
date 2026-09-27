@@ -26,18 +26,13 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
   const [paulaInput, setPaulaInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
-  const prevIsOpenRef = React.useRef(false);
-
   useEffect(() => {
-    // Only initialize form fields when the modal is opened
-    // Never overwrite while the user is actively typing!
-    if (isOpen && !prevIsOpenRef.current) {
+    if (isOpen) {
       setCarlosInput(carlosCurrentSalary > 0 ? carlosCurrentSalary.toFixed(2).replace('.', ',') : '');
       setPaulaInput(paulaCurrentSalary > 0 ? paulaCurrentSalary.toFixed(2).replace('.', ',') : '');
       setError(null);
     }
-    prevIsOpenRef.current = isOpen;
-  }, [isOpen]);
+  }, [isOpen, carlosCurrentSalary, paulaCurrentSalary]);
 
   if (!isOpen) return null;
 
@@ -119,13 +114,16 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             </div>
           )}
 
-          {/* Resident 1 Salary Input */}
+          {/* Carlos Salary Input */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                <span className="text-base">👤</span>
+                <span className="text-base">👨🏻‍💻</span>
                 <span>{userLabel}</span>
               </label>
+              <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
+                50% Despesas
+              </span>
             </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">
@@ -143,13 +141,16 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             </div>
           </div>
 
-          {/* Resident 2 Salary Input */}
+          {/* Paula Salary Input */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                <span className="text-base">👤</span>
+                <span className="text-base">👩🏻‍💼</span>
                 <span>{spouseLabel}</span>
               </label>
+              <span className="text-[10px] font-semibold text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/60 px-2 py-0.5 rounded-md">
+                50% Despesas
+              </span>
             </div>
             <div className="relative">
               <span className="absolute left-3 top-1/2 -translate-y-1/2 text-sm font-bold text-slate-400">

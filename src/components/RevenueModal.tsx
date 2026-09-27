@@ -35,20 +35,12 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   const [date, setDate] = useState('');
   const [category, setCategory] = useState('Salário & Renda');
   const [recurrence, setRecurrence] = useState<'Mensal' | 'Única'>('Mensal');
-  const [profileName, setProfileName] = useState(profiles[0]?.name || 'Carlos');
+  const [profileName, setProfileName] = useState('Carlos');
   const [notes, setNotes] = useState('');
   const [applyToFutureMonths, setApplyToFutureMonths] = useState(true);
 
-  // Track modal open state and active revenue ID to initialize ONLY on modal open or explicit revenue selection
-  const prevIsOpenRef = React.useRef(false);
-  const initialRevenueIdRef = React.useRef<string | undefined>(undefined);
-
   const isLikelyDebt = Boolean(
     name &&
-    !name.toLowerCase().includes('receb') &&
-    !name.toLowerCase().includes('renda') &&
-    !name.toLowerCase().includes('salário') &&
-    !name.toLowerCase().includes('salario') &&
     (
       name.toLowerCase().startsWith('conta') ||
       name.toLowerCase().startsWith('boleto') ||
@@ -62,42 +54,31 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
       name.toLowerCase().includes('enel') ||
       name.toLowerCase().includes('sabesp') ||
       name.toLowerCase().includes('condom') ||
+      name.toLowerCase().includes('aluguel') ||
       name.toLowerCase().includes('internet')
     )
   );
 
   useEffect(() => {
-    const justOpened = isOpen && !prevIsOpenRef.current;
-    const revenueSwitched = isOpen && initialRevenue?.id !== initialRevenueIdRef.current;
-
-    // ONLY initialize form when modal just opened or when a different revenue is selected
-    // NEVER re-initialize while the user is actively typing!
-    if (justOpened || revenueSwitched) {
-      if (initialRevenue) {
-        setName(initialRevenue.name || '');
-        setAmount(initialRevenue.amount != null ? initialRevenue.amount.toString() : '');
-        setDate(initialRevenue.date || (defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0]));
-        setCategory(initialRevenue.category || 'Salário & Renda');
-        setRecurrence(initialRevenue.recurrence || 'Mensal');
-        setProfileName(initialRevenue.profileName || profiles[0]?.name || 'Carlos');
-        setNotes(initialRevenue.notes || '');
-        setApplyToFutureMonths(true);
-      } else {
-        setName('');
-        setAmount('');
-        const defaultDateStr = defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0];
-        setDate(defaultDateStr);
-        setCategory('Salário & Renda');
-        setRecurrence('Mensal');
-        setProfileName(profiles[0]?.name || 'Carlos');
-        setNotes('');
-        setApplyToFutureMonths(true);
-      }
+    if (initialRevenue) {
+      setName(initialRevenue.name);
+      setAmount(initialRevenue.amount.toString());
+      setDate(initialRevenue.date);
+      setCategory(initialRevenue.category);
+      setRecurrence(initialRevenue.recurrence);
+      setProfileName(initialRevenue.profileName);
+      setNotes(initialRevenue.notes || '');
+    } else {
+      setName('');
+      setAmount('');
+      const defaultDateStr = defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0];
+      setDate(defaultDateStr);
+      setCategory('Salário & Renda');
+      setRecurrence('Mensal');
+      setProfileName(profiles[0]?.name || 'Carlos');
+      setNotes('');
     }
-
-    prevIsOpenRef.current = isOpen;
-    initialRevenueIdRef.current = initialRevenue?.id;
-  }, [isOpen, initialRevenue?.id]);
+  }, [initialRevenue, isOpen, profiles, defaultMonth]);
 
   if (!isOpen) return null;
 
@@ -220,6 +201,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
                     {p.avatar} {p.name}
                   </option>
                 ))}
+                <option value="Casa Compartilhada">🏡 Casa Compartilhada</option>
               </select>
             </div>
           </div>

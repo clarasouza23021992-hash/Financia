@@ -801,46 +801,6 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
             </p>
           </div>
 
-          {/* Data Cleanup & Reset Tools */}
-          <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">
-            <div>
-              <span className="text-xs font-bold text-slate-900 dark:text-white block">
-                Gerenciamento de Lançamentos
-              </span>
-              <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                Limpe dados de teste ou recomece o aplicativo com dados 100% limpos.
-              </span>
-            </div>
-            <div className="flex flex-col sm:flex-row items-center gap-2 pt-1">
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('Deseja remover todas as contas e receitas fictícias de demonstração?')) {
-                    cloudkit.clearMockBills();
-                    setSyncSuccessMsg('Dados fictícios removidos permanentemente!');
-                    setTimeout(() => setSyncSuccessMsg(null), 3000);
-                  }
-                }}
-                className="w-full sm:w-1/2 py-2 px-3 bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800 rounded-xl text-xs font-bold active-press text-center hover:bg-amber-100"
-              >
-                Limpar Demonstração
-              </button>
-              <button
-                type="button"
-                onClick={() => {
-                  if (window.confirm('ATENÇÃO: Deseja apagar todas as dívidas e receitas para zerar o app? Esta ação não pode ser desfeita.')) {
-                    cloudkit.clearAllData();
-                    setSyncSuccessMsg('App zerado com sucesso! Comece do zero.');
-                    setTimeout(() => setSyncSuccessMsg(null), 3000);
-                  }
-                }}
-                className="w-full sm:w-1/2 py-2 px-3 bg-rose-50 dark:bg-rose-950/40 text-rose-600 dark:text-rose-300 border border-rose-300 dark:border-rose-800 rounded-xl text-xs font-bold active-press text-center hover:bg-rose-100"
-              >
-                Zerar App (Do Zero)
-              </button>
-            </div>
-          </div>
-
           {/* Sincronizar Agora Button */}
           <button
             onClick={handleSyncClick}

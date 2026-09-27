@@ -29,27 +29,40 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   // Real revenues only, excluding any mock records
   const realRevenues = revenues.filter(r => !isMockRevenue(r));
 
-  // Identify You and Wife's salaries dynamically
-  const carlosRevenues = realRevenues.filter(
-    r =>
-      r.profileName === userProfileName ||
-      r.profileName === 'Carlos' ||
-      r.profileName === 'Você' ||
-      r.name.toLowerCase().includes(userProfileName.toLowerCase()) ||
-      r.name.toLowerCase().includes('carlos') ||
-      r.name.toLowerCase().includes('meu')
-  );
-  const paulaRevenues = realRevenues.filter(
-    r =>
-      r.profileName === spouseProfileName ||
-      r.profileName === 'Paula' ||
-      r.profileName === 'Esposa' ||
-      r.profileName === 'Camila' ||
-      r.name.toLowerCase().includes(spouseProfileName.toLowerCase()) ||
-      r.name.toLowerCase().includes('paula') ||
-      r.name.toLowerCase().includes('esposa') ||
-      r.name.toLowerCase().includes('camila')
-  );
+  // Identify Resident 1 and Resident 2 salaries dynamically
+  const carlosRevenues = realRevenues.filter(r => {
+    const profLower = (r.profileName || '').toLowerCase();
+    const nameLower = (r.name || '').toLowerCase();
+    return (
+      r.id.startsWith('rev-carlos-') ||
+      r.id.startsWith('rev-p1-') ||
+      profLower.includes('carlos') ||
+      nameLower.includes('carlos') ||
+      profLower === userProfileName.toLowerCase() ||
+      nameLower.includes(userProfileName.toLowerCase()) ||
+      profLower.includes('você') ||
+      profLower.includes('voce') ||
+      nameLower.includes('meu')
+    );
+  });
+
+  const paulaRevenues = realRevenues.filter(r => {
+    const profLower = (r.profileName || '').toLowerCase();
+    const nameLower = (r.name || '').toLowerCase();
+    return (
+      r.id.startsWith('rev-paula-') ||
+      r.id.startsWith('rev-clara-') ||
+      r.id.startsWith('rev-p2-') ||
+      profLower.includes('clara') ||
+      nameLower.includes('clara') ||
+      profLower.includes('paula') ||
+      nameLower.includes('paula') ||
+      profLower.includes('esposa') ||
+      nameLower.includes('esposa') ||
+      profLower === spouseProfileName.toLowerCase() ||
+      nameLower.includes(spouseProfileName.toLowerCase())
+    );
+  });
 
   // Helper to reliably sum all revenues for the family member
   const calculateMemberTotal = (memberRevs: typeof realRevenues) => {

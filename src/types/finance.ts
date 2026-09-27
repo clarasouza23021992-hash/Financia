@@ -59,6 +59,8 @@ export interface Revenue {
   updatedAt: string;
   updatedByDevice: string;
   isSynced: boolean;
+  isUserFilled?: boolean;
+  userCustomized?: boolean;
 }
 
 export interface UserProfile {

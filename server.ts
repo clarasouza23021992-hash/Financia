@@ -199,6 +199,14 @@ function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[
     if (!existing) {
       map.set(r.id, r);
     } else {
+      if (r.isUserFilled && !existing.isUserFilled) {
+        map.set(r.id, r);
+        continue;
+      }
+      if (existing.isUserFilled && !r.isUserFilled) {
+        continue;
+      }
+
       const incVersion = r.version || 0;
       const curVersion = existing.version || 0;
       const incUpdated = new Date(r.updatedAt || 0).getTime();
@@ -378,6 +386,15 @@ async function startServer() {
         if (!current) {
           revMap.set(incoming.id, incoming);
         } else {
+          // If incoming was explicitly user-filled, it always takes precedence
+          if (incoming.isUserFilled && !current.isUserFilled) {
+            revMap.set(incoming.id, incoming);
+            return;
+          }
+          if (current.isUserFilled && !incoming.isUserFilled) {
+            return;
+          }
+
           const incVersion = incoming.version || 0;
           const curVersion = current.version || 0;
           const incUpdated = new Date(incoming.updatedAt || 0).getTime();

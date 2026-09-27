@@ -224,23 +224,41 @@ export default function App() {
 
   // Salaries of Resident 1 and Resident 2 (Editable by user)
   const carlosCurrentSalary = useMemo(() => {
-    const userPName = profiles[0]?.name || 'Carlos';
-    const r = currentMonthRevenues.find(x => 
-      x.profileName === userPName || 
-      x.profileName === 'Carlos' || 
-      x.name.toLowerCase().includes(userPName.toLowerCase())
-    );
+    const userPName = profiles[0]?.name || 'Carlos Ramos';
+    const r = currentMonthRevenues.find(x => {
+      const nameLower = (x.name || '').toLowerCase();
+      const profLower = (x.profileName || '').toLowerCase();
+      return (
+        x.id.startsWith('rev-carlos-') ||
+        x.id.startsWith('rev-p1-') ||
+        profLower.includes('carlos') ||
+        nameLower.includes('carlos') ||
+        profLower === userPName.toLowerCase() ||
+        nameLower.includes(userPName.toLowerCase())
+      );
+    });
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
   const paulaCurrentSalary = useMemo(() => {
-    const spousePName = profiles[1]?.name || 'Paula';
-    const r = currentMonthRevenues.find(x => 
-      x.profileName === spousePName || 
-      x.profileName === 'Paula' || 
-      x.profileName === 'Esposa' || 
-      x.name.toLowerCase().includes(spousePName.toLowerCase())
-    );
+    const spousePName = profiles[1]?.name || 'Clara Souza';
+    const r = currentMonthRevenues.find(x => {
+      const nameLower = (x.name || '').toLowerCase();
+      const profLower = (x.profileName || '').toLowerCase();
+      return (
+        x.id.startsWith('rev-paula-') ||
+        x.id.startsWith('rev-clara-') ||
+        x.id.startsWith('rev-p2-') ||
+        profLower.includes('clara') ||
+        nameLower.includes('clara') ||
+        profLower.includes('paula') ||
+        nameLower.includes('paula') ||
+        profLower.includes('esposa') ||
+        nameLower.includes('esposa') ||
+        profLower === spousePName.toLowerCase() ||
+        nameLower.includes(spousePName.toLowerCase())
+      );
+    });
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
@@ -249,11 +267,13 @@ export default function App() {
     return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
   }, [currentMonthRevenues]);
 
-  // Handler to edit and save Carlos & Paula salaries
+  // Handler to edit and save Carlos & Clara salaries
   const handleSaveCoupleSalaries = (carlosAmount: number, paulaAmount: number) => {
+    const p1 = profiles[0]?.name || 'Carlos Ramos';
+    const p2 = profiles[1]?.name || 'Clara Souza';
     cloudkit.updateCoupleSalaries(carlosAmount, paulaAmount, selectedMonth.id);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Salários atualizados: Carlos (R$ ${carlosAmount.toFixed(2)}) e Paula (R$ ${paulaAmount.toFixed(2)})`);
+    showTemporaryToast(`Salários salvos com sucesso: ${p1} (R$ ${carlosAmount.toFixed(2)}) e ${p2} (R$ ${paulaAmount.toFixed(2)})`);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data

@@ -1506,12 +1506,21 @@ class CloudKitSyncEngine {
       if (!existing) {
         map.set(r.id, r);
       } else {
+        // Absolute Priority: Explicitly user-filled amounts must never be overwritten by unedited defaults
+        if (existing.isUserFilled && !r.isUserFilled) {
+          continue;
+        }
+        if (r.isUserFilled && !existing.isUserFilled) {
+          map.set(r.id, r);
+          continue;
+        }
+
         const rVersion = r.version || 0;
         const curVersion = existing.version || 0;
         const rUpdated = new Date(r.updatedAt || 0).getTime();
         const curUpdated = new Date(existing.updatedAt || 0).getTime();
 
-        if (rVersion > curVersion || rUpdated >= curUpdated) {
+        if (rVersion > curVersion || (rVersion === curVersion && rUpdated >= curUpdated)) {
           map.set(r.id, r);
         }
       }
@@ -1773,11 +1782,15 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
   }
 
-  // Direct helper to edit and persist Carlos & Paula salaries with automatic propagation to subsequent months
+  // Direct helper to edit and persist couple salaries with automatic propagation to subsequent months
   public updateCoupleSalaries(carlosAmount: number, paulaAmount: number, selectedMonthId: string = '2026-10'): Revenue[] {
     const rawRevenues = this.getRevenues();
     const activeDev = this.getActiveDevice().name;
     const monthPrefix = selectedMonthId || '2026-10';
+
+    const profiles = this.getProfiles();
+    const p1Name = profiles[0]?.name || 'Carlos Ramos';
+    const p2Name = profiles[1]?.name || 'Clara Souza';
 
     const defaultMonths = [
       '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
@@ -1793,6 +1806,7 @@ class CloudKitSyncEngine {
 
     const futureMonths = targetMonthList.filter(m => m >= monthPrefix);
     const nowIso = new Date().toISOString();
+    const newVersion = Date.now();
 
     let updated = [...rawRevenues];
 
@@ -1805,41 +1819,56 @@ class CloudKitSyncEngine {
       const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== carlosId && id !== paulaId);
       localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
 
-      // Filter out existing Carlos & Paula instances in month m
+      // Filter out existing resident 1 & resident 2 instances in month m
       updated = updated.filter(r => {
-        const isCarlos = r.id === carlosId || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
-        const isPaula = r.id === paulaId || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
-        return !isCarlos && !isPaula;
+        const rMonth = (r.date || '').substring(0, 7);
+        if (rMonth !== m) return true;
+        const nameLower = (r.name || '').toLowerCase();
+        const profLower = (r.profileName || '').toLowerCase();
+        const isSalario = r.category === 'Salário & Renda' || nameLower.includes('salário') || nameLower.includes('salario');
+        if (!isSalario) return true;
+
+        const isCarlos = r.id === carlosId || r.id === `rev-carlos-${m}` || r.id === `rev-p1-${m}` ||
+          profLower.includes('carlos') || nameLower.includes('carlos') || profLower.includes('você') || profLower.includes('voce');
+        const isPaulaOrClara = r.id === paulaId || r.id === `rev-clara-${m}` || r.id === `rev-p2-${m}` || r.id === `rev-paula-${m}` ||
+          profLower.includes('clara') || nameLower.includes('clara') || profLower.includes('paula') || nameLower.includes('paula') ||
+          profLower.includes('esposa') || nameLower.includes('esposa');
+
+        return !isCarlos && !isPaulaOrClara;
       });
 
       updated.push(
         {
           id: carlosId,
-          name: 'Salário Líquido (Carlos)',
-          amount: carlosAmount,
+          name: `Salário Líquido (${p1Name})`,
+          amount: Number(carlosAmount) || 0,
           date: dateStr,
           category: 'Salário & Renda',
           recurrence: 'Mensal',
-          profileName: 'Carlos',
-          notes: 'Salário de Carlos',
-          version: 2,
+          profileName: p1Name,
+          notes: `Salário de ${p1Name}`,
+          version: newVersion,
           updatedAt: nowIso,
           updatedByDevice: activeDev,
           isSynced: true,
+          isUserFilled: true,
+          userCustomized: true,
         },
         {
           id: paulaId,
-          name: 'Salário Líquido (Paula)',
-          amount: paulaAmount,
+          name: `Salário Líquido (${p2Name})`,
+          amount: Number(paulaAmount) || 0,
           date: dateStr,
           category: 'Salário & Renda',
           recurrence: 'Mensal',
-          profileName: 'Paula',
-          notes: 'Salário de Paula',
-          version: 2,
+          profileName: p2Name,
+          notes: `Salário de ${p2Name}`,
+          version: newVersion,
           updatedAt: nowIso,
           updatedByDevice: activeDev,
           isSynced: true,
+          isUserFilled: true,
+          userCustomized: true,
         }
       );
     }
@@ -1890,9 +1919,13 @@ class CloudKitSyncEngine {
 
       let seriesKey = '';
       const idRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
-      if (r.id.startsWith('rev-carlos-') || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda')) {
+      const nameLower = (r.name || '').toLowerCase();
+      const profLower = (r.profileName || '').toLowerCase();
+      const isSalario = r.category === 'Salário & Renda' || nameLower.includes('salário') || nameLower.includes('salario');
+
+      if (isSalario && (r.id.startsWith('rev-carlos-') || r.id.startsWith('rev-p1-') || profLower.includes('carlos') || nameLower.includes('carlos') || profLower.includes('você') || profLower.includes('voce'))) {
         seriesKey = 'carlos';
-      } else if (r.id.startsWith('rev-paula-') || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda')) {
+      } else if (isSalario && (r.id.startsWith('rev-paula-') || r.id.startsWith('rev-clara-') || r.id.startsWith('rev-p2-') || profLower.includes('clara') || nameLower.includes('clara') || profLower.includes('paula') || nameLower.includes('paula') || profLower.includes('esposa') || nameLower.includes('esposa'))) {
         seriesKey = 'paula';
       } else if (r.id.startsWith('rev-rec-')) {
         seriesKey = idRoot;
@@ -1914,13 +1947,20 @@ class CloudKitSyncEngine {
         const rTime = new Date(r.updatedAt || 0).getTime();
         const rVer = r.version || 1;
         const eVer = existing.master.version || 1;
+        const rIsFilled = !!r.isUserFilled;
+        const eIsFilled = !!existing.master.isUserFilled;
         
         if (rMonth < existing.startMonth) {
           existing.startMonth = rMonth;
         }
 
-        // Canonical master is the one with highest version or most recently edited timestamp
-        if (rVer > eVer || (rVer === eVer && rTime > eTime)) {
+        // Canonical master is the one with user-filled status, then highest version or most recently edited timestamp
+        if (rIsFilled && !eIsFilled) {
+          existing.master = r;
+          existing.dayOfMonth = day;
+        } else if (eIsFilled && !rIsFilled) {
+          // Keep existing user-filled master
+        } else if (rVer > eVer || (rVer === eVer && rTime > eTime)) {
           existing.master = r;
           existing.dayOfMonth = day;
         }
@@ -1944,10 +1984,10 @@ class CloudKitSyncEngine {
           const m = (r.date || '').substring(0, 7);
           if (m !== targetMonth) return false;
           if (cluster.id === 'carlos') {
-            return r.id === `rev-carlos-${targetMonth}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
+            return r.id === `rev-carlos-${targetMonth}` || ((r.profileName || '').toLowerCase().includes('carlos') || (r.name || '').toLowerCase().includes('carlos')) && (r.category === 'Salário & Renda' || (r.name || '').toLowerCase().includes('salário'));
           }
           if (cluster.id === 'paula') {
-            return r.id === `rev-paula-${targetMonth}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
+            return r.id === `rev-paula-${targetMonth}` || ((r.profileName || '').toLowerCase().includes('clara') || (r.name || '').toLowerCase().includes('clara') || (r.profileName || '').toLowerCase().includes('paula') || (r.name || '').toLowerCase().includes('paula') || (r.profileName || '').toLowerCase().includes('esposa')) && (r.category === 'Salário & Renda' || (r.name || '').toLowerCase().includes('salário'));
           }
           const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
           if (rIdRoot && rIdRoot === cluster.id) return true;
@@ -1957,6 +1997,14 @@ class CloudKitSyncEngine {
 
         if (existingIdx >= 0) {
           const item = workingRevs[existingIdx];
+          // User protection: NEVER overwrite an explicitly user-filled entry unless master is also user-filled and newer
+          if (item.isUserFilled && !master.isUserFilled) {
+            continue;
+          }
+          if (item.isUserFilled && master.isUserFilled && targetMonth !== masterMonth && new Date(item.updatedAt || 0).getTime() > new Date(master.updatedAt || 0).getTime()) {
+            continue;
+          }
+
           // For months from master's month onwards, ensure amount and details match master
           if (targetMonth >= masterMonth && (item.amount !== master.amount || item.name !== master.name)) {
             workingRevs[existingIdx] = {
@@ -1968,6 +2016,8 @@ class CloudKitSyncEngine {
               notes: master.notes,
               version: (item.version || 1) + 1,
               updatedAt: nowIso,
+              isUserFilled: master.isUserFilled,
+              userCustomized: master.userCustomized,
             };
             hasChanges = true;
           }
@@ -1991,10 +2041,12 @@ class CloudKitSyncEngine {
             recurrence: 'Mensal',
             profileName: master.profileName,
             notes: master.notes || '',
-            version: 1,
+            version: master.version || 1,
             updatedAt: nowIso,
             updatedByDevice: activeDev,
             isSynced: true,
+            isUserFilled: master.isUserFilled,
+            userCustomized: master.userCustomized,
           });
           hasChanges = true;
         }
@@ -2039,10 +2091,12 @@ class CloudKitSyncEngine {
         ...rev,
         id: revId,
         amount: Number(rev.amount) || 0,
-        version: (existing.version || 1) + 1,
+        version: Date.now(),
         updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
+        isUserFilled: true,
+        userCustomized: true,
       };
       revenues[existingIndex] = saved;
     } else {
@@ -2055,10 +2109,12 @@ class CloudKitSyncEngine {
         recurrence: rev.recurrence || 'Mensal',
         profileName: rev.profileName || 'Carlos',
         notes: rev.notes || '',
-        version: 1,
+        version: Date.now(),
         updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
+        isUserFilled: true,
+        userCustomized: true,
       };
       revenues.unshift(saved);
     }
@@ -2081,8 +2137,8 @@ class CloudKitSyncEngine {
         ...deduped.map(r => (r.date || '').substring(0, 7)).filter(Boolean)
       ])).filter(m => m >= savedMonth).sort();
 
-      const isCarlos = saved.id.startsWith('rev-carlos-') || ((saved.profileName === 'Carlos' || saved.name.toLowerCase().includes('carlos')) && saved.category === 'Salário & Renda');
-      const isPaula = saved.id.startsWith('rev-paula-') || ((saved.profileName === 'Paula' || saved.name.toLowerCase().includes('paula')) && saved.category === 'Salário & Renda');
+      const isCarlos = saved.id.startsWith('rev-carlos-') || saved.id.startsWith('rev-p1-') || ((saved.profileName || '').toLowerCase().includes('carlos') || (saved.name || '').toLowerCase().includes('carlos')) && (saved.category === 'Salário & Renda' || (saved.name || '').toLowerCase().includes('salário'));
+      const isPaula = saved.id.startsWith('rev-paula-') || saved.id.startsWith('rev-clara-') || saved.id.startsWith('rev-p2-') || ((saved.profileName || '').toLowerCase().includes('clara') || (saved.name || '').toLowerCase().includes('clara') || (saved.profileName || '').toLowerCase().includes('paula') || (saved.name || '').toLowerCase().includes('paula') || (saved.profileName || '').toLowerCase().includes('esposa')) && (saved.category === 'Salário & Renda' || (saved.name || '').toLowerCase().includes('salário'));
       const cleanName = saved.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
       const prevCleanName = prevName ? prevName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-') : '';
       const savedIdRoot = saved.id.replace(/-\d{4}-\d{2}$/, '');
@@ -2095,10 +2151,10 @@ class CloudKitSyncEngine {
         const existingSubIdx = deduped.findIndex(r => {
           if ((r.date || '').substring(0, 7) !== m) return false;
           if (isCarlos) {
-            return r.id === `rev-carlos-${m}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
+            return r.id === `rev-carlos-${m}` || r.id === `rev-p1-${m}` || ((r.profileName || '').toLowerCase().includes('carlos') || (r.name || '').toLowerCase().includes('carlos')) && (r.category === 'Salário & Renda' || (r.name || '').toLowerCase().includes('salário'));
           }
           if (isPaula) {
-            return r.id === `rev-paula-${m}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
+            return r.id === `rev-paula-${m}` || r.id === `rev-clara-${m}` || r.id === `rev-p2-${m}` || ((r.profileName || '').toLowerCase().includes('clara') || (r.name || '').toLowerCase().includes('clara') || (r.profileName || '').toLowerCase().includes('paula') || (r.name || '').toLowerCase().includes('paula') || (r.profileName || '').toLowerCase().includes('esposa')) && (r.category === 'Salário & Renda' || (r.name || '').toLowerCase().includes('salário'));
           }
           const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
           if (savedIdRoot && rIdRoot === savedIdRoot) return true;
@@ -2108,15 +2164,23 @@ class CloudKitSyncEngine {
         });
 
         if (existingSubIdx >= 0) {
+          const item = deduped[existingSubIdx];
+          // Never overwrite an explicitly user-filled month unless saved was updated more recently
+          if (item.isUserFilled && new Date(item.updatedAt || 0).getTime() > new Date(saved.updatedAt || 0).getTime()) {
+            continue;
+          }
+
           deduped[existingSubIdx] = {
-            ...deduped[existingSubIdx],
+            ...item,
             amount: saved.amount,
             name: saved.name,
             category: saved.category,
             profileName: saved.profileName,
             notes: saved.notes,
-            version: (deduped[existingSubIdx].version || 1) + 1,
+            version: Date.now(),
             updatedAt: nowIso,
+            isUserFilled: true,
+            userCustomized: true,
           };
         } else {
           const subId = isCarlos 
@@ -2137,10 +2201,12 @@ class CloudKitSyncEngine {
             recurrence: 'Mensal',
             profileName: saved.profileName,
             notes: saved.notes || '',
-            version: 1,
+            version: Date.now(),
             updatedAt: nowIso,
             updatedByDevice: activeDev,
             isSynced: true,
+            isUserFilled: true,
+            userCustomized: true,
           });
         }
       }
@@ -3246,8 +3312,8 @@ class CloudKitSyncEngine {
     // Auto-propagate across all months
     this.autoPropagateRecurringBills();
 
-    // Save revenues (Carlos R$ 6850, Paula R$ 7240, Rendimentos R$ 345,80)
-    const revenues = this.updateCoupleSalaries(6850, 7240, month);
+    // Keep existing revenues without injecting hardcoded defaults
+    const revenues = this.getRevenues();
 
     return { bills: presetBills, revenues };
   }

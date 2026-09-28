@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2 } from 'lucide-react';
-import { Bill } from '../types/finance';
+import { Bill, getBillEffectiveMonth } from '../types/finance';
 
 export interface MonthOption {
   id: string; // e.g., '2026-10'
@@ -66,7 +66,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   const safeIndex = currentIndex >= 0 ? currentIndex : 1; // default to Outubro 2026 (index 1)
   const currentMonthOption = monthsList[safeIndex] || monthsList[0];
 
-  const currentMonthBillsCount = bills.filter(b => b.dueDate.startsWith(selectedMonthId)).length;
+  const currentMonthBillsCount = bills.filter(b => getBillEffectiveMonth(b) === selectedMonthId).length;
 
   const handlePrev = () => {
     if (safeIndex > 0) {
@@ -164,7 +164,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-0.5">
           {monthsList.map((month) => {
             const isSelected = month.id === selectedMonthId;
-            const count = bills.filter(b => b.dueDate.startsWith(month.id)).length;
+            const count = bills.filter(b => getBillEffectiveMonth(b) === month.id).length;
 
             return (
               <button

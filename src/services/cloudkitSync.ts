@@ -1,4 +1,4 @@
-import { Bill, Revenue, UserProfile, CloudDevice, SyncConflictLog, SyncLogEntry } from '../types/finance';
+import { Bill, Revenue, UserProfile, CloudDevice, SyncConflictLog, SyncLogEntry, getBillEffectiveMonth, isBillRescheduled } from '../types/finance';
 import { inferCategoryFromName } from '../utils/categories';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
@@ -577,7 +577,7 @@ class CloudKitSyncEngine {
       }
 
       const cleanName = normalizeText(b.name);
-      const month = (b.dueDate || '').substring(0, 7) || '2026-10';
+      const month = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
       const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
       const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
 
@@ -593,6 +593,10 @@ class CloudKitSyncEngine {
           keepIncoming = true;
         } else if (existing.receiptUrl && !b.receiptUrl) {
           keepIncoming = false;
+        } else if (b.isProjected && !existing.isProjected) {
+          keepIncoming = false;
+        } else if (!b.isProjected && existing.isProjected) {
+          keepIncoming = true;
         } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
           // Favor original bill over recovery-generated clone
           keepIncoming = false;
@@ -635,19 +639,19 @@ class CloudKitSyncEngine {
 
     for (const b of list) {
       // Recurring bills ('Mensal Fixa') and installment bills ('Parcelada') legitimately exist in multiple months
-      if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType || b.isProjected) {
+      if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType) {
         finalList.push(b);
         continue;
       }
 
-      const bMonth = (b.dueDate || '').substring(0, 7);
+      const bMonth = getBillEffectiveMonth(b);
       const bBarcode = (b.barcode || '').replace(/\D/g, '');
       const bName = b.name.trim().toLowerCase();
 
       const hasLaterVersion = list.some(other => {
         if (other.id === b.id) return false;
         if (other.recurrence === 'Mensal Fixa' || other.recurrence === 'Parcelada') return false;
-        const otherMonth = (other.dueDate || '').substring(0, 7);
+        const otherMonth = getBillEffectiveMonth(other);
         if (otherMonth <= bMonth) return false;
         const otherBarcode = (other.barcode || '').replace(/\D/g, '');
         if (bBarcode.length >= 10 && otherBarcode === bBarcode) return true;
@@ -862,8 +866,8 @@ class CloudKitSyncEngine {
       for (const cluster of activeRecurringClusters) {
         const master = cluster.master;
         const masterMonth = (master.dueDate || '').substring(0, 7);
-        // Only populate from master's start month onwards
-        if (targetMonth < masterMonth) continue;
+        // Only populate into strictly subsequent months (the master itself already exists in masterMonth)
+        if (targetMonth <= masterMonth) continue;
 
         const cleanName = master.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
         const cleanBarcode = (master.barcode || '').replace(/\D/g, '');
@@ -1502,7 +1506,7 @@ class CloudKitSyncEngine {
     }
   }
 
-  // Deduplicate revenues list strictly by ID without dropping user revenues
+  // Deduplicate revenues: ensures no duplicate entries per month (e.g. at most 1 salary for Carlos, 1 for Paula, etc.)
   public deduplicateRevenues(revenuesList: Revenue[]): Revenue[] {
     if (!Array.isArray(revenuesList)) return [];
 
@@ -1510,21 +1514,48 @@ class CloudKitSyncEngine {
     const map = new Map<string, Revenue>();
 
     for (const r of revenuesList) {
-      if (!r || !r.id) continue;
+      if (!r || !r.id || isMockRevenue(r)) continue;
       // If actively deleted by user, skip
       if (activeDeleted.includes(r.id)) continue;
 
-      const existing = map.get(r.id);
+      const rMonth = (r.date || '').substring(0, 7) || '2026-10';
+      const cleanName = (r.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const profLower = (r.profileName || '').trim().toLowerCase();
+
+      let key = `id_${r.id}`;
+      if (profLower === 'carlos' || cleanName.includes('carlos')) {
+        key = `salary_carlos_${rMonth}`;
+      } else if (profLower === 'paula' || profLower === 'esposa' || cleanName.includes('paula') || cleanName.includes('esposa')) {
+        key = `salary_paula_${rMonth}`;
+      } else {
+        key = `rev_${rMonth}_${cleanName}`;
+      }
+
+      const existing = map.get(key);
       if (!existing) {
-        map.set(r.id, r);
+        map.set(key, r);
       } else {
         const rVersion = r.version || 0;
         const curVersion = existing.version || 0;
         const rUpdated = new Date(r.updatedAt || 0).getTime();
         const curUpdated = new Date(existing.updatedAt || 0).getTime();
 
-        if (rVersion > curVersion || rUpdated >= curUpdated) {
-          map.set(r.id, r);
+        let keepIncoming = false;
+        if ((r.amount || 0) > 0 && (existing.amount || 0) === 0) {
+          keepIncoming = true;
+        } else if ((existing.amount || 0) > 0 && (r.amount || 0) === 0) {
+          keepIncoming = false;
+        } else if (rVersion > curVersion) {
+          keepIncoming = true;
+        } else if (rVersion === curVersion && rUpdated >= curUpdated) {
+          keepIncoming = true;
+        }
+
+        if (keepIncoming) {
+          this.recordDeletedRevenue(existing.id);
+          map.set(key, r);
+        } else {
+          this.recordDeletedRevenue(r.id);
         }
       }
     }
@@ -1705,7 +1736,6 @@ class CloudKitSyncEngine {
   // Revenues
   public getRevenues(): Revenue[] {
     if (typeof window === 'undefined') return [];
-    this.sanitizeAndMigrateMismatchedRevenues();
     let raw = localStorage.getItem(STORAGE_KEY_REVENUES);
 
     // Fallback checks on older keys and safety vault

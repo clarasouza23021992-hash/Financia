@@ -104,8 +104,8 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
       continue;
     }
 
-    const month = (b.dueDate || '').substring(0, 7);
-    const cleanName = (b.name || '').trim().toLowerCase();
+    const month = (b.paymentMonth && /^\d{4}-\d{2}$/.test(b.paymentMonth)) ? b.paymentMonth : (b.dueDate || '').substring(0, 7);
+    const cleanName = (b.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
     const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
 
@@ -120,6 +120,10 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
         keepIncoming = true;
       } else if (existing.receiptUrl && !b.receiptUrl) {
         keepIncoming = false;
+      } else if (b.isProjected && !existing.isProjected) {
+        keepIncoming = false;
+      } else if (!b.isProjected && existing.isProjected) {
+        keepIncoming = true;
       } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
         keepIncoming = true;
       } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
@@ -155,24 +159,24 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
   
   for (const b of list) {
     // CRITICAL: Recurring bills ('Mensal Fixa') and installment bills ('Parcelada') legitimately exist in multiple months!
-    if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType || b.isProjected) {
+    if (b.recurrence === 'Mensal Fixa' || b.recurrence === 'Parcelada' || b.fixedValueType) {
       finalList.push(b);
       continue;
     }
 
-    const bMonth = (b.dueDate || '').substring(0, 7);
-    const bName = (b.name || '').trim().toLowerCase();
+    const bMonth = (b.paymentMonth && /^\d{4}-\d{2}$/.test(b.paymentMonth)) ? b.paymentMonth : (b.dueDate || '').substring(0, 7);
+    const bName = (b.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const bBarcode = (b.barcode || '').replace(/\D/g, '');
 
     // Check if there is a newer scheduled version of this single pontual bill in a later month
     const hasLaterMonthVersion = list.some(other => {
       if (other.id === b.id) return false;
       if (other.recurrence === 'Mensal Fixa' || other.recurrence === 'Parcelada' || other.fixedValueType) return false;
-      const otherMonth = (other.dueDate || '').substring(0, 7);
+      const otherMonth = (other.paymentMonth && /^\d{4}-\d{2}$/.test(other.paymentMonth)) ? other.paymentMonth : (other.dueDate || '').substring(0, 7);
       if (otherMonth <= bMonth) return false;
       const otherBarcode = (other.barcode || '').replace(/\D/g, '');
       if (bBarcode.length >= 10 && otherBarcode === bBarcode) return true;
-      return other.name.trim().toLowerCase() === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
+      return (other.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
     });
 
     if (hasLaterMonthVersion) {
@@ -195,17 +199,39 @@ function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[
     if (!r || !r.id || isMockRevenueServer(r)) continue;
     if (deletedIds.includes(r.id)) continue;
 
-    const existing = map.get(r.id);
+    const rMonth = (r.date || '').substring(0, 7) || '2026-10';
+    const cleanName = (r.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const profLower = (r.profileName || '').trim().toLowerCase();
+
+    let key = `id_${r.id}`;
+    if (profLower === 'carlos' || cleanName.includes('carlos')) {
+      key = `salary_carlos_${rMonth}`;
+    } else if (profLower === 'paula' || profLower === 'esposa' || cleanName.includes('paula') || cleanName.includes('esposa')) {
+      key = `salary_paula_${rMonth}`;
+    } else {
+      key = `rev_${rMonth}_${cleanName}`;
+    }
+
+    const existing = map.get(key);
     if (!existing) {
-      map.set(r.id, r);
+      map.set(key, r);
     } else {
       const incVersion = r.version || 0;
       const curVersion = existing.version || 0;
       const incUpdated = new Date(r.updatedAt || 0).getTime();
       const curUpdated = new Date(existing.updatedAt || 0).getTime();
 
-      if (incVersion > curVersion || incUpdated >= curUpdated) {
-        map.set(r.id, r);
+      let keepIncoming = false;
+      if ((r.amount || 0) > 0 && (existing.amount || 0) === 0) {
+        keepIncoming = true;
+      } else if ((existing.amount || 0) > 0 && (r.amount || 0) === 0) {
+        keepIncoming = false;
+      } else if (incVersion > curVersion || incUpdated >= curUpdated) {
+        keepIncoming = true;
+      }
+
+      if (keepIncoming) {
+        map.set(key, r);
       }
     }
   }

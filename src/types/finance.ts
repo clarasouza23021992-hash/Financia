@@ -41,10 +41,44 @@ export interface Bill {
   endMonth?: string;
   isCarriedOver?: boolean;
   originalDueDate?: string;
+  paymentMonth?: string; // YYYY-MM: mês em que o usuário quer pagar / visualizar (caso pague antes ou depois)
   fixedValueType?: 'fixed_value' | 'variable_value';
   isEdited?: boolean;
   lastEditedAt?: string;
 }
+
+// Retorna o mês efetivo onde a conta deve aparecer (paymentMonth se definido, senão mês do dueDate)
+export const getBillEffectiveMonth = (bill: { dueDate?: string; paymentMonth?: string }): string => {
+  if (bill.paymentMonth && bill.paymentMonth.trim().length === 7) {
+    return bill.paymentMonth.trim();
+  }
+  return (bill.dueDate || '').substring(0, 7);
+};
+
+// Verifica se a conta foi reagendada para pagar em outro mês (diferente do mês de vencimento)
+export const isBillRescheduled = (bill: { dueDate?: string; paymentMonth?: string }): boolean => {
+  const dueMonth = (bill.dueDate || '').substring(0, 7);
+  const effectiveMonth = getBillEffectiveMonth(bill);
+  return Boolean(bill.paymentMonth && effectiveMonth !== dueMonth);
+};
+
+export const getMonthNamePtBr = (monthId: string): string => {
+  if (!monthId || !monthId.includes('-')) return monthId || '';
+  const [y, m] = monthId.split('-').map(Number);
+  if (!y || !m || isNaN(y) || isNaN(m)) return monthId;
+  const dateObj = new Date(y, m - 1, 15);
+  const name = dateObj.toLocaleDateString('pt-BR', { month: 'long', year: 'numeric' });
+  return name.charAt(0).toUpperCase() + name.slice(1);
+};
+
+export const getMonthShortPtBr = (monthId: string): string => {
+  if (!monthId || !monthId.includes('-')) return monthId || '';
+  const [y, m] = monthId.split('-').map(Number);
+  if (!y || !m || isNaN(y) || isNaN(m)) return monthId;
+  const dateObj = new Date(y, m - 1, 15);
+  const monthShort = dateObj.toLocaleDateString('pt-BR', { month: 'short' }).replace('.', '');
+  return `${monthShort.charAt(0).toUpperCase() + monthShort.slice(1)}/${String(y).slice(-2)}`;
+};
 
 export interface Revenue {
   id: string;

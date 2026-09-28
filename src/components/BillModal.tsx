@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2 } from 'lucide-react';
-import { Bill, PixKeyType, RecurrenceType } from '../types/finance';
+import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2, Calendar } from 'lucide-react';
+import { Bill, PixKeyType, RecurrenceType, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
 import { CATEGORIES_LIST, getCategoryInfo, inferCategoryFromName } from '../utils/categories';
 
@@ -57,55 +57,81 @@ export const BillModal: React.FC<BillModalProps> = ({
   // Recorrência Mensal Fixa: Dívida e Valor vs Só a Dívida (User explicitly requested)
   const [fixedValueType, setFixedValueType] = useState<'fixed_value' | 'variable_value'>('fixed_value');
 
+  // Mês em que o usuário quer pagar (caso queira pagar antes ou depois do mês de vencimento)
+  const [paymentMonth, setPaymentMonth] = useState<string>('');
+  const [customPaymentMonthEnabled, setCustomPaymentMonthEnabled] = useState<boolean>(false);
+
+  const prevIsOpenRef = React.useRef(false);
+  const initialBillIdRef = React.useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (initialBill) {
-      setName(initialBill.name);
-      setAmount(initialBill.amount.toString());
-      setDueDate(initialBill.dueDate);
-      setCategory(initialBill.category);
-      setFavored(initialBill.favored);
-      setBarcode(initialBill.barcode || '');
-      setPixKey(initialBill.pixKey || '');
-      setPixType(initialBill.pixType || 'CNPJ');
-      setRecurrence(initialBill.recurrence || 'Mensal Fixa');
-      setFixedValueType(initialBill.fixedValueType || 'fixed_value');
-      setNotes(initialBill.notes || '');
-      setReceiptName(initialBill.receiptName || '');
-      setReceiptUrl(initialBill.receiptUrl || '');
-      setReceiptSize(initialBill.receiptSize || '');
-      setTotalInstallments(initialBill.totalInstallments || 10);
-      setCurrentInstallment(initialBill.installmentNumber || 1);
-      setValueIsPerInstallment(true);
-      setPixDetectedNotice(null);
-      setBarcodeDetectedNotice(null);
-      setCategoryNotice(null);
-      setApplyToFutureMonths(true);
-    } else {
-      // Default for new bill
-      setName('');
-      setAmount('');
-      const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
-      setDueDate(defaultDate);
-      setCategory('Outras Despesas');
-      setFavored('');
-      setBarcode('');
-      setPixKey('');
-      setPixType('CNPJ');
-      setRecurrence('Mensal Fixa');
-      setFixedValueType('fixed_value');
-      setNotes('');
-      setReceiptName('');
-      setReceiptUrl('');
-      setReceiptSize('');
-      setTotalInstallments(10);
-      setCurrentInstallment(1);
-      setValueIsPerInstallment(true);
-      setPixDetectedNotice(null);
-      setBarcodeDetectedNotice(null);
-      setCategoryNotice(null);
-      setApplyToFutureMonths(true);
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const billChanged = isOpen && initialBill?.id !== initialBillIdRef.current;
+
+    if (justOpened || billChanged) {
+      if (initialBill) {
+        setName(initialBill.name);
+        setAmount(initialBill.amount.toString());
+        setDueDate(initialBill.dueDate);
+        setCategory(initialBill.category);
+        setFavored(initialBill.favored);
+        setBarcode(initialBill.barcode || '');
+        setPixKey(initialBill.pixKey || '');
+        setPixType(initialBill.pixType || 'CNPJ');
+        setRecurrence(initialBill.recurrence || 'Mensal Fixa');
+        setFixedValueType(initialBill.fixedValueType || 'fixed_value');
+        const dueM = (initialBill.dueDate || '').substring(0, 7);
+        const payM = initialBill.paymentMonth || '';
+        if (payM && payM !== dueM) {
+          setCustomPaymentMonthEnabled(true);
+          setPaymentMonth(payM);
+        } else {
+          setCustomPaymentMonthEnabled(false);
+          setPaymentMonth(dueM || defaultMonth || '2026-09');
+        }
+        setNotes(initialBill.notes || '');
+        setReceiptName(initialBill.receiptName || '');
+        setReceiptUrl(initialBill.receiptUrl || '');
+        setReceiptSize(initialBill.receiptSize || '');
+        setTotalInstallments(initialBill.totalInstallments || 10);
+        setCurrentInstallment(initialBill.installmentNumber || 1);
+        setValueIsPerInstallment(true);
+        setPixDetectedNotice(null);
+        setBarcodeDetectedNotice(null);
+        setCategoryNotice(null);
+        setApplyToFutureMonths(true);
+      } else {
+        // Default for new bill
+        setName('');
+        setAmount('');
+        const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
+        setDueDate(defaultDate);
+        setCategory('Outras Despesas');
+        setFavored('');
+        setBarcode('');
+        setPixKey('');
+        setPixType('CNPJ');
+        setRecurrence('Mensal Fixa');
+        setFixedValueType('fixed_value');
+        setCustomPaymentMonthEnabled(false);
+        setPaymentMonth(defaultMonth || '2026-09');
+        setNotes('');
+        setReceiptName('');
+        setReceiptUrl('');
+        setReceiptSize('');
+        setTotalInstallments(10);
+        setCurrentInstallment(1);
+        setValueIsPerInstallment(true);
+        setPixDetectedNotice(null);
+        setBarcodeDetectedNotice(null);
+        setCategoryNotice(null);
+        setApplyToFutureMonths(true);
+      }
     }
-  }, [initialBill, isOpen]);
+
+    prevIsOpenRef.current = isOpen;
+    initialBillIdRef.current = initialBill?.id;
+  }, [defaultMonth, initialBill?.id, isOpen]);
 
   // Handler for typing name and auto-detecting category intelligently
   const handleNameChange = (val: string) => {
@@ -345,12 +371,18 @@ export const BillModal: React.FC<BillModalProps> = ({
     const isParcelada = recurrence === 'Parcelada';
     const summary = calculateInstallmentSummary();
 
+    const effectivePaymentMonth = customPaymentMonthEnabled && paymentMonth && paymentMonth !== (dueDate || '').substring(0, 7)
+      ? paymentMonth
+      : undefined;
+
     onSave(
       {
         id: initialBill?.id,
         name: name.trim() || 'Conta sem nome',
         amount: parsedAmount,
         dueDate,
+        originalDueDate: initialBill?.originalDueDate || dueDate,
+        paymentMonth: effectivePaymentMonth,
         category,
         favored: favored.trim() || 'Não especificado',
         barcode: barcode.trim(),
@@ -540,13 +572,146 @@ export const BillModal: React.FC<BillModalProps> = ({
             </div>
 
             {/* Confirmation indicator if bill is in a different month */}
-            {dueDate && defaultMonth && !dueDate.startsWith(defaultMonth) && (
+            {dueDate && defaultMonth && !dueDate.startsWith(defaultMonth) && !customPaymentMonthEnabled && (
               <div className="p-2 bg-blue-50 dark:bg-blue-950/40 border border-blue-200 dark:border-blue-900 rounded-xl text-[11px] text-blue-800 dark:text-blue-300 flex items-center gap-1.5">
                 <span>💡</span>
                 <span>
-                  Esta conta será salva com vencimento em{' '}
-                  <strong>{dueDate.split('-').reverse().join('/')}</strong> (fora do mês atual).
+                  Esta conta tem vencimento em{' '}
+                  <strong>{dueDate.split('-').reverse().join('/')}</strong> ({getMonthNamePtBr(dueDate.substring(0, 7))}).
                 </span>
+              </div>
+            )}
+          </div>
+
+          {/* Opção para pagar antes ou depois (onde a dívida deve aparecer) */}
+          <div className="p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 bg-slate-50/70 dark:bg-slate-900/60 space-y-2.5">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <Calendar className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                <span>Mês em que vai pagar (onde a conta vai aparecer)</span>
+              </label>
+            </div>
+
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomPaymentMonthEnabled(false);
+                }}
+                className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex flex-col justify-between active-press ${
+                  !customPaymentMonthEnabled
+                    ? 'bg-teal-600 text-white border-teal-600 shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold">
+                  <span>{!customPaymentMonthEnabled ? '✓' : '○'}</span>
+                  <span>No mês do vencimento</span>
+                </div>
+                <div className={`text-[11px] mt-1 font-medium truncate ${!customPaymentMonthEnabled ? 'text-teal-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                  {getMonthNamePtBr((dueDate || '').substring(0, 7)) || 'Mês do vencimento'}
+                </div>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => {
+                  setCustomPaymentMonthEnabled(true);
+                  if (!paymentMonth || paymentMonth === (dueDate || '').substring(0, 7)) {
+                    // Default to current viewed month or next/previous
+                    setPaymentMonth(defaultMonth || '2026-09');
+                  }
+                }}
+                className={`p-2.5 rounded-xl text-xs font-bold border transition-all text-left flex flex-col justify-between active-press ${
+                  customPaymentMonthEnabled
+                    ? 'bg-amber-600 text-white border-amber-600 shadow-xs'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700/60'
+                }`}
+              >
+                <div className="flex items-center gap-1 font-extrabold">
+                  <span>{customPaymentMonthEnabled ? '✓' : '○'}</span>
+                  <span>Pagar antes ou depois</span>
+                </div>
+                <div className={`text-[11px] mt-1 font-medium truncate ${customPaymentMonthEnabled ? 'text-amber-100' : 'text-slate-500 dark:text-slate-400'}`}>
+                  Escolher outro mês
+                </div>
+              </button>
+            </div>
+
+            {customPaymentMonthEnabled && (
+              <div className="pt-2 border-t border-slate-200/80 dark:border-slate-700/80 space-y-2">
+                <div className="text-[11px] font-bold text-slate-700 dark:text-slate-300">
+                  🗓️ Escolha o mês onde quer pagar (a conta aparecerá lá):
+                </div>
+
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { id: '2026-08', label: 'Ago/26' },
+                    { id: '2026-09', label: 'Set/26' },
+                    { id: '2026-10', label: 'Out/26' },
+                    { id: '2026-11', label: 'Nov/26' },
+                    { id: '2026-12', label: 'Dez/26' },
+                    { id: '2027-01', label: 'Jan/27' },
+                    { id: '2027-02', label: 'Fev/27' },
+                    { id: '2027-03', label: 'Mar/27' },
+                  ].map(item => {
+                    const isSelected = paymentMonth === item.id;
+                    const dueM = (dueDate || '').substring(0, 7);
+                    const isDue = item.id === dueM;
+                    const isBefore = item.id < dueM;
+                    const isAfter = item.id > dueM;
+
+                    return (
+                      <button
+                        key={item.id}
+                        type="button"
+                        onClick={() => setPaymentMonth(item.id)}
+                        className={`px-2.5 py-1.5 rounded-lg text-xs font-bold transition-all active-press flex items-center gap-1 ${
+                          isSelected
+                            ? 'bg-amber-600 text-white shadow-xs'
+                            : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
+                        }`}
+                      >
+                        <span>{item.label}</span>
+                        {isDue && <span className="text-[10px] opacity-80">(Venc.)</span>}
+                        {isBefore && !isDue && <span className="text-[10px] opacity-80">(Antes ⚡)</span>}
+                        {isAfter && !isDue && <span className="text-[10px] opacity-80">(Depois ⏳)</span>}
+                        {isSelected && <span>✓</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Explanatory callout */}
+                {(() => {
+                  const dueM = (dueDate || '').substring(0, 7);
+                  const dueMonthName = getMonthNamePtBr(dueM);
+                  const payMonthName = getMonthNamePtBr(paymentMonth);
+                  const isBefore = paymentMonth < dueM;
+                  const isAfter = paymentMonth > dueM;
+                  const formattedDate = (dueDate || '').split('-').reverse().join('/');
+
+                  if (paymentMonth && paymentMonth !== dueM) {
+                    return (
+                      <div className="p-2.5 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-700/80 rounded-xl text-xs text-amber-900 dark:text-amber-200 space-y-1">
+                        <div className="font-bold flex items-center gap-1.5">
+                          <span>{isBefore ? '⚡' : '⏳'}</span>
+                          <span>
+                            {isBefore ? 'Pagamento Antecipado' : 'Pagamento Postergado'}
+                          </span>
+                        </div>
+                        <p className="text-[11.5px] leading-relaxed">
+                          Esta dívida vence em <strong>{dueMonthName}</strong> ({formattedDate}), mas você programou para pagar no mês de <strong>{payMonthName}</strong>. A conta aparecerá no mês escolhido e o mês de vencimento continuará sempre visível!
+                        </p>
+                      </div>
+                    );
+                  }
+                  return (
+                    <div className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-[11px] text-slate-600 dark:text-slate-400">
+                      O mês selecionado coincide com o mês do vencimento. A conta aparecerá em {dueMonthName}.
+                    </div>
+                  );
+                })()}
               </div>
             )}
           </div>

@@ -5,7 +5,7 @@ import {
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator
 } from 'lucide-react';
-import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog } from './types/finance';
+import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from './types/finance';
 import { cloudkit, isMockBill } from './services/cloudkitSync';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
@@ -87,11 +87,11 @@ export default function App() {
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
-  // Map other months that contain bills (in case bills are in a different month)
+  // Map other months that contain bills (in case bills are scheduled in a different month)
   const otherMonthsWithBills = useMemo(() => {
     const map = new Map<string, number>();
     bills.forEach(b => {
-      const m = (b.dueDate || '').slice(0, 7);
+      const m = getBillEffectiveMonth(b);
       if (m && m !== selectedMonth.id) {
         map.set(m, (map.get(m) || 0) + 1);
       }
@@ -109,24 +109,20 @@ export default function App() {
     { id: 'notif-4', title: 'Notificar quando o cônjuge/morador anexar comprovante', daysBeforeDue: 0, enabled: true },
   ]);
 
-  // Automatic check to ensure bills & revenues are safe, recurring bills and revenues auto-populate subsequent months, and debts are not in revenues
+  // Automatic check to ensure bills & revenues are safe and thoroughly deduplicated
   useEffect(() => {
-    // Thorough deduplication to remove any repeating debts and restore clean originals
     cloudkit.cleanupAndDeduplicateAllBills();
     cloudkit.ensureDefaultDataIfEmpty();
-    cloudkit.sanitizeAndMigrateMismatchedRevenues();
-    const updatedBills = cloudkit.cleanupAndDeduplicateAllBills();
-    const updatedRevs = cloudkit.autoPropagateRecurringRevenues();
+    const updatedBills = cloudkit.getBills();
+    const updatedRevs = cloudkit.getRevenues();
     setBills(updatedBills);
     setRevenues(updatedRevs);
   }, []);
 
-  // When selected month changes, ensure all recurring and installment bills & revenues are populated
+  // When selected month changes, refresh local state without re-generating duplicates
   useEffect(() => {
-    const updatedBills = cloudkit.ensureRecurringBillsForMonth(selectedMonth.id);
-    setBills(updatedBills);
-    const updatedRevs = cloudkit.ensureRecurringRevenuesForMonth(selectedMonth.id);
-    setRevenues(updatedRevs);
+    setBills(cloudkit.getBills());
+    setRevenues(cloudkit.getRevenues());
   }, [selectedMonth.id]);
 
   // Sync with CloudKit Real-Time BroadcastChannel
@@ -155,7 +151,7 @@ export default function App() {
   // Check for upcoming bills in current selected month to notify automatically
   useEffect(() => {
     const currentMonthPrefix = selectedMonth.id;
-    const monthBills = bills.filter(b => (b.dueDate || '').startsWith(currentMonthPrefix));
+    const monthBills = bills.filter(b => getBillEffectiveMonth(b) === currentMonthPrefix);
     const overdue = monthBills.find(b => b.status === 'overdue');
     if (overdue) {
       setToastNotification(`⚠️ Lembrete de Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2)})`);
@@ -223,9 +219,9 @@ export default function App() {
     return devices.find(d => d.id === activeDeviceId) || devices[0];
   }, [devices, activeDeviceId]);
 
-  // Month-aware Bills: returns actual saved bills for the selected month
+  // Month-aware Bills: returns actual saved bills for the selected month based on effective payment month
   const currentMonthBills = useMemo(() => {
-    return bills.filter(b => (b.dueDate || '').startsWith(selectedMonth.id));
+    return bills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
   }, [bills, selectedMonth.id]);
 
   // Month-aware Revenues: returns actual saved revenues for the selected month
@@ -393,37 +389,40 @@ export default function App() {
   };
 
   const handleMoveBillMonth = (bill: Bill, targetMonthId: string) => {
-    const currentDay = (bill.dueDate.split('-')[2] || '10').padStart(2, '0');
-    const [y, m] = targetMonthId.split('-').map(Number);
-    const maxDays = new Date(y, m, 0).getDate();
-    const safeDay = String(Math.min(parseInt(currentDay, 10), maxDays)).padStart(2, '0');
-    const newDueDate = `${targetMonthId}-${safeDay}`;
+    const dueMonth = (bill.dueDate || '').substring(0, 7);
+    const isReturningToDueMonth = targetMonthId === dueMonth;
+    const newPaymentMonth = isReturningToDueMonth ? undefined : targetMonthId;
 
     cloudkit.saveBill({
       ...bill,
-      dueDate: newDueDate,
+      paymentMonth: newPaymentMonth,
+      originalDueDate: bill.originalDueDate || bill.dueDate,
     });
     setBills(cloudkit.getBills());
     setConflictLogs(cloudkit.getConflictLogs());
 
-    const monthNames: Record<string, string> = {
-      '2026-08': 'Agosto/2026',
-      '2026-09': 'Setembro/2026',
-      '2026-10': 'Outubro/2026',
-      '2026-11': 'Novembro/2026',
-      '2026-12': 'Dezembro/2026',
-      '2027-01': 'Janeiro/2027',
-      '2027-02': 'Fevereiro/2027',
-      '2027-03': 'Março/2027',
-    };
-    const targetLabel = monthNames[targetMonthId] || targetMonthId;
+    const targetLabel = getMonthNamePtBr(targetMonthId) || targetMonthId;
     const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === targetMonthId) || {
       id: targetMonthId,
       label: targetLabel,
       shortLabel: targetMonthId,
     };
     setSelectedMonth(targetMonthOption);
-    showTemporaryToast(`✅ Dívida "${bill.name}" movida para ${targetLabel}!`);
+
+    const formattedDueDate = bill.dueDate ? bill.dueDate.split('-').reverse().join('/') : '';
+    if (isReturningToDueMonth) {
+      showTemporaryToast(`✅ Conta "${bill.name}" restaurada para pagar no mês de vencimento (${targetLabel})!`);
+    } else {
+      const isBefore = targetMonthId < dueMonth;
+      showTemporaryToast(
+        `✅ Conta "${bill.name}" ${isBefore ? 'antecipada' : 'programada'} para pagar em ${targetLabel}! (Vencimento real: ${formattedDueDate})`
+      );
+    }
+  };
+
+  const handleRestoreDueMonth = (bill: Bill) => {
+    const dueMonth = (bill.dueDate || '').substring(0, 7);
+    handleMoveBillMonth(bill, dueMonth);
   };
 
   const handleDeleteBill = (bill: Bill) => {
@@ -873,6 +872,7 @@ export default function App() {
                     onViewReceipt={handleViewReceipt}
                     onAttachReceipt={handleAttachReceipt}
                     onMoveMonth={handleMoveBillMonth}
+                    onRestoreDueMonth={handleRestoreDueMonth}
                   />
                 ))
               )}

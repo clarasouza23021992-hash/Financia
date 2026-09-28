@@ -4,7 +4,7 @@ import {
   QrCode, Barcode, FileText, Paperclip, Undo2, Eye, Calendar
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bill } from '../types/finance';
+import { Bill, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { getCategoryInfo } from '../utils/categories';
 
 interface BillCardProps {
@@ -15,6 +15,7 @@ interface BillCardProps {
   onViewReceipt: (bill: Bill) => void;
   onAttachReceipt: (bill: Bill) => void;
   onMoveMonth?: (bill: Bill, targetMonth: string) => void;
+  onRestoreDueMonth?: (bill: Bill) => void;
 }
 
 export const BillCard: React.FC<BillCardProps> = ({
@@ -25,6 +26,7 @@ export const BillCard: React.FC<BillCardProps> = ({
   onViewReceipt,
   onAttachReceipt,
   onMoveMonth,
+  onRestoreDueMonth,
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
@@ -56,6 +58,14 @@ export const BillCard: React.FC<BillCardProps> = ({
 
   const categoryInfo = getCategoryInfo(bill.category);
   const CategoryIcon = categoryInfo.icon;
+
+  const dueMonth = (bill.dueDate || '').substring(0, 7);
+  const effectiveMonth = getBillEffectiveMonth(bill);
+  const isRescheduled = Boolean(bill.paymentMonth && effectiveMonth !== dueMonth);
+  const isPaidEarly = isRescheduled && effectiveMonth < dueMonth;
+  const isPaidLater = isRescheduled && effectiveMonth > dueMonth;
+  const formattedDueDate = bill.dueDate ? bill.dueDate.split('-').reverse().join('/') : '';
+  const dueDayMonth = bill.dueDate ? bill.dueDate.split('-').reverse().slice(0, 2).join('/') : '';
 
   return (
     <div className={`bg-white dark:bg-[#131D38] rounded-2xl border ${
@@ -128,20 +138,16 @@ export const BillCard: React.FC<BillCardProps> = ({
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.88, y: 2 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                title="Clique para alterar o mês de vencimento"
+                title="Clique para escolher em qual mês quer pagar esta conta"
                 className={`text-[11px] font-medium px-2.5 py-0.5 rounded-full flex items-center gap-1 shrink-0 active-press hover:opacity-85 cursor-pointer ${
                   bill.dueDate.endsWith('17')
                     ? 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300 border border-amber-300 dark:border-amber-800 font-bold'
+                    : isRescheduled
+                    ? 'bg-indigo-100 text-indigo-800 dark:bg-indigo-950/70 dark:text-indigo-300 border border-indigo-300 dark:border-indigo-800 font-bold'
                     : 'bg-slate-100 text-slate-600 dark:bg-slate-800 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
                 }`}
               >
-                {bill.dueDate.endsWith('17') ? (
-                  <>
-                    <span>⏰</span> <span>Vence Hoje!</span>
-                  </>
-                ) : (
-                  <span>Vence em {bill.dueDate.split('-').reverse().slice(0, 2).join('/')} 📅</span>
-                )}
+                <span>📅 Vence em {dueDayMonth} ({getMonthShortPtBr(dueMonth)})</span>
               </motion.button>
             )}
             {bill.status === 'paid' && (
@@ -168,19 +174,56 @@ export const BillCard: React.FC<BillCardProps> = ({
           <button
             onClick={(e) => copyToClipboard(`R$ ${bill.amount.toFixed(2)}`, 'amount', e)}
             className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 mt-1"
+            title="Copiar valor exato"
           >
             {copiedField === 'amount' ? (
-              <span className="text-emerald-600 dark:text-emerald-400 font-semibold flex items-center gap-0.5">
-                <Check className="w-3 h-3" /> Copiado
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
+                <Check className="w-3 h-3" /> Copiado!
               </span>
             ) : (
-              <span className="flex items-center gap-1">
-                <Copy className="w-3 h-3" /> Copiar R$
+              <span className="flex items-center gap-0.5">
+                <Copy className="w-3 h-3" /> Copiar
               </span>
             )}
           </button>
         </div>
       </div>
+
+      {/* Banner Informativo se a conta foi programada para pagar em outro mês (Antecipada ou Adiada) */}
+      {isRescheduled && (
+        <div className={`mt-1.5 mb-2.5 p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs ${
+          isPaidEarly
+            ? 'bg-emerald-50 dark:bg-emerald-950/40 border-emerald-200 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200'
+            : 'bg-amber-50 dark:bg-amber-950/40 border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200'
+        }`}>
+          <div className="flex items-center gap-2 flex-1 min-w-0">
+            <span className="text-base shrink-0">{isPaidEarly ? '⚡' : '⏳'}</span>
+            <div className="min-w-0">
+              <span className="font-extrabold block text-xs">
+                {isPaidEarly
+                  ? `Conta Antecipada para pagar em ${getMonthShortPtBr(effectiveMonth)}!`
+                  : `Conta Adiada para pagar em ${getMonthShortPtBr(effectiveMonth)}!`}
+              </span>
+              <span className="text-[11px] opacity-85 block truncate mt-0.5">
+                Vencimento original: <strong>{formattedDueDate}</strong> ({getMonthNamePtBr(dueMonth)})
+              </span>
+            </div>
+          </div>
+          {onRestoreDueMonth && (
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onRestoreDueMonth(bill);
+              }}
+              title="Voltar a conta para o mês de vencimento original"
+              className="px-2.5 py-1 bg-white dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-lg border border-slate-200 dark:border-slate-700 text-[10.5px] shrink-0 active-press shadow-2xs"
+            >
+              ↩️ Restaurar p/ {getMonthShortPtBr(dueMonth)}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Bill Name & Favored */}
       <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">
@@ -392,30 +435,41 @@ export const BillCard: React.FC<BillCardProps> = ({
           initial={{ opacity: 0, height: 0 }}
           animate={{ opacity: 1, height: 'auto' }}
           exit={{ opacity: 0, height: 0 }}
-          className="pt-2 mt-2 border-t border-slate-100 dark:border-slate-800/80"
+          className="pt-2.5 mt-2.5 border-t border-slate-100 dark:border-slate-800/80 space-y-2"
         >
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[11px] font-bold text-slate-700 dark:text-slate-300 flex items-center gap-1">
-              <span>📅</span> Mover vencimento desta conta para:
-            </span>
+          <div className="flex items-start justify-between gap-2">
+            <div>
+              <span className="text-[11.5px] font-extrabold text-slate-800 dark:text-slate-200 flex items-center gap-1">
+                <span>🗓️</span> Em qual mês você quer pagar/visualizar esta conta?
+              </span>
+              <span className="text-[10.5px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                Vencimento oficial permanecerá: <strong>{formattedDueDate}</strong> ({getMonthNamePtBr(dueMonth)})
+              </span>
+            </div>
             <button
               onClick={() => setIsMonthPickerOpen(false)}
-              className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1"
+              className="text-xs text-slate-400 hover:text-slate-600 font-bold px-1.5 py-0.5"
             >
               ✕
             </button>
           </div>
+
           <div className="flex flex-wrap gap-1.5">
             {[
+              { id: '2026-08', label: 'Ago/26' },
               { id: '2026-09', label: 'Set/26' },
               { id: '2026-10', label: 'Out/26' },
               { id: '2026-11', label: 'Nov/26' },
               { id: '2026-12', label: 'Dez/26' },
               { id: '2027-01', label: 'Jan/27' },
               { id: '2027-02', label: 'Fev/27' },
+              { id: '2027-03', label: 'Mar/27' },
             ].map(m => {
-              const currentBillMonth = (bill.dueDate || '').substring(0, 7);
-              const isCurrent = currentBillMonth === m.id;
+              const isCurrentDisplayMonth = effectiveMonth === m.id;
+              const isDueMonth = dueMonth === m.id;
+              const isBeforeDue = m.id < dueMonth;
+              const isAfterDue = m.id > dueMonth;
+
               return (
                 <button
                   key={m.id}
@@ -423,19 +477,38 @@ export const BillCard: React.FC<BillCardProps> = ({
                     onMoveMonth(bill, m.id);
                     setIsMonthPickerOpen(false);
                   }}
-                  disabled={isCurrent}
-                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active-press ${
-                    isCurrent
-                      ? 'bg-slate-200 dark:bg-slate-800 text-slate-400 cursor-default'
-                      : 'bg-teal-50 dark:bg-teal-950/40 text-teal-700 dark:text-teal-300 hover:bg-teal-100 dark:hover:bg-teal-900 border border-teal-200 dark:border-teal-800'
+                  className={`px-2.5 py-1 text-xs font-bold rounded-lg transition-all active-press flex items-center gap-1 ${
+                    isCurrentDisplayMonth
+                      ? 'bg-amber-600 text-white shadow-xs'
+                      : isDueMonth
+                      ? 'bg-teal-50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200 border border-teal-300 dark:border-teal-700 hover:bg-teal-100'
+                      : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700'
                   }`}
                 >
-                  {m.label}
-                  {isCurrent && ' (Atual)'}
+                  <span>{m.label}</span>
+                  {isDueMonth && <span className="text-[10px] opacity-80">(Venc.)</span>}
+                  {isBeforeDue && !isDueMonth && <span className="text-[10px] opacity-80">(Antes ⚡)</span>}
+                  {isAfterDue && !isDueMonth && <span className="text-[10px] opacity-80">(Depois ⏳)</span>}
+                  {isCurrentDisplayMonth && <span>✓ Exibindo</span>}
                 </button>
               );
             })}
           </div>
+
+          {isRescheduled && onRestoreDueMonth && (
+            <div className="pt-1 flex items-center justify-end">
+              <button
+                type="button"
+                onClick={() => {
+                  onRestoreDueMonth(bill);
+                  setIsMonthPickerOpen(false);
+                }}
+                className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1"
+              >
+                <span>↩️ Restaurar para aparecer no mês de vencimento ({getMonthShortPtBr(dueMonth)})</span>
+              </button>
+            </div>
+          )}
         </motion.div>
       )}
     </div>

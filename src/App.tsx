@@ -846,17 +846,6 @@ export default function App() {
                   )}
 
                   <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                    {/* Recovery Modal Button */}
-                    <button
-                      type="button"
-                      onClick={() => setIsDataRecoveryModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-500/15 hover:bg-blue-500/25 text-blue-700 dark:text-blue-300 font-bold text-xs rounded-xl border border-blue-500/30 active-press"
-                      title="Varredura profunda para restaurar dados perdidos"
-                    >
-                      <ShieldCheck className="w-4 h-4 text-blue-600 dark:text-blue-400" />
-                      <span>Recuperar Dados & Backups</span>
-                    </button>
-
                     <button
                       type="button"
                       onClick={() => {
@@ -1070,23 +1059,20 @@ export default function App() {
         bill={viewingReceiptBill}
       />
 
-      <DataRecoveryModal
-        isOpen={isDataRecoveryModalOpen}
-        onClose={() => setIsDataRecoveryModalOpen(false)}
-        currentMonthId={selectedMonth.id}
-        currentMonthLabel={selectedMonth.label}
-        onSelectMonth={(monthId) => {
-          const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
-            id: monthId,
-            label: monthId,
-            shortLabel: monthId,
-          };
-          setSelectedMonth(found);
-        }}
-        onDataRestored={() => {
-          setBills(cloudkit.getBills());
-          setRevenues(cloudkit.getRevenues());
-          setToastNotification('Contas e receitas restauradas e atualizadas com sucesso!');
+      <CalculatorModal
+        isOpen={isCalculatorOpen}
+        onClose={() => setIsCalculatorOpen(false)}
+        onApplyToNewBill={(amount) => {
+          setEditingBill({
+            name: '',
+            amount,
+            dueDate: `${selectedMonth.id}-10`,
+            category: 'Outros',
+            recurrence: 'Única / Pontual',
+            status: 'pending',
+            splitHousehold: true,
+          } as any);
+          setIsBillModalOpen(true);
         }}
       />
 

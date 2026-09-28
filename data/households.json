@@ -493,9 +493,18 @@
         "lastActive": "Agora mesmo",
         "connectedAt": "2026-09-27T16:03:35.007Z",
         "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E1"
+      },
+      {
+        "id": "dev_1790589691861_4j46y",
+        "name": "iPhone Carlos",
+        "model": "iPhone (Tela de Início)",
+        "owner": "Carlos",
+        "lastActive": "Agora mesmo",
+        "connectedAt": "2026-09-28T10:01:32.253Z",
+        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E1"
       }
     ],
-    "lastUpdated": "2026-09-27T16:07:31.191Z",
+    "lastUpdated": "2026-09-28T10:01:32.253Z",
     "deletedBillIds": [],
     "deletedRevenueIds": []
   },

@@ -627,37 +627,6 @@ class CloudKitSyncEngine {
       }
     }
 
-    return Array.from(map.values());
-  }
-
-  // Force thorough deduplication across all months and remove repeating bills
-  public cleanupAndDeduplicateAllBills(): Bill[] {
-    if (typeof window === 'undefined') return [];
-
-    let raw = localStorage.getItem(STORAGE_KEY_BILLS);
-    let bills: Bill[] = [];
-    try {
-      bills = raw ? JSON.parse(raw) : [];
-    } catch {
-      bills = [];
-    }
-    if (!Array.isArray(bills)) bills = [];
-
-    // Filter out mock bills
-    bills = bills.filter(b => !isMockBill(b));
-
-    const deduped = this.deduplicateBills(bills);
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
-    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
-    
-    // Clear temporary deep scan cache keys
-    localStorage.removeItem('financas_bills_deep_scan');
-    
-    this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
-    this.syncWithServer();
-    return deduped;
-  }
-
     // Cross-month cleanup:
     // If a bill was rescheduled/moved (single 'Única / Pontual' or carried-over bill), eliminate earlier phantom ghost copies.
     // CRITICAL: NEVER delete recurring bills ('Mensal Fixa') or installment bills ('Parcelada') across months!
@@ -694,6 +663,34 @@ class CloudKitSyncEngine {
     }
 
     return finalList;
+  }
+
+  // Force thorough deduplication across all months and remove repeating bills
+  public cleanupAndDeduplicateAllBills(): Bill[] {
+    if (typeof window === 'undefined') return [];
+
+    let raw = localStorage.getItem(STORAGE_KEY_BILLS);
+    let bills: Bill[] = [];
+    try {
+      bills = raw ? JSON.parse(raw) : [];
+    } catch {
+      bills = [];
+    }
+    if (!Array.isArray(bills)) bills = [];
+
+    // Filter out mock bills
+    bills = bills.filter(b => !isMockBill(b));
+
+    const deduped = this.deduplicateBills(bills);
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
+    
+    // Clear temporary deep scan cache keys
+    localStorage.removeItem('financas_bills_deep_scan');
+    
+    this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
+    this.syncWithServer();
+    return deduped;
   }
 
   // Helper to infer expense category from bill title or favored

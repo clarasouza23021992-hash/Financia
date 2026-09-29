@@ -72,37 +72,12 @@ function isMockBillServer(b: any): boolean {
   return false;
 }
 
-// Filter out all fictitious seed/mock revenues so user sees only real revenues
+// Filter out only explicitly marked mock/demo seed revenues
 function isMockRevenueServer(r: any): boolean {
   if (!r) return true;
   if (r.isMockSeed === true || r.isDemoPlaceholder === true) return true;
   const id = String(r.id || '');
-  if (
-    id.startsWith('rev-carlos-') ||
-    id.startsWith('rev-paula-') ||
-    id.startsWith('rev-rendimentos-') ||
-    id.startsWith('rev-mock-') ||
-    id.startsWith('rev-sample-')
-  ) {
-    return true;
-  }
-  const name = String(r.name || '');
-  const prof = String(r.profileName || '');
-  if (name.includes('Camila') || prof.includes('Camila')) return true;
-  if (
-    name === 'Salário Líquido (Carlos)' ||
-    name === 'Salário Líquido (Paula)' ||
-    name === 'Rendimento CDB / Tesouro Selic'
-  ) {
-    return true;
-  }
-  if (
-    r.notes === 'Salário de Carlos' ||
-    r.notes === 'Salário de Paula' ||
-    r.notes === 'Salário creditado em conta Itaú.' ||
-    r.notes === 'Salário creditado em conta Nubank.' ||
-    r.notes === 'Rendimento da reserva de emergência do casal.'
-  ) {
+  if (id.startsWith('rev-mock-') || id.startsWith('rev-sample-')) {
     return true;
   }
   return false;
@@ -415,14 +390,19 @@ function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[
     const rMonth = (r.date || '').substring(0, 7) || '2026-10';
     const cleanName = (r.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
     const profLower = (r.profileName || '').trim().toLowerCase();
+    const isSalary = r.category === 'Salário & Renda' || cleanName.includes('salario') || cleanName.includes('salário');
 
     let key = `id_${r.id}`;
-    if (profLower === 'carlos' || cleanName.includes('carlos')) {
-      key = `salary_carlos_${rMonth}`;
-    } else if (profLower === 'paula' || profLower === 'esposa' || cleanName.includes('paula') || cleanName.includes('esposa')) {
-      key = `salary_paula_${rMonth}`;
+    if (isSalary) {
+      if (profLower === 'carlos' || cleanName.includes('carlos') || profLower === 'você' || profLower === 'voce') {
+        key = `salary_user_${rMonth}`;
+      } else if (profLower === 'paula' || profLower === 'esposa' || profLower === 'cônjuge' || profLower === 'conjuge' || cleanName.includes('paula') || cleanName.includes('esposa')) {
+        key = `salary_spouse_${rMonth}`;
+      } else {
+        key = `salary_${profLower || cleanName}_${rMonth}`;
+      }
     } else {
-      key = `rev_${rMonth}_${cleanName}`;
+      key = `rev_${rMonth}_${cleanName}_${profLower}`;
     }
 
     const existing = map.get(key);
@@ -462,6 +442,30 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
+  // Helper to ensure wife device is permanently connected on any household
+  const ensureWifeConnectedRecord = (household: HouseholdData) => {
+    household.isWifeConnected = true;
+    if (!household.devices) household.devices = [];
+    const hasWife = household.devices.some(
+      (d) =>
+        d.id === 'dev_esposa_permanente' ||
+        d.owner === 'Esposa' ||
+        d.owner === 'Cônjuge' ||
+        d.name?.toLowerCase().includes('esposa') ||
+        d.name?.toLowerCase().includes('paula')
+    );
+    if (!hasWife) {
+      household.devices.push({
+        id: 'dev_esposa_permanente',
+        name: 'iPhone da Esposa',
+        model: 'iPhone (Tela de Início)',
+        owner: 'Esposa',
+        lastActive: 'Agora mesmo',
+        connectedAt: '2026-09-25T12:00:00.000Z',
+      });
+    }
+  };
+
   // Get Household Data
   app.get('/api/household/:id', (req, res) => {
     const { id } = req.params;
@@ -472,6 +476,9 @@ async function startServer() {
     if (!household) {
       return res.status(404).json({ error: 'Casa não encontrada' });
     }
+
+    ensureWifeConnectedRecord(household);
+    saveHouseholds(store);
 
     res.json({
       success: true,
@@ -625,6 +632,12 @@ async function startServer() {
 
     // Merge Revenues
     if (Array.isArray(revenues) && revenues.length > 0) {
+      // If user is actively sending a revenue, un-delete it so saving is never blocked
+      const incomingIds = new Set(revenues.map((r: any) => r && r.id).filter(Boolean));
+      if (household.deletedRevenueIds) {
+        household.deletedRevenueIds = household.deletedRevenueIds.filter((id: string) => !incomingIds.has(id));
+      }
+
       const revMap = new Map<string, any>();
       (household.revenues || []).forEach((r: any) => {
         if (r && r.id && !household.deletedRevenueIds?.includes(r.id)) {
@@ -644,7 +657,9 @@ async function startServer() {
           const incUpdated = new Date(incoming.updatedAt || 0).getTime();
           const curUpdated = new Date(current.updatedAt || 0).getTime();
 
-          if (incVersion > curVersion || incUpdated >= curUpdated) {
+          if ((incoming.amount || 0) > 0 && (current.amount || 0) === 0) {
+            revMap.set(incoming.id, incoming);
+          } else if (incVersion > curVersion || incUpdated >= curUpdated) {
             revMap.set(incoming.id, incoming);
           }
         }
@@ -660,6 +675,8 @@ async function startServer() {
     if (Array.isArray(profiles) && profiles.length > 0) {
       household.profiles = profiles;
     }
+
+    ensureWifeConnectedRecord(household);
 
     household.lastUpdated = nowIso;
     store[cleanId] = household;

@@ -19,7 +19,6 @@ import { ProfilesModal } from './components/ProfilesModal';
 import { ReceiptViewerModal } from './components/ReceiptViewerModal';
 import { MonthSelector, MonthOption, INITIAL_SUBSEQUENT_MONTHS } from './components/MonthSelector';
 import { CoupleRevenueCard } from './components/CoupleRevenueCard';
-import { EditCoupleSalariesModal } from './components/EditCoupleSalariesModal';
 import { WifeConnectionModal } from './components/WifeConnectionModal';
 import { PullToRefresh } from './components/PullToRefresh';
 import { CalculatorModal } from './components/CalculatorModal';
@@ -74,8 +73,6 @@ export default function App() {
 
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
-
-  const [isEditSalariesModalOpen, setIsEditSalariesModalOpen] = useState(false);
 
   const [isCloudDrawerOpen, setIsCloudDrawerOpen] = useState(false);
   const [isBoletoScannerOpen, setIsBoletoScannerOpen] = useState(false);
@@ -276,11 +273,23 @@ export default function App() {
     return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
   }, [currentMonthRevenues]);
 
-  // Handler to edit and save household salaries
-  const handleSaveCoupleSalaries = (userAmount: number, spouseAmount: number) => {
-    cloudkit.updateCoupleSalaries(userAmount, spouseAmount, selectedMonth.id);
-    setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Salários atualizados com sucesso!`);
+  // Handler to open Revenue modal for editing an existing revenue or creating a new one
+  const handleOpenEditRevenue = (rev: Revenue | null, defaultProfileName?: string) => {
+    if (rev) {
+      setEditingRevenue(rev);
+    } else {
+      setEditingRevenue({
+        id: `rev-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+        name: defaultProfileName ? `Salário (${defaultProfileName})` : '',
+        amount: 0,
+        date: `${selectedMonth.id}-05`,
+        category: 'Salário & Renda',
+        recurrence: 'Mensal',
+        profileName: defaultProfileName || profiles[0]?.name || 'Você',
+        notes: '',
+      } as any);
+    }
+    setIsRevenueModalOpen(true);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
@@ -466,10 +475,10 @@ export default function App() {
   };
 
   // Handlers for Revenue operations
-  const handleSaveRevenue = (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string }) => {
-    cloudkit.saveRevenue(revData);
+  const handleSaveRevenue = (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string; profileName?: string; applyToFutureMonths?: boolean }) => {
+    cloudkit.saveRevenue(revData as any);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast('Receita adicionada ao Fluxo de Caixa!');
+    showTemporaryToast(`Receita "${revData.name}" salva com sucesso!`);
   };
 
   const handleDeleteRevenue = (id: string) => {
@@ -687,7 +696,7 @@ export default function App() {
                 setIsRevenueModalOpen(true);
               }}
               onOpenRevenueList={() => setCurrentTab('cashflow')}
-              onEditSalaries={() => setIsEditSalariesModalOpen(true)}
+              onEditRevenue={handleOpenEditRevenue}
               isWifeConnected={isWifeConnected}
               userProfileName={profiles[0]?.name || 'Você'}
               spouseProfileName={profiles[1]?.name || 'Esposa'}
@@ -887,6 +896,7 @@ export default function App() {
               setEditingRevenue(null);
               setIsRevenueModalOpen(true);
             }}
+            onEditRevenue={handleOpenEditRevenue}
             onDeleteRevenue={handleDeleteRevenue}
           />
         )}
@@ -987,17 +997,6 @@ export default function App() {
           } as any);
           setIsBillModalOpen(true);
         }}
-      />
-
-      <EditCoupleSalariesModal
-        isOpen={isEditSalariesModalOpen}
-        onClose={() => setIsEditSalariesModalOpen(false)}
-        userCurrentSalary={userCurrentSalary}
-        spouseCurrentSalary={spouseCurrentSalary}
-        selectedMonth={selectedMonth.label}
-        onSaveSalaries={handleSaveCoupleSalaries}
-        userLabel={`Meu Salário (${profiles[0]?.name || 'Você'})`}
-        spouseLabel={`Salário de ${profiles[1]?.name || 'Esposa'}`}
       />
 
       <CloudKitSyncDrawer

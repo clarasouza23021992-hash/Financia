@@ -9,7 +9,7 @@ interface CoupleRevenueCardProps {
   selectedMonth: string;
   onOpenNewRevenue: () => void;
   onOpenRevenueList: () => void;
-  onEditSalaries: () => void;
+  onEditRevenue?: (revenue: Revenue | null, defaultProfileName?: string) => void;
   isWifeConnected?: boolean;
   userProfileName?: string;
   spouseProfileName?: string;
@@ -21,7 +21,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   selectedMonth,
   onOpenNewRevenue,
   onOpenRevenueList,
-  onEditSalaries,
+  onEditRevenue,
   isWifeConnected = false,
   userProfileName = 'Você',
   spouseProfileName = 'Esposa',
@@ -34,16 +34,21 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
     r =>
       r.profileName === userProfileName ||
       r.profileName === 'Você' ||
-      (r.category === 'Salário & Renda' && (!r.profileName || r.profileName === 'Você')) ||
+      r.profileName === 'Carlos' ||
+      (r.category === 'Salário & Renda' && (!r.profileName || r.profileName === 'Você' || r.profileName === 'Carlos')) ||
       r.name.toLowerCase().includes(userProfileName.toLowerCase()) ||
+      r.name.toLowerCase().includes('carlos') ||
       r.name.toLowerCase().includes('meu salário')
   );
   const spouseRevenues = realRevenues.filter(
     r =>
       (spouseProfileName && r.profileName === spouseProfileName) ||
       r.profileName === 'Esposa' ||
+      r.profileName === 'Paula' ||
       r.profileName === 'Cônjuge' ||
-      (spouseProfileName && r.name.toLowerCase().includes(spouseProfileName.toLowerCase()))
+      (spouseProfileName && r.name.toLowerCase().includes(spouseProfileName.toLowerCase())) ||
+      r.name.toLowerCase().includes('paula') ||
+      r.name.toLowerCase().includes('esposa')
   );
 
   // Helper to reliably sum all revenues for the family member
@@ -81,6 +86,22 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   const projectedBalance = grandTotalRevenue - totalBillsAmount;
   const isSurplus = projectedBalance >= 0;
 
+  const handleEditUser = () => {
+    if (onEditRevenue) {
+      onEditRevenue(userRevenues[0] || null, userProfileName || 'Você');
+    } else {
+      onOpenNewRevenue();
+    }
+  };
+
+  const handleEditSpouse = () => {
+    if (onEditRevenue) {
+      onEditRevenue(spouseRevenues[0] || null, spouseProfileName || 'Esposa');
+    } else {
+      onOpenNewRevenue();
+    }
+  };
+
   const formatBRL = (val: number) => {
     return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
@@ -111,21 +132,22 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
 
             <div className="flex items-center gap-1.5">
               <button
-                id="btn-edit-couple-salaries"
-                onClick={onEditSalaries}
-                className="px-2.5 py-1 bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/30 active-press"
-                title="Editar os salários do casal"
+                type="button"
+                onClick={onOpenRevenueList}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
+                title="Ver lista detalhada de receitas"
               >
-                <Edit3 className="w-3.5 h-3.5 text-teal-300" />
-                <span>Editar Salários</span>
+                <TrendingUp className="w-3.5 h-3.5 text-teal-300" />
+                <span>Ver Todas</span>
               </button>
 
               <button
+                type="button"
                 onClick={onOpenNewRevenue}
-                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
+                className="px-2.5 py-1 bg-teal-500/25 hover:bg-teal-500/35 active:bg-teal-500/40 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/40 active-press"
               >
                 <Plus className="w-3.5 h-3.5 text-[#00C49F]" />
-                <span>Receita</span>
+                <span>+ Receita</span>
               </button>
             </div>
           </div>
@@ -134,37 +156,41 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
           <div className="grid grid-cols-2 gap-2 text-xs">
             {/* Você Salary */}
             <button
-              onClick={onEditSalaries}
+              type="button"
+              onClick={handleEditUser}
               className="bg-white/5 hover:bg-white/10 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-blue-400/40 text-left flex items-center justify-between group active-press"
-              title="Clique para editar o seu salário"
+              title="Clique para editar ou cadastrar o seu salário"
             >
               <div className="flex items-center gap-2">
                 <span className="text-lg">👨🏻‍💻</span>
                 <div>
                   <div className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
                     <span>{userProfileName || 'Você'}</span>
-                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <div className="font-extrabold text-blue-300 text-sm">{formatBRL(userSalary)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{userSalary > 0 ? 'Toque p/ editar' : '+ Cadastrar'}</div>
                 </div>
               </div>
             </button>
 
             {/* Esposa Salary */}
             <button
-              onClick={onEditSalaries}
+              type="button"
+              onClick={handleEditSpouse}
               className="bg-white/5 hover:bg-white/10 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-pink-400/40 text-left flex items-center justify-between group active-press"
-              title="Clique para editar o salário da esposa"
+              title="Clique para editar ou cadastrar o salário da esposa"
             >
               <div className="flex items-center gap-2">
                 <span className="text-lg">👩🏻‍💼</span>
                 <div>
                   <div className="font-bold text-slate-200 text-[11px] flex items-center gap-1">
                     <span>{spouseProfileName || 'Esposa'}</span>
-                    <span className={`w-1.5 h-1.5 rounded-full ${isWifeConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
-                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" title="Celular conectado" />
+                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity" />
                   </div>
                   <div className="font-extrabold text-pink-300 text-sm">{formatBRL(spouseSalary)}</div>
+                  <div className="text-[10px] text-slate-400 mt-0.5">{spouseSalary > 0 ? 'Toque p/ editar' : '+ Cadastrar'}</div>
                 </div>
               </div>
             </button>

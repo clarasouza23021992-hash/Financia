@@ -6,6 +6,7 @@ interface RevenueModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSave: (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string; applyToFutureMonths?: boolean }) => void;
+  onDelete?: (id: string) => void;
   profiles: UserProfile[];
   initialRevenue?: Revenue | null;
   defaultMonth?: string;
@@ -25,17 +26,21 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   isOpen,
   onClose,
   onSave,
-  profiles,
+  onDelete,
+  profiles = [],
   initialRevenue,
   defaultMonth,
   onSwitchToBill,
 }) => {
+  const defaultProfName = profiles[0]?.name || 'Você';
+  const spouseProfName = profiles[1]?.name || 'Esposa';
+
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [date, setDate] = useState('');
   const [category, setCategory] = useState('Salário & Renda');
   const [recurrence, setRecurrence] = useState<'Mensal' | 'Única'>('Mensal');
-  const [profileName, setProfileName] = useState('Você');
+  const [profileName, setProfileName] = useState(defaultProfName);
   const [notes, setNotes] = useState('');
   const [applyToFutureMonths, setApplyToFutureMonths] = useState(true);
 
@@ -52,21 +57,22 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   );
 
   const prevIsOpenRef = React.useRef(false);
-  const initialRevIdRef = React.useRef<string | undefined>(undefined);
+  const prevRevIdRef = React.useRef<string | undefined>(undefined);
 
   useEffect(() => {
     const justOpened = isOpen && !prevIsOpenRef.current;
-    const revChanged = isOpen && initialRevenue?.id !== initialRevIdRef.current;
+    const revChanged = isOpen && initialRevenue?.id !== prevRevIdRef.current;
 
     if (justOpened || revChanged) {
       if (initialRevenue) {
-        setName(initialRevenue.name);
-        setAmount(initialRevenue.amount ? initialRevenue.amount.toString() : '');
-        setDate(initialRevenue.date);
-        setCategory(initialRevenue.category);
-        setRecurrence(initialRevenue.recurrence);
-        setProfileName(initialRevenue.profileName);
+        setName(initialRevenue.name || '');
+        setAmount(initialRevenue.amount ? initialRevenue.amount.toString().replace('.', ',') : '');
+        setDate(initialRevenue.date || (defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0]));
+        setCategory(initialRevenue.category || 'Salário & Renda');
+        setRecurrence(initialRevenue.recurrence || 'Mensal');
+        setProfileName(initialRevenue.profileName || defaultProfName);
         setNotes(initialRevenue.notes || '');
+        setApplyToFutureMonths(true);
       } else {
         setName('');
         setAmount('');
@@ -74,27 +80,30 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
         setDate(defaultDateStr);
         setCategory('Salário & Renda');
         setRecurrence('Mensal');
-        setProfileName(profiles[0]?.name || 'Você');
+        setProfileName(defaultProfName);
         setNotes('');
+        setApplyToFutureMonths(true);
       }
     }
     prevIsOpenRef.current = isOpen;
-    initialRevIdRef.current = initialRevenue?.id;
-  }, [initialRevenue?.id, isOpen]);
+    prevRevIdRef.current = initialRevenue?.id;
+  }, [isOpen, initialRevenue?.id, defaultMonth, defaultProfName]);
 
   if (!isOpen) return null;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const parsed = parseFloat(amount.replace(',', '.')) || 0;
+    const cleaned = amount.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
+    const parsed = parseFloat(cleaned) || 0;
+
     onSave({
       id: initialRevenue?.id,
-      name: name.trim() || 'Receita sem nome',
+      name: name.trim() || 'Receita',
       amount: parsed,
-      date,
+      date: date || (defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0]),
       category,
       recurrence,
-      profileName,
+      profileName: profileName.trim() || defaultProfName,
       notes: notes.trim(),
       applyToFutureMonths,
     });
@@ -110,7 +119,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
               <TrendingUp className="w-4 h-4" />
             </div>
             <h2 className="text-base font-bold tracking-tight">
-              {initialRevenue ? 'Editar Receita' : 'Adicionar Nova Receita / Entrada'}
+              {initialRevenue ? 'Editar Receita / Salário' : 'Adicionar Nova Receita / Salário'}
             </h2>
           </div>
           <button
@@ -132,9 +141,37 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Meu Salário, Rendimento, Freelance"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              placeholder="Ex: Salário, Renda Extra, Investimentos..."
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
+
+            {/* Quick Name suggestions */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {[
+                `Salário (${defaultProfName})`,
+                `Salário (${spouseProfName})`,
+                'Renda Extra / Freelance',
+                'Rendimentos / Investimentos',
+                'Aluguel Recebido',
+              ].map((suggestion) => (
+                <button
+                  key={suggestion}
+                  type="button"
+                  onClick={() => {
+                    setName(suggestion);
+                    if (suggestion.includes(spouseProfName)) {
+                      setProfileName(spouseProfName);
+                    } else if (suggestion.includes(defaultProfName)) {
+                      setProfileName(defaultProfName);
+                    }
+                  }}
+                  className="text-[11px] px-2.5 py-1 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800/60 font-semibold hover:bg-emerald-100 dark:hover:bg-emerald-900/50 transition-all active-press"
+                >
+                  {suggestion}
+                </button>
+              ))}
+            </div>
+
             {isLikelyDebt && onSwitchToBill && (
               <div className="mt-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-2.5 rounded-xl flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
@@ -163,14 +200,97 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
             <div className="relative">
               <span className="absolute left-3.5 top-2.5 text-xs font-bold text-slate-400">R$</span>
               <input
-                type="number"
-                step="0.01"
+                type="text"
+                inputMode="decimal"
                 required
                 value={amount}
                 onChange={(e) => setAmount(e.target.value)}
                 placeholder="0,00"
-                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
+                className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-base font-extrabold text-emerald-700 dark:text-emerald-400 focus:outline-none focus:ring-2 focus:ring-emerald-500"
               />
+            </div>
+          </div>
+
+          {/* Quem Recebeu / Titular (com opções rápidas de todos os moradores e campo livre) */}
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1 flex items-center justify-between">
+              <span>Quem Recebeu / Titular *</span>
+              <span className="text-[10.5px] text-slate-400 font-normal">Selecione ou digite abaixo</span>
+            </label>
+            <input
+              type="text"
+              required
+              value={profileName}
+              onChange={(e) => setProfileName(e.target.value)}
+              placeholder="Digite o nome de quem recebeu..."
+              list="profile-suggestions"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+            />
+            <datalist id="profile-suggestions">
+              {profiles.map(p => (
+                <option key={p.id} value={p.name} />
+              ))}
+              <option value="Carlos" />
+              <option value="Paula" />
+              <option value="Esposa" />
+              <option value="Você" />
+              <option value="Casal / Conjunta" />
+            </datalist>
+
+            {/* Quick chips para preenchimento com 1 toque */}
+            <div className="flex flex-wrap gap-1.5 mt-2">
+              {profiles.length > 0 ? (
+                profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => setProfileName(p.name)}
+                    className={`text-xs px-3 py-1.5 rounded-xl font-bold border transition-all active-press ${
+                      profileName.toLowerCase() === p.name.toLowerCase()
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    {p.avatar ? `${p.avatar} ` : ''}{p.name}
+                  </button>
+                ))
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    onClick={() => setProfileName('Carlos')}
+                    className={`text-xs px-3 py-1.5 rounded-xl font-bold border transition-all active-press ${
+                      profileName.toLowerCase() === 'carlos'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    👨🏻‍💻 Carlos
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setProfileName('Paula')}
+                    className={`text-xs px-3 py-1.5 rounded-xl font-bold border transition-all active-press ${
+                      profileName.toLowerCase() === 'paula'
+                        ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                        : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                    }`}
+                  >
+                    👩🏻‍💼 Paula (Esposa)
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                onClick={() => setProfileName('Casal / Conjunta')}
+                className={`text-xs px-3 py-1.5 rounded-xl font-bold border transition-all active-press ${
+                  profileName.toLowerCase() === 'casal / conjunta'
+                    ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
+                    : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
+                }`}
+              >
+                👫 Casal / Conjunta
+              </button>
             </div>
           </div>
 
@@ -189,26 +309,6 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
             </div>
             <div>
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Titular / Recebedor
-              </label>
-              <select
-                value={profileName}
-                onChange={(e) => setProfileName(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-              >
-                {profiles.map((p) => (
-                  <option key={p.id} value={p.name}>
-                    {p.avatar} {p.name}
-                  </option>
-                ))}
-                <option value="Casa Compartilhada">🏡 Casa Compartilhada</option>
-              </select>
-            </div>
-          </div>
-
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
                 Categoria
               </label>
               <select
@@ -223,19 +323,20 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
                 ))}
               </select>
             </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-                Recorrência
-              </label>
-              <select
-                value={recurrence}
-                onChange={(e) => setRecurrence(e.target.value as 'Mensal' | 'Única')}
-                className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
-              >
-                <option value="Mensal">Mensal Recorrente</option>
-                <option value="Única">Única / Eventual</option>
-              </select>
-            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
+              Recorrência
+            </label>
+            <select
+              value={recurrence}
+              onChange={(e) => setRecurrence(e.target.value as 'Mensal' | 'Única')}
+              className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs text-slate-900 dark:text-white"
+            >
+              <option value="Mensal">Mensal Recorrente (Repete todo mês)</option>
+              <option value="Única">Única / Eventual (Só neste mês)</option>
+            </select>
           </div>
 
           {recurrence === 'Mensal' && (
@@ -270,25 +371,43 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
               type="text"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ex: Depositado no Itaú Conta Salário"
+              placeholder="Ex: Depositado no Itaú, Pix, etc."
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
             />
           </div>
 
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md active-press"
-            >
-              Salvar Receita
-            </button>
+          <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
+            {initialRevenue && onDelete ? (
+              <button
+                type="button"
+                onClick={() => {
+                  if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
+                    onDelete(initialRevenue.id);
+                    onClose();
+                  }
+                }}
+                className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors"
+              >
+                Excluir Receita
+              </button>
+            ) : (
+              <div></div>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md active-press"
+              >
+                Salvar Receita
+              </button>
+            </div>
           </div>
         </form>
       </div>

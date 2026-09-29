@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   FileDown, Table, TrendingUp, TrendingDown, Wallet, 
   ArrowUpRight, ArrowDownRight, PieChart, Plus, Trash2, Calendar,
-  CheckCircle2, Clock, AlertCircle, Receipt
+  CheckCircle2, Clock, AlertCircle, Receipt, Edit3
 } from 'lucide-react';
 import { Bill, Revenue } from '../types/finance';
 import { exportFinancialPDF, exportFinancialCSV } from '../services/pdfExporter';
@@ -13,6 +13,7 @@ interface CashFlowReportProps {
   revenues: Revenue[];
   selectedMonth?: string;
   onOpenNewRevenue: () => void;
+  onEditRevenue?: (revenue: Revenue) => void;
   onDeleteRevenue: (id: string) => void;
 }
 
@@ -21,6 +22,7 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   revenues,
   selectedMonth = 'Outubro de 2026',
   onOpenNewRevenue,
+  onEditRevenue,
   onDeleteRevenue,
 }) => {
   const totalRevenues = revenues.reduce((acc, r) => acc + r.amount, 0);
@@ -177,27 +179,53 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
             revenues.map((rev) => (
               <div 
                 key={rev.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer group"
+                onClick={() => onEditRevenue && onEditRevenue(rev)}
               >
-                <div>
-                  <div className="text-xs font-bold text-slate-900 dark:text-white">
-                    {rev.name}
+                <div className="flex-1 min-w-0 pr-2">
+                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
+                    <span>{rev.name}</span>
+                    <Edit3 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
                   </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
                     <span>📅 {rev.date.split('-').reverse().join('/')}</span>
                     <span>•</span>
-                    <span>👤 {rev.profileName}</span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">👤 {rev.profileName}</span>
                     <span>•</span>
                     <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rev.category}</span>
+                    {rev.recurrence === 'Mensal' && (
+                      <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+                        Mensal
+                      </span>
+                    )}
                   </div>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 shrink-0">
                   <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
                     + R$ {rev.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                   </div>
+                  {onEditRevenue && (
+                    <button
+                      type="button"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onEditRevenue(rev);
+                      }}
+                      className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+                      title="Editar Receita"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  )}
                   <button
-                    onClick={() => onDeleteRevenue(rev.id)}
-                    className="text-slate-400 hover:text-rose-600 p-1"
+                    type="button"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      if (confirm(`Excluir a receita "${rev.name}"?`)) {
+                        onDeleteRevenue(rev.id);
+                      }
+                    }}
+                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                     title="Excluir Receita"
                   >
                     <Trash2 className="w-3.5 h-3.5" />

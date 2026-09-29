@@ -102,32 +102,7 @@ export function isMockRevenue(r: Partial<Revenue>): boolean {
   if (!r) return true;
   if ((r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true) return true;
   const id = String(r.id || '');
-  if (
-    id.startsWith('rev-carlos-') ||
-    id.startsWith('rev-paula-') ||
-    id.startsWith('rev-rendimentos-') ||
-    id.startsWith('rev-mock-') ||
-    id.startsWith('rev-sample-')
-  ) {
-    return true;
-  }
-  const name = String(r.name || '');
-  const prof = String(r.profileName || '');
-  if (name.includes('Camila') || prof.includes('Camila')) return true;
-  if (
-    name === 'Salário Líquido (Carlos)' ||
-    name === 'Salário Líquido (Paula)' ||
-    name === 'Rendimento CDB / Tesouro Selic'
-  ) {
-    return true;
-  }
-  if (
-    r.notes === 'Salário de Carlos' ||
-    r.notes === 'Salário de Paula' ||
-    r.notes === 'Salário creditado em conta Itaú.' ||
-    r.notes === 'Salário creditado em conta Nubank.' ||
-    r.notes === 'Rendimento da reserva de emergência do casal.'
-  ) {
+  if (id.startsWith('rev-mock-') || id.startsWith('rev-sample-')) {
     return true;
   }
   return false;
@@ -1683,7 +1658,7 @@ class CloudKitSyncEngine {
     }
   }
 
-  // Deduplicate revenues: ensures no duplicate entries per month (e.g. at most 1 salary for Carlos, 1 for Paula, etc.)
+  // Deduplicate revenues: ensures no duplicate entries per month (e.g. at most 1 salary for Resident 1, 1 for Resident 2, etc.)
   public deduplicateRevenues(revenuesList: Revenue[]): Revenue[] {
     if (!Array.isArray(revenuesList)) return [];
 
@@ -1698,14 +1673,19 @@ class CloudKitSyncEngine {
       const rMonth = (r.date || '').substring(0, 7) || '2026-10';
       const cleanName = (r.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
       const profLower = (r.profileName || '').trim().toLowerCase();
+      const isSalary = r.category === 'Salário & Renda' || cleanName.includes('salario') || cleanName.includes('salário');
 
       let key = `id_${r.id}`;
-      if (profLower === 'carlos' || cleanName.includes('carlos')) {
-        key = `salary_carlos_${rMonth}`;
-      } else if (profLower === 'paula' || profLower === 'esposa' || cleanName.includes('paula') || cleanName.includes('esposa')) {
-        key = `salary_paula_${rMonth}`;
+      if (isSalary) {
+        if (profLower === 'carlos' || cleanName.includes('carlos') || profLower === 'você' || profLower === 'voce') {
+          key = `salary_user_${rMonth}`;
+        } else if (profLower === 'paula' || profLower === 'esposa' || profLower === 'cônjuge' || profLower === 'conjuge' || cleanName.includes('paula') || cleanName.includes('esposa')) {
+          key = `salary_spouse_${rMonth}`;
+        } else {
+          key = `salary_${profLower || cleanName}_${rMonth}`;
+        }
       } else {
-        key = `rev_${rMonth}_${cleanName}`;
+        key = `rev_${rMonth}_${cleanName}_${profLower}`;
       }
 
       const existing = map.get(key);
@@ -1729,10 +1709,7 @@ class CloudKitSyncEngine {
         }
 
         if (keepIncoming) {
-          this.recordDeletedRevenue(existing.id);
           map.set(key, r);
-        } else {
-          this.recordDeletedRevenue(r.id);
         }
       }
     }

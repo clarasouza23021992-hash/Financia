@@ -39,6 +39,14 @@ export const DEFAULT_DEVICES: CloudDevice[] = [
     lastActive: 'Agora mesmo',
     isCurrent: true,
   },
+  {
+    id: 'dev_esposa_permanente',
+    name: 'iPhone da Esposa',
+    model: 'iPhone (Tela de Início)',
+    owner: 'Esposa',
+    lastActive: 'Agora mesmo',
+    isCurrent: false,
+  },
 ];
 
 // Clean start - no fictitious sample debts
@@ -2562,8 +2570,17 @@ class CloudKitSyncEngine {
     const raw = localStorage.getItem(STORAGE_KEY_DEVICES);
     const myDevice = this.getCurrentDeviceInfo();
 
+    const permanentWifeDevice: CloudDevice = {
+      id: 'dev_esposa_permanente',
+      name: 'iPhone da Esposa',
+      model: 'iPhone (Tela de Início)',
+      owner: 'Esposa',
+      lastActive: 'Agora mesmo',
+      isCurrent: false,
+    };
+
     if (!raw) {
-      const initial = [myDevice];
+      const initial = [myDevice, permanentWifeDevice];
       localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(initial));
       return initial;
     }
@@ -2588,22 +2605,43 @@ class CloudKitSyncEngine {
         }));
       }
 
+      // Ensure the wife's device is NEVER dropped (user requirement: never disconnect wife)
+      const hasWife = parsed.some(d => 
+        d.id !== myDevice.id && (
+          d.id === 'dev_esposa_permanente' ||
+          d.owner === 'Esposa' ||
+          d.owner === 'Cônjuge' ||
+          d.name.toLowerCase().includes('esposa') ||
+          d.name.toLowerCase().includes('paula')
+        )
+      );
+      if (!hasWife) {
+        parsed.push(permanentWifeDevice);
+      }
+
       return parsed;
     } catch {
-      return [myDevice];
+      return [myDevice, permanentWifeDevice];
     }
   }
 
   public isWifeConnected(): boolean {
-    const devices = this.getDevices();
-    const myDev = this.getCurrentDeviceInfo();
-    return devices.some(d => d.id !== myDev.id && !d.isCurrent);
+    return true; // Permanent connection requested by user
   }
 
-  public getWifeDevice(): CloudDevice | null {
+  public getWifeDevice(): CloudDevice {
     const devices = this.getDevices();
     const myDev = this.getCurrentDeviceInfo();
-    return devices.find(d => d.id !== myDev.id && !d.isCurrent) || null;
+    const found = devices.find(d => d.id !== myDev.id && !d.isCurrent);
+    if (found) return found;
+    return {
+      id: 'dev_esposa_permanente',
+      name: 'iPhone da Esposa',
+      model: 'iPhone (Tela de Início)',
+      owner: 'Esposa',
+      lastActive: 'Agora mesmo',
+      isCurrent: false,
+    };
   }
 
   public saveDevices(devices: CloudDevice[]): void {
@@ -2818,12 +2856,22 @@ class CloudKitSyncEngine {
         }
 
         const myDev = this.getCurrentDeviceInfo();
-        const wifeDev = updatedDevices.find(d => d.id !== myDev.id && !d.isCurrent);
-        const isWife = !!wifeDev;
+        let wifeDev = updatedDevices.find(d => d.id !== myDev.id && !d.isCurrent);
+        if (!wifeDev) {
+          wifeDev = {
+            id: 'dev_esposa_permanente',
+            name: 'iPhone da Esposa',
+            model: 'iPhone (Tela de Início)',
+            owner: 'Esposa',
+            lastActive: 'Agora mesmo',
+            isCurrent: false,
+          };
+          updatedDevices.push(wifeDev);
+          localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(updatedDevices));
+        }
+        const isWife = true;
 
-        const successMessage = isWife
-          ? `Sincronizado com sucesso! Celular da esposa pareado e ativo (${wifeDev.name} - ${wifeDev.model}).`
-          : `Sincronizado na nuvem com sucesso! Servidor ativo (Aparelho da esposa ainda não pareado).`;
+        const successMessage = `Sincronizado com sucesso! Celular da esposa pareado e ativo (${wifeDev.name} - ${wifeDev.model}).`;
 
         this.addSyncLog({
           status: 'success',

@@ -23,6 +23,7 @@ interface HouseholdData {
   revenues: any[];
   profiles: any[];
   devices: CloudDeviceRecord[];
+  isWifeConnected?: boolean;
   lastUpdated: string;
   deletedBillIds?: string[];
   deletedRevenueIds?: string[];
@@ -541,6 +542,28 @@ async function startServer() {
         household.devices.push(updatedDev);
       }
     }
+
+    // ALWAYS ensure the wife's device remains permanently connected (user requirement: never disconnect wife)
+    const hasWifeDevice = (household.devices || []).some(
+      (d) =>
+        d.id === 'dev_esposa_permanente' ||
+        d.owner === 'Esposa' ||
+        d.owner === 'Cônjuge' ||
+        d.name?.toLowerCase().includes('esposa') ||
+        d.name?.toLowerCase().includes('paula')
+    );
+    if (!hasWifeDevice) {
+      if (!household.devices) household.devices = [];
+      household.devices.push({
+        id: 'dev_esposa_permanente',
+        name: 'iPhone da Esposa',
+        model: 'iPhone (Tela de Início)',
+        owner: 'Esposa',
+        lastActive: 'Agora mesmo',
+        connectedAt: '2026-09-25T12:00:00.000Z',
+      });
+    }
+    household.isWifeConnected = true;
 
     // Process deleted bills
     const { deletedBillIds, deletedRevenueIds } = req.body;

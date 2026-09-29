@@ -33,12 +33,16 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
   const [spouseInput, setSpouseInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
+  const prevIsOpenRef = React.useRef(false);
+
   useEffect(() => {
-    if (isOpen) {
+    // Only initialize input values when modal transitions from closed to open
+    if (isOpen && !prevIsOpenRef.current) {
       setUserInput(currentVal1 > 0 ? currentVal1.toFixed(2).replace('.', ',') : '');
       setSpouseInput(currentVal2 > 0 ? currentVal2.toFixed(2).replace('.', ',') : '');
       setError(null);
     }
+    prevIsOpenRef.current = isOpen;
   }, [isOpen, currentVal1, currentVal2]);
 
   if (!isOpen) return null;

@@ -51,26 +51,36 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
     )
   );
 
+  const prevIsOpenRef = React.useRef(false);
+  const initialRevIdRef = React.useRef<string | undefined>(undefined);
+
   useEffect(() => {
-    if (initialRevenue) {
-      setName(initialRevenue.name);
-      setAmount(initialRevenue.amount.toString());
-      setDate(initialRevenue.date);
-      setCategory(initialRevenue.category);
-      setRecurrence(initialRevenue.recurrence);
-      setProfileName(initialRevenue.profileName);
-      setNotes(initialRevenue.notes || '');
-    } else {
-      setName('');
-      setAmount('');
-      const defaultDateStr = defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0];
-      setDate(defaultDateStr);
-      setCategory('Salário & Renda');
-      setRecurrence('Mensal');
-      setProfileName(profiles[0]?.name || 'Você');
-      setNotes('');
+    const justOpened = isOpen && !prevIsOpenRef.current;
+    const revChanged = isOpen && initialRevenue?.id !== initialRevIdRef.current;
+
+    if (justOpened || revChanged) {
+      if (initialRevenue) {
+        setName(initialRevenue.name);
+        setAmount(initialRevenue.amount ? initialRevenue.amount.toString() : '');
+        setDate(initialRevenue.date);
+        setCategory(initialRevenue.category);
+        setRecurrence(initialRevenue.recurrence);
+        setProfileName(initialRevenue.profileName);
+        setNotes(initialRevenue.notes || '');
+      } else {
+        setName('');
+        setAmount('');
+        const defaultDateStr = defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0];
+        setDate(defaultDateStr);
+        setCategory('Salário & Renda');
+        setRecurrence('Mensal');
+        setProfileName(profiles[0]?.name || 'Você');
+        setNotes('');
+      }
     }
-  }, [initialRevenue, isOpen, profiles, defaultMonth]);
+    prevIsOpenRef.current = isOpen;
+    initialRevIdRef.current = initialRevenue?.id;
+  }, [initialRevenue?.id, isOpen]);
 
   if (!isOpen) return null;
 

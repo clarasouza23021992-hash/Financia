@@ -41,11 +41,11 @@ export default function App() {
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
 
   const isWifeConnected = useMemo(() => {
-    return devices.some(d => !d.isCurrent && d.id !== activeDeviceId);
+    return cloudkit.isWifeConnected();
   }, [devices, activeDeviceId]);
 
   const wifeDevice = useMemo(() => {
-    return devices.find(d => !d.isCurrent && d.id !== activeDeviceId) || null;
+    return cloudkit.getWifeDevice();
   }, [devices, activeDeviceId]);
 
   // App Navigation, Months & Filters

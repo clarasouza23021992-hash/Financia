@@ -23,6 +23,7 @@ import { WifeConnectionModal } from './components/WifeConnectionModal';
 import { PullToRefresh } from './components/PullToRefresh';
 import { CalculatorModal } from './components/CalculatorModal';
 import { DeleteBillModal } from './components/DeleteBillModal';
+import { DeleteRevenueModal } from './components/DeleteRevenueModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -35,6 +36,7 @@ export default function App() {
   const [isOffline, setIsOffline] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
+  const [revenueToDelete, setRevenueToDelete] = useState<Revenue | null>(null);
 
   // Wife Connection State
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
@@ -481,10 +483,18 @@ export default function App() {
     showTemporaryToast(`Receita "${revData.name}" salva com sucesso!`);
   };
 
-  const handleDeleteRevenue = (id: string) => {
-    cloudkit.deleteRevenue(id);
+  const handleDeleteRevenueSingleMonth = (rev: Revenue) => {
+    cloudkit.deleteRevenue(rev.id);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast('Receita removida.');
+    setRevenueToDelete(null);
+    showTemporaryToast(`🗑️ Receita "${rev.name}" removida deste mês.`);
+  };
+
+  const handleDeleteRevenueAllMonths = (rev: Revenue) => {
+    const deletedIds = cloudkit.deleteRevenueSeries(rev);
+    setRevenues(cloudkit.getRevenues());
+    setRevenueToDelete(null);
+    showTemporaryToast(`🗑️ Receita "${rev.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
   // Handlers for Receipt viewing & attaching
@@ -897,7 +907,7 @@ export default function App() {
               setIsRevenueModalOpen(true);
             }}
             onEditRevenue={handleOpenEditRevenue}
-            onDeleteRevenue={handleDeleteRevenue}
+            onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
           />
         )}
           </PullToRefresh>
@@ -982,6 +992,7 @@ export default function App() {
           setEditingRevenue(null);
         }}
         onSave={handleSaveRevenue}
+        onDeleteRequest={(rev) => setRevenueToDelete(rev)}
         profiles={profiles}
         initialRevenue={editingRevenue}
         defaultMonth={selectedMonth.id}
@@ -1079,6 +1090,15 @@ export default function App() {
         currentMonthLabel={selectedMonth.label}
         onDeleteCurrentMonth={handleDeleteSingleMonth}
         onDeleteAllMonths={handleDeleteAllMonths}
+      />
+
+      <DeleteRevenueModal
+        isOpen={Boolean(revenueToDelete)}
+        onClose={() => setRevenueToDelete(null)}
+        revenue={revenueToDelete}
+        currentMonthLabel={selectedMonth.label}
+        onDeleteCurrentMonth={handleDeleteRevenueSingleMonth}
+        onDeleteAllMonths={handleDeleteRevenueAllMonths}
       />
     </div>
   );

@@ -14,7 +14,7 @@ interface CashFlowReportProps {
   selectedMonth?: string;
   onOpenNewRevenue: () => void;
   onEditRevenue?: (revenue: Revenue) => void;
-  onDeleteRevenue: (id: string) => void;
+  onDeleteRevenue: (revenue: Revenue) => void;
 }
 
 export const CashFlowReport: React.FC<CashFlowReportProps> = ({
@@ -221,9 +221,7 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
                     type="button"
                     onClick={(e) => {
                       e.stopPropagation();
-                      if (confirm(`Excluir a receita "${rev.name}"?`)) {
-                        onDeleteRevenue(rev.id);
-                      }
+                      onDeleteRevenue(rev);
                     }}
                     className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
                     title="Excluir Receita"

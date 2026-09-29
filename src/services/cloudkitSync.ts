@@ -2022,6 +2022,8 @@ class CloudKitSyncEngine {
     }
     const seriesMap = new Map<string, RevenueSeriesCluster>();
 
+    const deletedSeries = this.getDeletedRevenueSeriesSlugs();
+
     // Check existing revenues
     allRevenues.forEach(r => {
       if (isMockRevenue(r)) return;
@@ -2041,6 +2043,10 @@ class CloudKitSyncEngine {
       } else {
         const cleanName = r.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
         seriesKey = `custom_${cleanName}_${(r.profileName || 'user').toLowerCase()}`;
+      }
+
+      if (deletedSeries.includes(seriesKey) || (idRoot && deletedSeries.includes(idRoot))) {
+        return;
       }
 
       const existing = seriesMap.get(seriesKey);
@@ -2221,6 +2227,16 @@ class CloudKitSyncEngine {
       const prevCleanName = prevName ? prevName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-') : '';
       const savedIdRoot = saved.id.replace(/-\d{4}-\d{2}$/, '');
       const profLower = (saved.profileName || 'user').toLowerCase();
+
+      // Un-record from deleted series slugs if actively being saved/re-created
+      const delSlugs = this.getDeletedRevenueSeriesSlugs().filter(s => 
+        s !== `salary_${profLower}` && 
+        s !== `salary_${cleanName}` && 
+        s !== cleanName && 
+        s !== `custom_${cleanName}_${profLower}` &&
+        s !== savedIdRoot
+      );
+      localStorage.setItem('financas_deleted_revenue_series_slugs', JSON.stringify(delSlugs));
 
       for (const m of targetMonths) {
         if (m === savedMonth) continue;
@@ -2477,8 +2493,84 @@ class CloudKitSyncEngine {
     this.recordDeletedRevenue(id);
     const revenues = this.getRevenues().filter(r => r.id !== id);
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(revenues));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(revenues));
     this.broadcastUpdate('REVENUE_DELETED', { id });
     this.syncWithServer();
+  }
+
+  public getDeletedRevenueSeriesSlugs(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('financas_deleted_revenue_series_slugs');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
+
+  public recordDeletedRevenueSeriesSlug(slug: string): void {
+    if (typeof window === 'undefined' || !slug) return;
+    const slugs = this.getDeletedRevenueSeriesSlugs();
+    if (!slugs.includes(slug)) {
+      slugs.push(slug);
+      localStorage.setItem('financas_deleted_revenue_series_slugs', JSON.stringify(slugs));
+    }
+  }
+
+  // Delete all occurrences of a recurring revenue across ALL months (current and future)
+  public deleteRevenueSeries(revenue: Revenue): string[] {
+    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    const allRevs = this.getRevenues();
+    const cleanName = (revenue.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const profLower = (revenue.profileName || 'user').toLowerCase();
+    const isSalary = revenue.category === 'Salário & Renda' || cleanName.includes('salario') || cleanName.includes('salário');
+    const idRoot = (revenue.id || '').replace(/-\d{4}-\d{2}$/, '');
+
+    const deletedIds: string[] = [];
+    const remaining: Revenue[] = [];
+
+    for (const r of allRevs) {
+      const rClean = (r.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const rProf = (r.profileName || 'user').toLowerCase();
+      const rIsSalary = r.category === 'Salário & Renda' || rClean.includes('salario') || rClean.includes('salário');
+      const rIdRoot = (r.id || '').replace(/-\d{4}-\d{2}$/, '');
+
+      let isMatch = false;
+      if (r.id === revenue.id) {
+        isMatch = true;
+      } else if (idRoot && rIdRoot === idRoot) {
+        isMatch = true;
+      } else if (isSalary && rIsSalary && (rProf === profLower || rClean === cleanName)) {
+        isMatch = true;
+      } else if (rClean === cleanName && rProf === profLower) {
+        isMatch = true;
+      }
+
+      if (isMatch) {
+        deletedIds.push(r.id);
+        this.recordDeletedRevenue(r.id);
+      } else {
+        remaining.push(r);
+      }
+    }
+
+    if (isSalary) {
+      this.recordDeletedRevenueSeriesSlug(`salary_${profLower}`);
+      this.recordDeletedRevenueSeriesSlug(`salary_${cleanName}`);
+    } else {
+      const slug = `custom_${cleanName.replace(/[^a-z0-9]/g, '-')}_${profLower}`;
+      this.recordDeletedRevenueSeriesSlug(slug);
+      this.recordDeletedRevenueSeriesSlug(cleanName);
+    }
+    if (idRoot) {
+      this.recordDeletedRevenueSeriesSlug(idRoot);
+    }
+
+    localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(remaining));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(remaining));
+    this.broadcastUpdate('REVENUE_SERIES_DELETED', { deletedIds, revenueName: revenue.name });
+    this.syncWithServer();
+    return deletedIds;
   }
 
   // Devices (Sincronização de Aparelhos Conectados)

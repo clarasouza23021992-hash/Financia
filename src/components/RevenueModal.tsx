@@ -7,6 +7,7 @@ interface RevenueModalProps {
   onClose: () => void;
   onSave: (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string; applyToFutureMonths?: boolean }) => void;
   onDelete?: (id: string) => void;
+  onDeleteRequest?: (revenue: Revenue) => void;
   profiles: UserProfile[];
   initialRevenue?: Revenue | null;
   defaultMonth?: string;
@@ -27,6 +28,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   onClose,
   onSave,
   onDelete,
+  onDeleteRequest,
   profiles = [],
   initialRevenue,
   defaultMonth,
@@ -377,16 +379,21 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
           </div>
 
           <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-            {initialRevenue && onDelete ? (
+            {initialRevenue && (onDeleteRequest || onDelete) ? (
               <button
                 type="button"
                 onClick={() => {
-                  if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
-                    onDelete(initialRevenue.id);
+                  if (onDeleteRequest) {
+                    onDeleteRequest(initialRevenue);
                     onClose();
+                  } else if (onDelete) {
+                    if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
+                      onDelete(initialRevenue.id);
+                      onClose();
+                    }
                   }
                 }}
-                className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors"
+                className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors active-press"
               >
                 Excluir Receita
               </button>

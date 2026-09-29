@@ -1,4 +1,15 @@
-import { Bill, Revenue, UserProfile, CloudDevice, SyncConflictLog, SyncLogEntry, getBillEffectiveMonth, isBillRescheduled } from '../types/finance';
+import {
+  Bill,
+  Revenue,
+  UserProfile,
+  CloudDevice,
+  SyncConflictLog,
+  SyncLogEntry,
+  getBillEffectiveMonth,
+  isBillRescheduled,
+  normalizeBillTitle,
+  parseInstallmentDetails,
+} from '../types/finance';
 import { inferCategoryFromName } from '../utils/categories';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
@@ -16,18 +27,17 @@ const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
   { id: 'p1', name: 'Você (Titular)', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
-  { id: 'p2', name: 'Esposa', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
+  { id: 'p2', name: 'Cônjuge', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
 ];
 
 export const DEFAULT_DEVICES: CloudDevice[] = [
   {
     id: 'dev_user_main',
-    name: 'iPhone Carlos',
-    model: 'iPhone 15 Pro',
-    owner: 'Carlos',
+    name: 'Meu Celular',
+    model: 'Smartphone',
+    owner: 'Você',
     lastActive: 'Agora mesmo',
     isCurrent: true,
-    iCloudAccount: 'carlos@icloud.com',
   },
 ];
 
@@ -48,13 +58,71 @@ export const MOCK_BILL_IDS = [
 ];
 
 export function isMockBill(b: Partial<Bill>): boolean {
-  if (!b) return false;
-  return (b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true;
+  if (!b) return true;
+  if ((b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true) return true;
+  const id = String(b.id || '');
+  if (
+    id.startsWith('bill-condo-') ||
+    id.startsWith('bill-luz-') ||
+    id.startsWith('bill-gas-') ||
+    id.startsWith('bill-preset-') ||
+    id.startsWith('bill-streaming-') ||
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id === 'bill-gas-pago' ||
+    id === 'bill-condominio' ||
+    id === 'bill-luz' ||
+    id === 'bill-gas' ||
+    id === 'bill-internet' ||
+    id === 'bill-financiamento' ||
+    id === 'bill-mercado' ||
+    id === 'bill-saude'
+  ) {
+    return true;
+  }
+  // Exclude bills that were mistakenly created by migrating revenues or that are salary
+  if (id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'))) {
+    return true;
+  }
+  if (b.category === 'Salário & Renda') return true;
+  const lowerName = String(b.name || '').toLowerCase();
+  if (lowerName.includes('salário') || lowerName.includes('salario')) return true;
+  return false;
 }
 
 export function isMockRevenue(r: Partial<Revenue>): boolean {
-  if (!r) return false;
-  return (r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true;
+  if (!r) return true;
+  if ((r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true) return true;
+  const id = String(r.id || '');
+  if (
+    id.startsWith('rev-carlos-') ||
+    id.startsWith('rev-paula-') ||
+    id.startsWith('rev-rendimentos-') ||
+    id.startsWith('rev-mock-') ||
+    id.startsWith('rev-sample-')
+  ) {
+    return true;
+  }
+  const name = String(r.name || '');
+  const prof = String(r.profileName || '');
+  if (name.includes('Camila') || prof.includes('Camila')) return true;
+  if (
+    name === 'Salário Líquido (Carlos)' ||
+    name === 'Salário Líquido (Paula)' ||
+    name === 'Rendimento CDB / Tesouro Selic'
+  ) {
+    return true;
+  }
+  if (
+    r.notes === 'Salário de Carlos' ||
+    r.notes === 'Salário de Paula' ||
+    r.notes === 'Salário creditado em conta Itaú.' ||
+    r.notes === 'Salário creditado em conta Nubank.' ||
+    r.notes === 'Rendimento da reserva de emergência do casal.'
+  ) {
+    return true;
+  }
+  return false;
 }
 
 export const INITIAL_REVENUES: Revenue[] = [];
@@ -506,17 +574,10 @@ class CloudKitSyncEngine {
       // Secure real bills in the safety vault!
       localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(cleaned));
 
-      // Migration: sanitize author so bills are never falsely attributed to Paula
       const migrated = cleaned.map(b => {
-        let cleanDev = b.updatedByDevice || 'iPhone Carlos';
-        if (cleanDev.includes('Paula') || cleanDev.includes('Camila') || cleanDev.includes('Clara') || cleanDev.includes('Principal') || cleanDev.includes('Dispositivo')) {
-          cleanDev = 'iPhone Carlos';
-        }
         return {
           ...b,
-          updatedByDevice: cleanDev,
-          paidBy: b.paidBy === 'Camila' ? 'Paula' : b.paidBy,
-          splitDetails: (b.splitDetails || []).map(s => (s.name === 'Camila' ? { ...s, name: 'Paula' } : s)),
+          updatedByDevice: b.updatedByDevice || 'Meu Celular',
         };
       });
 
@@ -550,22 +611,12 @@ class CloudKitSyncEngine {
     return Array.from(map.values());
   }
 
-  // Deduplicate bills list keeping the richest / paid version and recording deleted tombstones
+  // Deduplicate bills list keeping the richest / real version and recording deleted tombstones
   public deduplicateBills(billsList: Bill[]): Bill[] {
     if (!Array.isArray(billsList)) return [];
     const deleted = this.getDeletedBillIds();
     const deletedSet = new Set(deleted);
     const map = new Map<string, Bill>();
-
-    const normalizeText = (text: string) => {
-      return (text || '')
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .toLowerCase()
-        .replace(/\(recuperad[oa]\)/gi, '')
-        .replace(/\s+/g, ' ')
-        .trim();
-    };
 
     for (const b of billsList) {
       if (!b || !b.id || isMockBill(b) || deletedSet.has(b.id)) {
@@ -576,29 +627,48 @@ class CloudKitSyncEngine {
         continue;
       }
 
-      const cleanName = normalizeText(b.name);
-      const month = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
+      const month = (b.dueDate || '').substring(0, 7) || '2026-10';
       const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
-      const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
+      const { baseName, instNum } = parseInstallmentDetails(b.name, b);
+      const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || Boolean(b.installmentNumber && b.installmentNumber > 0);
+
+      let key: string;
+      if (cleanBarcode.length >= 10) {
+        key = `barcode_${month}_${cleanBarcode}`;
+      } else if (isInstallment) {
+        const num = instNum || b.installmentNumber || 1;
+        key = `inst_${month}_${baseName}_${num}`;
+      } else {
+        key = `name_${month}_${baseName}`;
+      }
 
       if (map.has(key)) {
         const existing = map.get(key)!;
         let keepIncoming = false;
 
-        if (b.status === 'paid' && existing.status !== 'paid') {
-          keepIncoming = true;
-        } else if (existing.status === 'paid' && b.status !== 'paid') {
+        const isMigratedB = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente'));
+        const isMigratedE = existing.id.startsWith('bill-migrated-') || (existing.notes && existing.notes.includes('Transferido automaticamente'));
+
+        if (isMigratedB && !isMigratedE) {
+          // Keep real user-created bill over automatic migration clone
           keepIncoming = false;
+        } else if (!isMigratedB && isMigratedE) {
+          keepIncoming = true;
         } else if (b.receiptUrl && !existing.receiptUrl) {
           keepIncoming = true;
         } else if (existing.receiptUrl && !b.receiptUrl) {
           keepIncoming = false;
+        } else if (b.status === 'paid' && existing.status !== 'paid' && b.receiptUrl) {
+          // Only prioritize paid status if verified by attached receipt proof
+          keepIncoming = true;
+        } else if (existing.status === 'paid' && b.status !== 'paid' && !existing.receiptUrl) {
+          // Revert unverified paid status in favor of user's pending bill
+          keepIncoming = true;
         } else if (b.isProjected && !existing.isProjected) {
           keepIncoming = false;
         } else if (!b.isProjected && existing.isProjected) {
           keepIncoming = true;
         } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
-          // Favor original bill over recovery-generated clone
           keepIncoming = false;
         } else if (!b.id.startsWith('bill-rec-') && existing.id.startsWith('bill-rec-')) {
           keepIncoming = true;
@@ -669,7 +739,7 @@ class CloudKitSyncEngine {
     return finalList;
   }
 
-  // Force thorough deduplication across all months and remove repeating bills
+  // Force thorough deduplication across all months, fix installment distribution, and revert falsely paid statuses
   public cleanupAndDeduplicateAllBills(): Bill[] {
     if (typeof window === 'undefined') return [];
 
@@ -682,9 +752,95 @@ class CloudKitSyncEngine {
     }
     if (!Array.isArray(bills)) bills = [];
 
-    // Filter out mock bills
+    // Filter out mock bills and mock revenues
     bills = bills.filter(b => !isMockBill(b));
 
+    // 1. Sanitize falsely marked 'paid' status for debts that were automatically migrated, preset, or marked by Carlos/Paula without user receipt
+    bills = bills.map(b => {
+      const isAutoMigrated = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'));
+      const isPreset = b.id.startsWith('bill-preset-') || b.id.startsWith('bill-streaming-') || b.id === 'bill-gas-pago' || b.id.startsWith('bill-condo-');
+      const isMockPaid = b.paidBy === 'Carlos' || b.paidBy === 'Paula' || isPreset || isAutoMigrated;
+      if ((isMockPaid || !b.receiptUrl) && b.status === 'paid' && (!b.paidAt || isMockPaid)) {
+        return {
+          ...b,
+          status: 'pending' as const,
+          paidAt: undefined,
+          paidBy: undefined,
+        };
+      }
+      return b;
+    });
+
+    // 2. Clear corrupted paymentMonth on all installments so each installment appears in its own due date month
+    bills = bills.map(b => {
+      const dueMonth = (b.dueDate || '').substring(0, 7);
+      const { instNum, totalInst } = parseInstallmentDetails(b.name, b);
+      const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || (totalInst && totalInst > 1);
+      const isPropagated = Boolean(b.parentRecurringId || (b.id && b.id.startsWith('rec_')));
+      
+      if (isInstallment || isPropagated) {
+        return {
+          ...b,
+          paymentMonth: undefined,
+        };
+      }
+      if (b.paymentMonth && b.paymentMonth === dueMonth) {
+        return {
+          ...b,
+          paymentMonth: undefined,
+        };
+      }
+      return b;
+    });
+
+    // 3. Fix installment distribution: Group installments by normalized baseName and distribute them consecutively across months
+    const installmentGroups = new Map<string, Bill[]>();
+    bills.forEach(b => {
+      const { baseName, instNum, totalInst } = parseInstallmentDetails(b.name, b);
+      const isInst = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || (totalInst && totalInst > 1);
+      if (isInst) {
+        const groupKey = baseName;
+        if (!installmentGroups.has(groupKey)) {
+          installmentGroups.set(groupKey, []);
+        }
+        installmentGroups.get(groupKey)!.push(b);
+      }
+    });
+
+    installmentGroups.forEach((groupBills) => {
+      if (groupBills.length > 1) {
+        groupBills.sort((a, b) => {
+          const numA = a.installmentNumber || parseInstallmentDetails(a.name, a).instNum || 1;
+          const numB = b.installmentNumber || parseInstallmentDetails(b.name, b).instNum || 1;
+          return numA - numB;
+        });
+
+        const firstBill = groupBills[0];
+        const firstDue = firstBill.dueDate || '2026-10-10';
+        const [baseYearStr, baseMonthStr, baseDayStr] = firstDue.split('-');
+        const baseYear = parseInt(baseYearStr, 10) || 2026;
+        const baseMonth = parseInt(baseMonthStr, 10) || 10;
+        const baseDay = parseInt(baseDayStr, 10) || 10;
+        const firstInstNum = firstBill.installmentNumber || parseInstallmentDetails(firstBill.name, firstBill).instNum || 1;
+
+        groupBills.forEach(b => {
+          const instNum = b.installmentNumber || parseInstallmentDetails(b.name, b).instNum || 1;
+          const offset = instNum - firstInstNum;
+          const targetMonthIndex = baseMonth + offset;
+          const targetYear = baseYear + Math.floor((targetMonthIndex - 1) / 12);
+          const targetMonthNum = ((targetMonthIndex - 1) % 12) + 1;
+          const maxDays = new Date(targetYear, targetMonthNum, 0).getDate();
+          const validDay = Math.min(baseDay, maxDays);
+          b.dueDate = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`;
+          b.paymentMonth = undefined;
+        });
+      }
+    });
+
+    // 4. Sanitize and migrate mismatched revenues
+    this.sanitizeAndMigrateMismatchedRevenues();
+
+    // 5. Run thorough deduplication
     const deduped = this.deduplicateBills(bills);
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
@@ -932,6 +1088,7 @@ class CloudKitSyncEngine {
             amount: newAmount,
             fixedValueType: isVariable ? 'variable_value' : 'fixed_value',
             status: 'pending',
+            paymentMonth: undefined,
             paidAt: undefined,
             paidBy: undefined,
             receiptUrl: undefined,
@@ -967,17 +1124,27 @@ class CloudKitSyncEngine {
         const targetInst = startInst + monthDiff;
 
         if (targetInst >= 1 && targetInst <= totalInst) {
-          const baseCleanName = master.name.replace(/\s*\(\d+\/\d+\)/, '').trim();
+          const baseCleanName = master.name.replace(/\s*\(\d+(?:\/\d+)?\)?/, '').trim();
           const targetName = `${baseCleanName} (${targetInst}/${totalInst})`;
           const cleanTargetName = targetName.toLowerCase();
 
-          const alreadyExists = workingBills.some(b => 
-            (b.dueDate || '').startsWith(targetMonth) &&
-            (
-              (b.parentInstallmentId && b.parentInstallmentId === (master.parentInstallmentId || master.id) && b.installmentNumber === targetInst) ||
-              b.name.trim().toLowerCase() === cleanTargetName
-            )
-          );
+          const alreadyExists = workingBills.some(b => {
+            const bMonth = (b.dueDate || '').substring(0, 7);
+            if (bMonth !== targetMonth) return false;
+            if (
+              b.parentInstallmentId &&
+              (b.parentInstallmentId === (master.parentInstallmentId || master.id) || b.parentInstallmentId === _groupId) &&
+              b.installmentNumber === targetInst
+            ) {
+              return true;
+            }
+            const { baseName: bBase, instNum: bInst } = parseInstallmentDetails(b.name, b);
+            const { baseName: mBase } = parseInstallmentDetails(master.name, master);
+            if (bBase === mBase && (bInst === targetInst || b.installmentNumber === targetInst)) {
+              return true;
+            }
+            return b.name.trim().toLowerCase() === cleanTargetName;
+          });
 
           if (!alreadyExists) {
             const [yStr, mStr] = targetMonth.split('-');
@@ -999,6 +1166,7 @@ class CloudKitSyncEngine {
               dueDate: targetDueDate,
               amount: master.amount,
               status: 'pending',
+              paymentMonth: undefined,
               paidAt: undefined,
               paidBy: undefined,
               receiptUrl: undefined,
@@ -1116,8 +1284,8 @@ class CloudKitSyncEngine {
       ? Number((rawAmount / totalInst).toFixed(2))
       : rawAmount;
 
-    // Clean base name without existing (X/Y)
-    const baseCleanName = (billData.name || 'Dívida Parcelada').replace(/\s*\(\d+\/\d+\)/, '').trim();
+    // Clean base name without existing (X/Y) or (X)
+    const baseCleanName = (billData.name || 'Dívida Parcelada').replace(/\s*\(\d+(?:\/\d+)?\)?/, '').trim();
     const parentGroupId = billData.parentInstallmentId || `inst-group-${Date.now()}`;
 
     // Calculate end month
@@ -1158,6 +1326,7 @@ class CloudKitSyncEngine {
         totalInstallments: totalInst,
         parentInstallmentId: parentGroupId,
         endMonth: endMonthStr,
+        paymentMonth: (isFirst && billData.paymentMonth && billData.paymentMonth !== installmentDueDate.substring(0, 7)) ? billData.paymentMonth : undefined,
         splitHousehold: false,
         splitDetails: [],
         version: isExistingEdit ? ((billData.version || 1) + 1) : 1,
@@ -1640,96 +1809,46 @@ class CloudKitSyncEngine {
     return deletedIds;
   }
 
-  // Check if a revenue item is actually an expense/debt by name or category
-  public isDebtExpense(item: { name: string; category?: string }): boolean {
-    if (!item || !item.name) return false;
-    const lowerName = item.name.toLowerCase().trim();
-    if (
-      lowerName.startsWith('conta ') ||
-      lowerName.startsWith('conta -') ||
-      lowerName.startsWith('conta de') ||
-      lowerName.startsWith('boleto') ||
-      lowerName.startsWith('fatura') ||
-      lowerName.includes('jupiter') ||
-      lowerName.includes('sabesp') ||
-      lowerName.includes('enel') ||
-      lowerName.includes('saneamento') ||
-      lowerName.includes('água') ||
-      lowerName.includes('agua') ||
-      lowerName.includes('luz') ||
-      lowerName.includes('energia') ||
-      lowerName.includes('iptu') ||
-      lowerName.includes('condom') ||
-      lowerName.includes('mensalidade') ||
-      lowerName.includes('financiamento') ||
-      lowerName.includes('parcela')
-    ) {
-      return true;
-    }
-    const expenseCategories = [
-      'Moradia & Condomínio',
-      'Água, Luz & Gás',
-      'Internet, TV & Telefonia',
-      'Outras Despesas',
-      'Transporte & Combustível',
-      'Saúde & Farmácia',
-      'Alimentação & Mercado',
-      'Cartão de Crédito',
-      'Financiamentos & Empréstimos'
-    ];
-    if (item.category && expenseCategories.includes(item.category)) {
-      return true;
-    }
+  // Reversal check: Never convert revenues into debt expenses
+  public isDebtExpense(_item: { name: string; category?: string }): boolean {
     return false;
   }
 
   /**
-   * Identifies any debts/bills that were accidentally stored in revenues
-   * (e.g., 'Conta - Jupiter_ti_2_servicos_em_', 'Conta de Água e Saneamento', etc.)
-   * and migrates them safely to bills, removing them from revenues.
+   * Cleanses both bills and revenues:
+   * 1. Removes any bills that were mistakenly created by migrating revenues or that are salary
+   * 2. Purges any mock/fictitious revenues and bills (Camila, Carlos, Paula seed data)
    */
   public sanitizeAndMigrateMismatchedRevenues(): void {
     if (typeof window === 'undefined') return;
-    const rawRevs = localStorage.getItem(STORAGE_KEY_REVENUES);
-    if (!rawRevs) return;
-
     try {
-      const parsed: Revenue[] = JSON.parse(rawRevs);
-      if (!Array.isArray(parsed)) return;
-
-      const validRevenues: Revenue[] = [];
-      const billsToMigrate: Partial<Bill>[] = [];
-
-      for (const r of parsed) {
-        if (!r || !r.name) continue;
-        if (this.isDebtExpense(r)) {
-          billsToMigrate.push({
-            id: r.id.startsWith('bill-') ? r.id : `bill-migrated-${r.id}`,
-            name: r.name,
-            amount: Number(r.amount) || 0,
-            dueDate: r.date || '2026-10-10',
-            category: this.guessCategoryFromName(r.name),
-            favored: r.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() || r.name,
-            status: 'paid',
-            recurrence: 'Mensal Fixa',
-            fixedValueType: (Number(r.amount) || 0) > 0 ? 'fixed_value' : 'variable_value',
-            splitHousehold: true,
-            notes: 'Transferido automaticamente para Dívidas (estava em receitas)',
-          });
-        } else {
-          validRevenues.push(r);
+      // 1. Purge any bills that were migrated from revenues or are salary-related
+      const rawBills = localStorage.getItem(STORAGE_KEY_BILLS);
+      if (rawBills) {
+        const parsedBills: Bill[] = JSON.parse(rawBills);
+        if (Array.isArray(parsedBills)) {
+          const pureBills = parsedBills.filter(b => !isMockBill(b));
+          if (pureBills.length !== parsedBills.length) {
+            localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(pureBills));
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(pureBills));
+          }
         }
       }
 
-      if (billsToMigrate.length > 0) {
-        localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(validRevenues));
-        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(validRevenues));
-        billsToMigrate.forEach(b => {
-          this.upsertBill(b as any);
-        });
+      // 2. Purge any mock/seed revenues (Camila, Carlos, Paula seed data)
+      const rawRevs = localStorage.getItem(STORAGE_KEY_REVENUES);
+      if (rawRevs) {
+        const parsedRevs: Revenue[] = JSON.parse(rawRevs);
+        if (Array.isArray(parsedRevs)) {
+          const pureRevs = parsedRevs.filter(r => !isMockRevenue(r));
+          if (pureRevs.length !== parsedRevs.length) {
+            localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(pureRevs));
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(pureRevs));
+          }
+        }
       }
     } catch (e) {
-      console.error('Error migrating mismatched revenues:', e);
+      console.error('Error cleaning up mismatched revenues and bills:', e);
     }
   }
 
@@ -1780,14 +1899,7 @@ class CloudKitSyncEngine {
     try {
       const parsed: Revenue[] = JSON.parse(raw);
       const activeDeleted = this.getDeletedRevenueIds();
-      let sanitized = parsed
-        .filter(r => r && r.id && !activeDeleted.includes(r.id) && !isMockRevenue(r))
-        .map(r => ({
-          ...r,
-          name: r.name.replace(/Camila/g, 'Paula'),
-          profileName: r.profileName === 'Camila' ? 'Paula' : r.profileName,
-          updatedByDevice: r.updatedByDevice?.replace(/Camila/g, 'Paula'),
-        }));
+      const sanitized = parsed.filter(r => r && r.id && !activeDeleted.includes(r.id) && !isMockRevenue(r));
 
       if (sanitized.length === 0) {
         localStorage.setItem(STORAGE_KEY_REVENUES, '[]');
@@ -1815,11 +1927,14 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
   }
 
-  // Direct helper to edit and persist Carlos & Paula salaries with automatic propagation to subsequent months
-  public updateCoupleSalaries(carlosAmount: number, paulaAmount: number, selectedMonthId: string = '2026-10'): Revenue[] {
-    const rawRevenues = this.getRevenues();
+  // Direct helper to edit and persist household salaries with automatic propagation to subsequent months
+  public updateCoupleSalaries(userAmount: number, spouseAmount: number, selectedMonthId: string = '2026-10'): Revenue[] {
+    const rawRevenues = this.getRevenues().filter(r => !isMockRevenue(r));
     const activeDev = this.getActiveDevice().name;
     const monthPrefix = selectedMonthId || '2026-10';
+    const profiles = this.getProfiles();
+    const userPName = profiles[0]?.name || 'Você';
+    const spousePName = profiles[1]?.name || 'Cônjuge';
 
     const defaultMonths = [
       '2026-08', '2026-09', '2026-10', '2026-11', '2026-12',
@@ -1839,51 +1954,52 @@ class CloudKitSyncEngine {
     let updated = [...rawRevenues];
 
     for (const m of futureMonths) {
-      const carlosId = `rev-carlos-${m}`;
-      const paulaId = `rev-paula-${m}`;
       const dateStr = `${m}-05`;
 
-      // Remove any tombstone for these IDs
-      const cleanDeleted = this.getDeletedRevenueIds().filter(id => id !== carlosId && id !== paulaId);
-      localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
-
-      // Filter out existing Carlos & Paula instances in month m
+      // Filter out existing salary instances in month m for user and spouse
       updated = updated.filter(r => {
-        const isCarlos = r.id === carlosId || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
-        const isPaula = r.id === paulaId || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda' && (r.date || '').startsWith(m));
-        return !isCarlos && !isPaula;
+        const isMonth = (r.date || '').startsWith(m);
+        if (!isMonth) return true;
+        if (r.category === 'Salário & Renda') {
+          if (r.profileName === userPName || r.profileName === 'Você') return false;
+          if (r.profileName === spousePName || r.profileName === 'Esposa' || r.profileName === 'Cônjuge') return false;
+        }
+        return true;
       });
 
-      updated.push(
-        {
-          id: carlosId,
-          name: 'Salário Líquido (Carlos)',
-          amount: carlosAmount,
+      if (userAmount > 0) {
+        updated.push({
+          id: `rev-user-${m}`,
+          name: `Salário (${userPName})`,
+          amount: userAmount,
           date: dateStr,
           category: 'Salário & Renda',
           recurrence: 'Mensal',
-          profileName: 'Carlos',
-          notes: 'Salário de Carlos',
+          profileName: userPName,
+          notes: `Salário de ${userPName}`,
           version: 2,
           updatedAt: nowIso,
           updatedByDevice: activeDev,
           isSynced: true,
-        },
-        {
-          id: paulaId,
-          name: 'Salário Líquido (Paula)',
-          amount: paulaAmount,
+        });
+      }
+
+      if (spouseAmount > 0) {
+        updated.push({
+          id: `rev-spouse-${m}`,
+          name: `Salário (${spousePName})`,
+          amount: spouseAmount,
           date: dateStr,
           category: 'Salário & Renda',
           recurrence: 'Mensal',
-          profileName: 'Paula',
-          notes: 'Salário de Paula',
+          profileName: spousePName,
+          notes: `Salário de ${spousePName}`,
           version: 2,
           updatedAt: nowIso,
           updatedByDevice: activeDev,
           isSynced: true,
-        }
-      );
+        });
+      }
     }
 
     this.saveRevenues(updated);
@@ -1924,7 +2040,7 @@ class CloudKitSyncEngine {
     // Check existing revenues
     allRevenues.forEach(r => {
       if (isMockRevenue(r)) return;
-      const isRecurring = r.recurrence === 'Mensal' || r.category === 'Salário & Renda' || r.id.startsWith('rev-carlos-') || r.id.startsWith('rev-paula-');
+      const isRecurring = r.recurrence === 'Mensal' || r.category === 'Salário & Renda';
       if (!isRecurring) return;
 
       const rMonth = (r.date || '').substring(0, 7) || '2026-10';
@@ -1932,10 +2048,9 @@ class CloudKitSyncEngine {
 
       let seriesKey = '';
       const idRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
-      if (r.id.startsWith('rev-carlos-') || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda')) {
-        seriesKey = 'carlos';
-      } else if (r.id.startsWith('rev-paula-') || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda')) {
-        seriesKey = 'paula';
+      if (r.category === 'Salário & Renda') {
+        const prof = (r.profileName || 'user').toLowerCase();
+        seriesKey = `salary_${prof}`;
       } else if (r.id.startsWith('rev-rec-')) {
         seriesKey = idRoot;
       } else {
@@ -1985,11 +2100,9 @@ class CloudKitSyncEngine {
         const existingIdx = workingRevs.findIndex(r => {
           const m = (r.date || '').substring(0, 7);
           if (m !== targetMonth) return false;
-          if (cluster.id === 'carlos') {
-            return r.id === `rev-carlos-${targetMonth}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
-          }
-          if (cluster.id === 'paula') {
-            return r.id === `rev-paula-${targetMonth}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
+          if (cluster.id.startsWith('salary_')) {
+            const prof = (r.profileName || 'user').toLowerCase();
+            return `salary_${prof}` === cluster.id && r.category === 'Salário & Renda';
           }
           const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
           if (rIdRoot && rIdRoot === cluster.id) return true;
@@ -2015,11 +2128,7 @@ class CloudKitSyncEngine {
           }
         } else {
           // Create revenue for targetMonth
-          const newId = cluster.id === 'carlos' 
-            ? `rev-carlos-${targetMonth}`
-            : cluster.id === 'paula'
-            ? `rev-paula-${targetMonth}`
-            : `rev-rec-${cluster.id}-${targetMonth}`;
+          const newId = `rev-rec-${cluster.id}-${targetMonth}`;
 
           const cleanDeleted = this.getDeletedRevenueIds().filter(d => d !== newId);
           localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDeleted));
@@ -2095,7 +2204,7 @@ class CloudKitSyncEngine {
         date: rev.date,
         category: rev.category,
         recurrence: rev.recurrence || 'Mensal',
-        profileName: rev.profileName || 'Carlos',
+        profileName: rev.profileName || this.getProfiles()[0]?.name || 'Você',
         notes: rev.notes || '',
         version: 1,
         updatedAt: nowIso,
@@ -2123,8 +2232,6 @@ class CloudKitSyncEngine {
         ...deduped.map(r => (r.date || '').substring(0, 7)).filter(Boolean)
       ])).filter(m => m >= savedMonth).sort();
 
-      const isCarlos = saved.id.startsWith('rev-carlos-') || ((saved.profileName === 'Carlos' || saved.name.toLowerCase().includes('carlos')) && saved.category === 'Salário & Renda');
-      const isPaula = saved.id.startsWith('rev-paula-') || ((saved.profileName === 'Paula' || saved.name.toLowerCase().includes('paula')) && saved.category === 'Salário & Renda');
       const cleanName = saved.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
       const prevCleanName = prevName ? prevName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-') : '';
       const savedIdRoot = saved.id.replace(/-\d{4}-\d{2}$/, '');
@@ -2136,12 +2243,6 @@ class CloudKitSyncEngine {
 
         const existingSubIdx = deduped.findIndex(r => {
           if ((r.date || '').substring(0, 7) !== m) return false;
-          if (isCarlos) {
-            return r.id === `rev-carlos-${m}` || ((r.profileName === 'Carlos' || r.name.toLowerCase().includes('carlos')) && r.category === 'Salário & Renda');
-          }
-          if (isPaula) {
-            return r.id === `rev-paula-${m}` || ((r.profileName === 'Paula' || r.name.toLowerCase().includes('paula')) && r.category === 'Salário & Renda');
-          }
           const rIdRoot = r.id.replace(/-\d{4}-\d{2}$/, '');
           if (savedIdRoot && rIdRoot === savedIdRoot) return true;
           const rClean = r.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/[^a-z0-9]/g, '-');
@@ -2161,11 +2262,7 @@ class CloudKitSyncEngine {
             updatedAt: nowIso,
           };
         } else {
-          const subId = isCarlos 
-            ? `rev-carlos-${m}`
-            : isPaula
-            ? `rev-paula-${m}`
-            : `rev-rec-${cleanName}-${profLower}-${m}`;
+          const subId = `rev-rec-${cleanName}-${profLower}-${m}`;
 
           const cleanDel = this.getDeletedRevenueIds().filter(d => d !== subId);
           localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify(cleanDel));
@@ -2413,17 +2510,17 @@ class CloudKitSyncEngine {
     const isAndroid = /Android/i.test(navigator.userAgent);
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone;
 
-    let defaultName = 'iPhone Carlos';
-    let model = 'iPhone 15 Pro';
+    let defaultName = 'Meu Celular';
+    let model = 'Smartphone';
 
     if (isIOS) {
-      defaultName = 'iPhone Carlos';
+      defaultName = isStandalone ? 'Meu iPhone (Início)' : 'Meu iPhone';
       model = isStandalone ? 'iPhone (Tela de Início)' : 'iPhone (Safari)';
     } else if (isAndroid) {
-      defaultName = 'Celular Carlos';
+      defaultName = isStandalone ? 'Meu Android (Início)' : 'Meu Android';
       model = isStandalone ? 'Android (Tela de Início)' : 'Android (Chrome)';
     } else {
-      defaultName = 'iPhone Carlos';
+      defaultName = 'Meu Computador';
       model = 'Computador / Web';
     }
 
@@ -2433,10 +2530,9 @@ class CloudKitSyncEngine {
       id: myId,
       name: savedCustomName || defaultName,
       model,
-      owner: 'Carlos',
+      owner: 'Você',
       lastActive: 'Agora mesmo',
       isCurrent: true,
-      iCloudAccount: 'carlos@icloud.com',
     };
   }
 
@@ -2893,7 +2989,7 @@ class CloudKitSyncEngine {
               category: item.category || 'Habitação & Moradia',
               status: item.status || 'pending',
               paidAt: item.paidAt,
-              paidBy: item.paidBy === 'Camila' ? 'Paula' : item.paidBy,
+              paidBy: item.paidBy,
               recurrence: item.recurrence || 'Mensal Fixa',
               favored: item.favored || '',
               barcode: item.barcode || '',
@@ -2902,12 +2998,12 @@ class CloudKitSyncEngine {
               notes: item.notes || '',
               splitHousehold: item.splitHousehold ?? true,
               splitDetails: item.splitDetails || [
-                { name: 'Carlos', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
-                { name: 'Paula', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
+                { name: 'Titular', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
+                { name: 'Cônjuge', percentage: 50, amount: (Number(item.amount) || 0) / 2 },
               ],
               version: item.version || 1,
               updatedAt: item.updatedAt || new Date().toISOString(),
-              updatedByDevice: item.updatedByDevice || 'iPhone Carlos',
+              updatedByDevice: item.updatedByDevice || 'Meu Celular',
               isSynced: true,
               receiptUrl: item.receiptUrl,
               receiptName: item.receiptName,
@@ -2937,18 +3033,19 @@ class CloudKitSyncEngine {
         }
         for (const item of list) {
           if (item && item.name && (item.amount !== undefined || item.category)) {
+            if (isMockRevenue(item)) continue;
             const rev: Revenue = {
               id: item.id || `rev-rec-${Date.now()}-${Math.random().toString(36).substr(2, 5)}`,
-              name: String(item.name || '').trim().replace(/Camila/g, 'Paula'),
+              name: String(item.name || '').trim(),
               amount: Number(item.amount) || 0,
               date: item.date || '2026-10-05',
               category: item.category || 'Salário & Renda',
               recurrence: item.recurrence || 'Mensal',
-              profileName: (item.profileName === 'Camila' ? 'Paula' : item.profileName) || 'Carlos',
+              profileName: item.profileName || 'Você',
               notes: item.notes || '',
               version: item.version || 1,
               updatedAt: item.updatedAt || new Date().toISOString(),
-              updatedByDevice: item.updatedByDevice || 'iPhone Carlos',
+              updatedByDevice: item.updatedByDevice || 'Meu Celular',
               isSynced: true,
             };
             const key = rev.id || `${rev.name.toLowerCase()}_${rev.date}_${rev.amount.toFixed(2)}`;

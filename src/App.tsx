@@ -6,7 +6,7 @@ import {
   RefreshCw, ScanLine, Calculator
 } from 'lucide-react';
 import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from './types/finance';
-import { cloudkit, isMockBill } from './services/cloudkitSync';
+import { cloudkit, isMockBill, isMockRevenue } from './services/cloudkitSync';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
 import { BillCard } from './components/BillCard';
@@ -221,12 +221,25 @@ export default function App() {
 
   // Month-aware Bills: returns actual saved bills for the selected month based on effective payment month
   const currentMonthBills = useMemo(() => {
-    return bills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+    return bills
+      .filter(b => !isMockBill(b))
+      .filter(b => {
+        // Exclude any salary or revenue item from bills
+        if (b.category === 'Salário & Renda') return false;
+        const lower = (b.name || '').toLowerCase();
+        if (lower.includes('salário') || lower.includes('salario')) return false;
+        if (b.id && b.id.startsWith('bill-migrated-')) return false;
+        if (b.notes && b.notes.includes('Transferido automaticamente para Dívidas')) return false;
+        return true;
+      })
+      .filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
   }, [bills, selectedMonth.id]);
 
   // Month-aware Revenues: returns actual saved revenues for the selected month
   const currentMonthRevenues = useMemo(() => {
-    return revenues.filter(r => (r.date || '').startsWith(selectedMonth.id));
+    return revenues
+      .filter(r => !isMockRevenue(r))
+      .filter(r => (r.date || '').startsWith(selectedMonth.id));
   }, [revenues, selectedMonth.id]);
 
   // Check if initial sample mock bills are present in current bills
@@ -235,23 +248,25 @@ export default function App() {
   }, [bills]);
 
   // Salaries of Resident 1 and Resident 2 (Editable by user)
-  const carlosCurrentSalary = useMemo(() => {
-    const userPName = profiles[0]?.name || 'Carlos';
+  const userCurrentSalary = useMemo(() => {
+    const userPName = profiles[0]?.name || 'Você';
     const r = currentMonthRevenues.find(x => 
       x.profileName === userPName || 
-      x.profileName === 'Carlos' || 
+      x.profileName === 'Você' || 
+      (x.category === 'Salário & Renda' && (!x.profileName || x.profileName === 'Você')) ||
+      x.name.toLowerCase().includes('meu salário') ||
       x.name.toLowerCase().includes(userPName.toLowerCase())
     );
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
 
-  const paulaCurrentSalary = useMemo(() => {
-    const spousePName = profiles[1]?.name || 'Paula';
+  const spouseCurrentSalary = useMemo(() => {
+    const spousePName = profiles[1]?.name || 'Cônjuge';
     const r = currentMonthRevenues.find(x => 
-      x.profileName === spousePName || 
-      x.profileName === 'Paula' || 
+      (spousePName && x.profileName === spousePName) || 
       x.profileName === 'Esposa' || 
-      x.name.toLowerCase().includes(spousePName.toLowerCase())
+      x.profileName === 'Cônjuge' || 
+      (spousePName && x.name.toLowerCase().includes(spousePName.toLowerCase()))
     );
     return r ? r.amount : 0;
   }, [currentMonthRevenues, profiles]);
@@ -261,11 +276,11 @@ export default function App() {
     return currentMonthRevenues.reduce((sum, r) => sum + r.amount, 0);
   }, [currentMonthRevenues]);
 
-  // Handler to edit and save Carlos & Paula salaries
-  const handleSaveCoupleSalaries = (carlosAmount: number, paulaAmount: number) => {
-    cloudkit.updateCoupleSalaries(carlosAmount, paulaAmount, selectedMonth.id);
+  // Handler to edit and save household salaries
+  const handleSaveCoupleSalaries = (userAmount: number, spouseAmount: number) => {
+    cloudkit.updateCoupleSalaries(userAmount, spouseAmount, selectedMonth.id);
     setRevenues(cloudkit.getRevenues());
-    showTemporaryToast(`Salários atualizados: Carlos (R$ ${carlosAmount.toFixed(2)}) e Paula (R$ ${paulaAmount.toFixed(2)})`);
+    showTemporaryToast(`Salários atualizados com sucesso!`);
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
@@ -452,26 +467,6 @@ export default function App() {
 
   // Handlers for Revenue operations
   const handleSaveRevenue = (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string }) => {
-    // If user saved a bill/debt in revenue form, intercept it, save as Bill, and do not save as Revenue!
-    if (cloudkit.isDebtExpense(revData)) {
-      const billData: Partial<Bill> = {
-        name: revData.name,
-        amount: revData.amount,
-        dueDate: revData.date,
-        category: cloudkit.guessCategoryFromName(revData.name),
-        favored: revData.name.replace(/^Conta\s*[-:]\s*/i, '').replace(/^Conta\s*de\s*/i, '').trim() || revData.name,
-        status: 'paid',
-        recurrence: 'Mensal Fixa',
-        fixedValueType: revData.amount > 0 ? 'fixed_value' : 'variable_value',
-        splitHousehold: true,
-      };
-      cloudkit.saveBill(billData);
-      setBills(cloudkit.getBills());
-      setRevenues(cloudkit.getRevenues());
-      showTemporaryToast(`Conta "${revData.name}" direcionada com sucesso para Dívidas do Lar!`);
-      return;
-    }
-
     cloudkit.saveRevenue(revData);
     setRevenues(cloudkit.getRevenues());
     showTemporaryToast('Receita adicionada ao Fluxo de Caixa!');
@@ -503,7 +498,9 @@ export default function App() {
     let text = `*Resumo de Contas do Lar - Finanças da Minha Casa*\n`;
     text += `📅 Mês: ${selectedMonth.label}\n`;
     text += `💰 Total Pendente: R$ ${total.toFixed(2).replace('.', ',')}\n`;
-    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (Carlos & Paula)\n\n`;
+    const name1 = profiles[0]?.name || 'Você';
+    const name2 = profiles[1]?.name || 'Cônjuge';
+    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (${name1} & ${name2})\n\n`;
     text += `*Contas a pagar:*\n`;
     pending.forEach((b, i) => {
       text += `${i + 1}. ${b.name} - R$ ${b.amount.toFixed(2).replace('.', ',')} (Vence: ${b.dueDate})\n`;
@@ -995,8 +992,8 @@ export default function App() {
       <EditCoupleSalariesModal
         isOpen={isEditSalariesModalOpen}
         onClose={() => setIsEditSalariesModalOpen(false)}
-        carlosCurrentSalary={carlosCurrentSalary}
-        paulaCurrentSalary={paulaCurrentSalary}
+        userCurrentSalary={userCurrentSalary}
+        spouseCurrentSalary={spouseCurrentSalary}
         selectedMonth={selectedMonth.label}
         onSaveSalaries={handleSaveCoupleSalaries}
         userLabel={`Meu Salário (${profiles[0]?.name || 'Você'})`}

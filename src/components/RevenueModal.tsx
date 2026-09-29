@@ -35,27 +35,19 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   const [date, setDate] = useState('');
   const [category, setCategory] = useState('Salário & Renda');
   const [recurrence, setRecurrence] = useState<'Mensal' | 'Única'>('Mensal');
-  const [profileName, setProfileName] = useState('Carlos');
+  const [profileName, setProfileName] = useState('Você');
   const [notes, setNotes] = useState('');
   const [applyToFutureMonths, setApplyToFutureMonths] = useState(true);
 
   const isLikelyDebt = Boolean(
     name &&
     (
-      name.toLowerCase().startsWith('conta') ||
-      name.toLowerCase().startsWith('boleto') ||
-      name.toLowerCase().startsWith('fatura') ||
-      name.toLowerCase().includes('jupiter') ||
-      name.toLowerCase().includes('água') ||
-      name.toLowerCase().includes('agua') ||
-      name.toLowerCase().includes('saneamento') ||
-      name.toLowerCase().includes('luz') ||
-      name.toLowerCase().includes('energia') ||
-      name.toLowerCase().includes('enel') ||
-      name.toLowerCase().includes('sabesp') ||
-      name.toLowerCase().includes('condom') ||
-      name.toLowerCase().includes('aluguel') ||
-      name.toLowerCase().includes('internet')
+      name.toLowerCase().startsWith('conta de luz') ||
+      name.toLowerCase().startsWith('conta de agua') ||
+      name.toLowerCase().startsWith('conta de água') ||
+      name.toLowerCase().startsWith('boleto condomin') ||
+      name.toLowerCase().startsWith('fatura cartao') ||
+      name.toLowerCase().startsWith('fatura cartão')
     )
   );
 
@@ -75,7 +67,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
       setDate(defaultDateStr);
       setCategory('Salário & Renda');
       setRecurrence('Mensal');
-      setProfileName(profiles[0]?.name || 'Carlos');
+      setProfileName(profiles[0]?.name || 'Você');
       setNotes('');
     }
   }, [initialRevenue, isOpen, profiles, defaultMonth]);
@@ -130,27 +122,25 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
               required
               value={name}
               onChange={(e) => setName(e.target.value)}
-              placeholder="Ex: Salário Carlos, Rendimento CDI, Venda"
+              placeholder="Ex: Meu Salário, Rendimento, Freelance"
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
             />
-            {isLikelyDebt && (
+            {isLikelyDebt && onSwitchToBill && (
               <div className="mt-2 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800 p-2.5 rounded-xl flex items-start gap-2">
                 <AlertTriangle className="w-4 h-4 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
                 <div className="text-[11px] text-amber-900 dark:text-amber-200">
-                  <span className="font-bold">Atenção:</span> Esta tela é para <b>RECEITAS</b> (salários/entradas). O nome informado parece uma <b>CONTA / DÍVIDA</b>. Ao salvar, ela será direcionada automaticamente para Dívidas.
-                  {onSwitchToBill && (
-                    <button
-                      type="button"
-                      onClick={() => {
-                        onSwitchToBill(name, amount);
-                        onClose();
-                      }}
-                      className="mt-1 flex items-center gap-1 font-bold text-teal-700 dark:text-teal-300 underline"
-                    >
-                      <span>Mudar para Nova Conta / Dívida</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </button>
-                  )}
+                  <span className="font-bold">Aviso:</span> Esta tela é para <b>RECEITAS / ENTRADAS</b>. Se esta for uma conta a pagar, você pode cadastrá-la em Dívidas:
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSwitchToBill(name, amount);
+                      onClose();
+                    }}
+                    className="mt-1 flex items-center gap-1 font-bold text-teal-700 dark:text-teal-300 underline"
+                  >
+                    <span>Mudar para Nova Conta / Dívida</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
                 </div>
               </div>
             )}

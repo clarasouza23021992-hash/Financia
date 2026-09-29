@@ -9,10 +9,20 @@ interface KpiCardsProps {
 }
 
 export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => {
-  const totalAmount = bills.reduce((acc, b) => acc + b.amount, 0);
-  const totalCount = bills.length;
+  // Strictly filter out any salary or migrated revenue items
+  const validBills = bills.filter(b => {
+    if (b.category === 'Salário & Renda') return false;
+    const lower = (b.name || '').toLowerCase();
+    if (lower.includes('salário') || lower.includes('salario')) return false;
+    if (b.id && b.id.startsWith('bill-migrated-')) return false;
+    if (b.notes && b.notes.includes('Transferido automaticamente para Dívidas')) return false;
+    return true;
+  });
 
-  const paidBills = bills.filter(b => b.status === 'paid');
+  const totalAmount = validBills.reduce((acc, b) => acc + b.amount, 0);
+  const totalCount = validBills.length;
+
+  const paidBills = validBills.filter(b => b.status === 'paid');
   const paidAmount = paidBills.reduce((acc, b) => acc + b.amount, 0);
   const paidPercentage = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
 

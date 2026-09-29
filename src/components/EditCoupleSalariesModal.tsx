@@ -4,10 +4,12 @@ import { X, Check, Wallet, Sparkles, User, Heart } from 'lucide-react';
 interface EditCoupleSalariesModalProps {
   isOpen: boolean;
   onClose: () => void;
-  carlosCurrentSalary: number;
-  paulaCurrentSalary: number;
+  userCurrentSalary?: number;
+  spouseCurrentSalary?: number;
+  carlosCurrentSalary?: number;
+  paulaCurrentSalary?: number;
   selectedMonth: string;
-  onSaveSalaries: (carlosAmount: number, paulaAmount: number) => void;
+  onSaveSalaries: (userAmount: number, spouseAmount: number) => void;
   userLabel?: string;
   spouseLabel?: string;
 }
@@ -15,24 +17,29 @@ interface EditCoupleSalariesModalProps {
 export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = ({
   isOpen,
   onClose,
+  userCurrentSalary,
+  spouseCurrentSalary,
   carlosCurrentSalary,
   paulaCurrentSalary,
   selectedMonth,
   onSaveSalaries,
   userLabel = 'Meu Salário (Você)',
-  spouseLabel = 'Salário da Esposa',
+  spouseLabel = 'Salário do Cônjuge',
 }) => {
-  const [carlosInput, setCarlosInput] = useState('');
-  const [paulaInput, setPaulaInput] = useState('');
+  const currentVal1 = typeof userCurrentSalary === 'number' ? userCurrentSalary : (carlosCurrentSalary || 0);
+  const currentVal2 = typeof spouseCurrentSalary === 'number' ? spouseCurrentSalary : (paulaCurrentSalary || 0);
+
+  const [userInput, setUserInput] = useState('');
+  const [spouseInput, setSpouseInput] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (isOpen) {
-      setCarlosInput(carlosCurrentSalary > 0 ? carlosCurrentSalary.toFixed(2).replace('.', ',') : '');
-      setPaulaInput(paulaCurrentSalary > 0 ? paulaCurrentSalary.toFixed(2).replace('.', ',') : '');
+      setUserInput(currentVal1 > 0 ? currentVal1.toFixed(2).replace('.', ',') : '');
+      setSpouseInput(currentVal2 > 0 ? currentVal2.toFixed(2).replace('.', ',') : '');
       setError(null);
     }
-  }, [isOpen, carlosCurrentSalary, paulaCurrentSalary]);
+  }, [isOpen, currentVal1, currentVal2]);
 
   if (!isOpen) return null;
 
@@ -43,9 +50,9 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
     return isNaN(val) ? 0 : val;
   };
 
-  const parsedCarlos = parseValue(carlosInput);
-  const parsedPaula = parseValue(paulaInput);
-  const totalCombined = parsedCarlos + parsedPaula;
+  const parsedUser = parseValue(userInput);
+  const parsedSpouse = parseValue(spouseInput);
+  const totalCombined = parsedUser + parsedSpouse;
 
   const formatBRL = (val: number) => {
     return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -53,12 +60,12 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    if (parsedCarlos < 0 || parsedPaula < 0) {
+    if (parsedUser < 0 || parsedSpouse < 0) {
       setError('Os salários não podem ser valores negativos.');
       return;
     }
 
-    onSaveSalaries(parsedCarlos, parsedPaula);
+    onSaveSalaries(parsedUser, parsedSpouse);
     onClose();
   };
 
@@ -114,11 +121,11 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             </div>
           )}
 
-          {/* Carlos Salary Input */}
+          {/* Titular Salary Input */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
-                <span className="text-base">👨🏻‍💻</span>
+                <span className="text-base">👤</span>
                 <span>{userLabel}</span>
               </label>
               <span className="text-[10px] font-semibold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/60 px-2 py-0.5 rounded-md">
@@ -130,18 +137,18 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
                 R$
               </span>
               <input
-                id="input-carlos-salary"
+                id="input-user-salary"
                 type="text"
                 inputMode="decimal"
-                value={carlosInput}
-                onChange={(e) => setCarlosInput(e.target.value)}
+                value={userInput}
+                onChange={(e) => setUserInput(e.target.value)}
                 placeholder="0,00"
                 className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-[#131D38] border border-slate-300 dark:border-slate-700 rounded-xl text-base font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
             </div>
           </div>
 
-          {/* Paula Salary Input */}
+          {/* Cônjuge Salary Input */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800">
             <div className="flex items-center justify-between mb-1.5">
               <label className="text-xs font-bold text-slate-800 dark:text-white flex items-center gap-1.5">
@@ -157,11 +164,11 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
                 R$
               </span>
               <input
-                id="input-paula-salary"
+                id="input-spouse-salary"
                 type="text"
                 inputMode="decimal"
-                value={paulaInput}
-                onChange={(e) => setPaulaInput(e.target.value)}
+                value={spouseInput}
+                onChange={(e) => setSpouseInput(e.target.value)}
                 placeholder="0,00"
                 className="w-full pl-10 pr-3 py-2.5 bg-white dark:bg-[#131D38] border border-slate-300 dark:border-slate-700 rounded-xl text-base font-extrabold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
               />
@@ -174,8 +181,8 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
             <button
               type="button"
               onClick={() => {
-                setCarlosInput('');
-                setPaulaInput('');
+                setUserInput('');
+                setSpouseInput('');
               }}
               className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-lg"
             >

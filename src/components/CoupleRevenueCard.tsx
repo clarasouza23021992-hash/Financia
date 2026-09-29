@@ -29,26 +29,21 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   // Real revenues only, excluding any mock records
   const realRevenues = revenues.filter(r => !isMockRevenue(r));
 
-  // Identify You and Wife's salaries dynamically
-  const carlosRevenues = realRevenues.filter(
+  // Identify You and Spouse's salaries dynamically based on user profiles
+  const userRevenues = realRevenues.filter(
     r =>
       r.profileName === userProfileName ||
-      r.profileName === 'Carlos' ||
       r.profileName === 'Você' ||
+      (r.category === 'Salário & Renda' && (!r.profileName || r.profileName === 'Você')) ||
       r.name.toLowerCase().includes(userProfileName.toLowerCase()) ||
-      r.name.toLowerCase().includes('carlos') ||
-      r.name.toLowerCase().includes('meu')
+      r.name.toLowerCase().includes('meu salário')
   );
-  const paulaRevenues = realRevenues.filter(
+  const spouseRevenues = realRevenues.filter(
     r =>
-      r.profileName === spouseProfileName ||
-      r.profileName === 'Paula' ||
+      (spouseProfileName && r.profileName === spouseProfileName) ||
       r.profileName === 'Esposa' ||
-      r.profileName === 'Camila' ||
-      r.name.toLowerCase().includes(spouseProfileName.toLowerCase()) ||
-      r.name.toLowerCase().includes('paula') ||
-      r.name.toLowerCase().includes('esposa') ||
-      r.name.toLowerCase().includes('camila')
+      r.profileName === 'Cônjuge' ||
+      (spouseProfileName && r.name.toLowerCase().includes(spouseProfileName.toLowerCase()))
   );
 
   // Helper to reliably sum all revenues for the family member
@@ -56,23 +51,31 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
     return memberRevs.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
   };
 
-  const carlosSalary = calculateMemberTotal(carlosRevenues);
-  const paulaSalary = calculateMemberTotal(paulaRevenues);
+  const userSalary = calculateMemberTotal(userRevenues);
+  const spouseSalary = calculateMemberTotal(spouseRevenues);
 
-  // Sum of Carlos and Paula salaries (Receita Somada do Casal)
-  const combinedSalaries = carlosSalary + paulaSalary;
+  // Sum of salaries
+  const combinedSalaries = userSalary + spouseSalary;
 
   // Other revenues (investments, bonuses, etc.)
   const otherRevenues = realRevenues.filter(
     r =>
-      !carlosRevenues.some(cr => cr.id === r.id) &&
-      !paulaRevenues.some(pr => pr.id === r.id)
+      !userRevenues.some(ur => ur.id === r.id) &&
+      !spouseRevenues.some(sr => sr.id === r.id)
   );
-  const otherTotal = otherRevenues.reduce((acc, r) => acc + r.amount, 0);
+  const otherTotal = otherRevenues.reduce((acc, r) => acc + (Number(r.amount) || 0), 0);
   const grandTotalRevenue = combinedSalaries + otherTotal;
 
-  // Total bills/debts for balance comparison (Valor da Dívida)
-  const totalBillsAmount = bills.reduce((acc, b) => acc + b.amount, 0);
+  // Total bills/debts for balance comparison (STRICTLY exclude any salary or migrated revenue items!)
+  const validDebts = bills.filter(b => {
+    if (b.category === 'Salário & Renda') return false;
+    const lower = (b.name || '').toLowerCase();
+    if (lower.includes('salário') || lower.includes('salario')) return false;
+    if (b.id && b.id.startsWith('bill-migrated-')) return false;
+    if (b.notes && b.notes.includes('Transferido automaticamente para Dívidas')) return false;
+    return true;
+  });
+  const totalBillsAmount = validDebts.reduce((acc, b) => acc + b.amount, 0);
   
   // Projected Balance (Receita Somada Menos a Dívida)
   const projectedBalance = grandTotalRevenue - totalBillsAmount;
@@ -142,7 +145,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                     <span>{userProfileName || 'Você'}</span>
                     <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <div className="font-extrabold text-blue-300 text-sm">{formatBRL(carlosSalary)}</div>
+                  <div className="font-extrabold text-blue-300 text-sm">{formatBRL(userSalary)}</div>
                 </div>
               </div>
             </button>
@@ -161,7 +164,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                     <span className={`w-1.5 h-1.5 rounded-full ${isWifeConnected ? 'bg-emerald-400' : 'bg-rose-400'}`} />
                     <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity" />
                   </div>
-                  <div className="font-extrabold text-pink-300 text-sm">{formatBRL(paulaSalary)}</div>
+                  <div className="font-extrabold text-pink-300 text-sm">{formatBRL(spouseSalary)}</div>
                 </div>
               </div>
             </button>
@@ -199,7 +202,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                 <div className="text-[10px] font-bold text-teal-300 uppercase tracking-wider flex items-center justify-between">
                   <span>Receita Somada</span>
-                  <span className="text-white/60 font-normal">Você + Esposa</span>
+                  <span className="text-white/60 font-normal">{userProfileName || 'Você'} + {spouseProfileName || 'Cônjuge'}</span>
                 </div>
                 <div className="text-lg font-black text-white mt-0.5 tracking-tight">
                   {formatBRL(grandTotalRevenue)}
@@ -220,7 +223,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
                 <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
                   <span>Valor da Dívida</span>
-                  <span className="text-white/60 font-normal">{bills.length} contas</span>
+                  <span className="text-white/60 font-normal">{validDebts.length} {validDebts.length === 1 ? 'conta' : 'contas'}</span>
                 </div>
                 <div className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">
                   {formatBRL(totalBillsAmount)}

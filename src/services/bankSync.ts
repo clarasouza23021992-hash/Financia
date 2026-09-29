@@ -30,34 +30,7 @@ export const SUPPORTED_INSTITUTIONS = [
   { id: 'sicredi', name: 'Sicredi', code: '748', color: '#005C2B', icon: '🌿' },
 ];
 
-export const INITIAL_BANK_CONNECTIONS: BankConnection[] = [
-  {
-    id: 'bank-itau-carlos',
-    institution: 'Banco Itaú',
-    accountType: 'Conta Corrente',
-    accountNumber: 'Ag 0142 • C/C 89210-4',
-    balance: 4890.30,
-    status: 'connected',
-    lastSync: 'Sincronizado há 2 min (Open Finance)',
-    securityHash: 'sha256-e2e-itau-f47a98',
-    cardHolder: 'Carlos',
-  },
-  {
-    id: 'bank-nubank-camila',
-    institution: 'Nubank',
-    accountType: 'Cartão de Crédito',
-    accountNumber: 'Final 4092 (Virtual & Físico)',
-    balance: -1280.40,
-    availableLimit: 14720.00,
-    usedLimit: 1280.40,
-    status: 'connected',
-    lastSync: 'Sincronizado há 5 min (Open Finance)',
-    securityHash: 'sha256-e2e-nu-a128df',
-    cardHolder: 'Paula',
-    closingDay: 5,
-    dueDay: 15,
-  },
-];
+export const INITIAL_BANK_CONNECTIONS: BankConnection[] = [];
 
 class BankSyncService {
   public getConnections(): BankConnection[] {
@@ -403,7 +376,7 @@ class BankSyncService {
       institution: matchedCard?.institution || institution,
       cardName: matchedCard?.cardName || matchedCard?.institution || institution,
       cardLast4: cardLast4 || (matchedCard?.accountNumber?.match(/\d{4}/)?.[0] || '0000'),
-      cardHolder: matchedCard?.cardHolder || 'Paula',
+      cardHolder: matchedCard?.cardHolder || 'Você',
       description,
       totalAmount,
       installments,
@@ -440,7 +413,7 @@ class BankSyncService {
 
     const cardName = card?.institution || request.cardName || request.institution || 'Cartão de Crédito';
     const cardLast4 = request.cardLast4 || (card?.accountNumber?.match(/\d{4}/)?.[0] || '0000');
-    const cardHolder = card?.cardHolder || request.cardHolder || 'Paula';
+    const cardHolder = card?.cardHolder || request.cardHolder || 'Você';
     const closingDay = request.closingDay || card?.closingDay || 5;
     const dueDay = request.dueDay || card?.dueDay || 15;
     const cleanDesc = (request.description || 'Compra no Cartão').trim();
@@ -594,7 +567,7 @@ class BankSyncService {
         installments: 10,
         description: 'Casas Bahia - Geladeira',
         cardName: 'Nubank',
-        cardHolder: 'Paula',
+        cardHolder: 'Titular',
       },
       null,
       2

@@ -188,7 +188,7 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({
             type="button"
             onClick={handleSplit5050}
             className="flex-1 py-1.5 px-2 bg-teal-500/20 hover:bg-teal-500/30 text-[#00E5B5] rounded-xl text-[11px] font-bold flex items-center justify-center gap-1 active-press transition-colors"
-            title="Dividir o valor atual igualmente por 2 (50% Carlos / 50% Paula)"
+            title="Dividir o valor atual igualmente por 2 (50% / 50% Casal)"
           >
             <Divide className="w-3.5 h-3.5" />
             <span>Dividir 50/50</span>

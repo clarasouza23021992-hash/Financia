@@ -238,11 +238,11 @@ export function exportFinancialCSV(bills: Bill[], revenues: Revenue[]) {
 
   // Section 1: Contas & Dívidas
   rows.push('--- CONTAS DA CASA E DÍVIDAS ---');
-  rows.push('ID;Nome da Conta;Favorecido;Categoria;Valor (R$);Vencimento;Status;Recorrência;Divisão Carlos;Divisão Paula;Chave Pix;Código de Barras;Possui Comprovante;Anotações');
+  rows.push('ID;Nome da Conta;Favorecido;Categoria;Valor (R$);Vencimento;Status;Recorrência;Divisão Titular;Divisão Cônjuge;Chave Pix;Código de Barras;Possui Comprovante;Anotações');
 
   bills.forEach(b => {
-    const carlosShare = b.splitDetails.find(s => s.name === 'Carlos')?.amount || 0;
-    const paulaShare = b.splitDetails.find(s => s.name === 'Paula' || s.name === 'Camila')?.amount || 0;
+    const userShare = b.splitDetails?.[0]?.amount ?? ((b.amount || 0) / 2);
+    const spouseShare = b.splitDetails?.[1]?.amount ?? ((b.amount || 0) / 2);
     const hasReceipt = b.receiptName ? 'Sim' : 'Não';
     const statusPt = b.status === 'paid' ? 'Pago' : b.status === 'overdue' ? 'Atrasado' : 'Pendente';
 
@@ -256,8 +256,8 @@ export function exportFinancialCSV(bills: Bill[], revenues: Revenue[]) {
         `"${b.dueDate}"`,
         `"${statusPt}"`,
         `"${b.recurrence}"`,
-        carlosShare.toFixed(2).replace('.', ','),
-        paulaShare.toFixed(2).replace('.', ','),
+        userShare.toFixed(2).replace('.', ','),
+        spouseShare.toFixed(2).replace('.', ','),
         `"${b.pixKey || ''}"`,
         `"${b.barcode || ''}"`,
         `"${hasReceipt}"`,

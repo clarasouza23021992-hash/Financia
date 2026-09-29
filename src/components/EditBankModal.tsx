@@ -25,7 +25,7 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
   const [balance, setBalance] = useState(initialData?.balance?.toString() || '0.00');
   const [availableLimit, setAvailableLimit] = useState(initialData?.availableLimit?.toString() || '');
   const [usedLimit, setUsedLimit] = useState(initialData?.usedLimit?.toString() || '');
-  const [cardHolder, setCardHolder] = useState(initialData?.cardHolder || 'Paula');
+  const [cardHolder, setCardHolder] = useState(initialData?.cardHolder || 'Você');
   const [closingDay, setClosingDay] = useState(initialData?.closingDay?.toString() || '5');
   const [dueDay, setDueDay] = useState(initialData?.dueDay?.toString() || '15');
 
@@ -38,7 +38,7 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
       setBalance(initialData.balance.toString());
       setAvailableLimit(initialData.availableLimit?.toString() || '');
       setUsedLimit(initialData.usedLimit?.toString() || '');
-      setCardHolder(initialData.cardHolder || 'Paula');
+      setCardHolder(initialData.cardHolder || 'Você');
       setClosingDay(initialData.closingDay?.toString() || '5');
       setDueDay(initialData.dueDay?.toString() || '15');
     } else {
@@ -48,7 +48,7 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
       setBalance('0.00');
       setAvailableLimit('');
       setUsedLimit('');
-      setCardHolder('Paula');
+      setCardHolder('Você');
       setClosingDay('5');
       setDueDay('15');
     }
@@ -201,8 +201,8 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
                 onChange={(e) => setCardHolder(e.target.value)}
                 className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white"
               >
-                <option value="Paula">👩🏻‍💼 Paula</option>
-                <option value="Carlos">👨🏻‍💻 Carlos</option>
+                <option value="Você">👤 Você (Titular)</option>
+                <option value="Cônjuge">👩🏻‍💼 Cônjuge</option>
                 <option value="Conjunta">👫 Conjunta (Casal)</option>
               </select>
             </div>

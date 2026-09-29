@@ -47,12 +47,41 @@ export interface Bill {
   lastEditedAt?: string;
 }
 
-// Retorna o mês efetivo onde a conta deve aparecer (paymentMonth se definido, senão mês do dueDate)
-export const getBillEffectiveMonth = (bill: { dueDate?: string; paymentMonth?: string }): string => {
-  if (bill.paymentMonth && bill.paymentMonth.trim().length === 7) {
-    return bill.paymentMonth.trim();
+// Retorna o mês efetivo onde a conta deve aparecer (paymentMonth se definido e legítimo, senão mês do dueDate)
+export const getBillEffectiveMonth = (bill: {
+  dueDate?: string;
+  paymentMonth?: string;
+  recurrence?: string;
+  installmentNumber?: number;
+  parentRecurringId?: string;
+  id?: string;
+  name?: string;
+  isEdited?: boolean;
+}): string => {
+  const dueMonth = (bill.dueDate || '').substring(0, 7);
+
+  // Regra fundamental: Dívidas parceladas NUNCA devem ter todas as parcelas aglomeradas no mesmo mês!
+  // Cada parcela pertence ao seu próprio mês de vencimento (dueDate).
+  const isInstallment = bill.recurrence === 'Parcelada' || 
+                        Boolean(bill.installmentNumber && bill.installmentNumber > 0) ||
+                        (bill.name && /\b(?:\d+\/\d+|\d+\s*de\s*\d+|parcela\s*\d+)\b/i.test(bill.name));
+
+  if (isInstallment) {
+    return dueMonth;
   }
-  return (bill.dueDate || '').substring(0, 7);
+
+  if (bill.paymentMonth && bill.paymentMonth.trim().length === 7) {
+    const payMonth = bill.paymentMonth.trim();
+    if (payMonth === dueMonth) {
+      return dueMonth;
+    }
+    const isPropagatedRecurring = Boolean(bill.parentRecurringId || (bill.id && bill.id.startsWith('rec_')));
+    if (isPropagatedRecurring && !bill.isEdited) {
+      return dueMonth;
+    }
+    return payMonth;
+  }
+  return dueMonth;
 };
 
 // Verifica se a conta foi reagendada para pagar em outro mês (diferente do mês de vencimento)
@@ -60,6 +89,65 @@ export const isBillRescheduled = (bill: { dueDate?: string; paymentMonth?: strin
   const dueMonth = (bill.dueDate || '').substring(0, 7);
   const effectiveMonth = getBillEffectiveMonth(bill);
   return Boolean(bill.paymentMonth && effectiveMonth !== dueMonth);
+};
+
+// Normalização de título de conta para busca, agrupamento e deduplicação precisa
+export const normalizeBillTitle = (name: string): string => {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\(recuperad[oa]\)/gi, '')
+    .replace(/^conta\s*[-:]\s*/i, '')
+    .replace(/^conta\s*de\s*/i, '')
+    .replace(/^fatura\s*[-:]\s*/i, '')
+    .replace(/^boleto\s*[-:]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+};
+
+// Extrai nome base e número de parcela (suporta todos os formatos comuns: "1/10", "(1/10)", "1 de 10", "parcela 1", etc.)
+export const parseInstallmentDetails = (
+  name: string,
+  b?: { installmentNumber?: number; totalInstallments?: number }
+): { baseName: string; instNum?: number; totalInst?: number } => {
+  const norm = normalizeBillTitle(name);
+
+  // Padrão 1: Parcela no início (ex: "parcela 1/10 curso", "1/10 empréstimo", "parcela 1 de 10 dentista")
+  const matchStart = norm.match(/^(?:parcela\s*)?(\d+)\s*(?:\/|de)\s*(\d+)\s*[-:–—]?\s*(.*)$/i);
+  if (matchStart && matchStart[3].trim()) {
+    return {
+      baseName: matchStart[3].trim(),
+      instNum: parseInt(matchStart[1], 10),
+      totalInst: parseInt(matchStart[2], 10),
+    };
+  }
+
+  // Padrão 2: Parcela no final (ex: "curso (1/10)", "curso 1/10", "curso parcela 1 de 10", "curso - 1 de 10", "curso (1 de 10)")
+  const matchEnd = norm.match(/^(.*?)(?:[\s\-_(]+(?:parcela\s*)?(\d+)\s*(?:\/|de)\s*(\d+)\)?)$/i);
+  if (matchEnd) {
+    return {
+      baseName: matchEnd[1].replace(/[-–—]\s*$/, '').trim(),
+      instNum: parseInt(matchEnd[2], 10),
+      totalInst: parseInt(matchEnd[3], 10),
+    };
+  }
+
+  // Padrão 3: Parcela única identificada (ex: "curso parcela 1", "curso (parcela 1)", "curso - parcela 2")
+  const matchSingle = norm.match(/^(.*?)(?:[\s\-_(]+parcela\s*(\d+)\)?)$/i);
+  if (matchSingle) {
+    return {
+      baseName: matchSingle[1].replace(/[-–—]\s*$/, '').trim(),
+      instNum: parseInt(matchSingle[2], 10),
+      totalInst: b?.totalInstallments,
+    };
+  }
+
+  return {
+    baseName: norm,
+    instNum: b?.installmentNumber,
+    totalInst: b?.totalInstallments,
+  };
 };
 
 export const getMonthNamePtBr = (monthId: string): string => {
@@ -120,7 +208,7 @@ export interface CloudDevice {
   owner: string;
   lastActive: string;
   isCurrent: boolean;
-  iCloudAccount: string;
+  iCloudAccount?: string;
 }
 
 export interface SyncConflictLog {

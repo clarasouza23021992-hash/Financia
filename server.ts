@@ -37,16 +37,74 @@ if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
 }
 
-// Filter out only explicitly marked mock/demo seed items, NEVER real user bills
+// Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
 function isMockBillServer(b: any): boolean {
-  if (!b) return false;
-  return b.isMockSeed === true || b.isDemoPlaceholder === true;
+  if (!b) return true;
+  if (b.isMockSeed === true || b.isDemoPlaceholder === true) return true;
+  const id = String(b.id || '');
+  if (
+    id.startsWith('bill-condo-') ||
+    id.startsWith('bill-luz-') ||
+    id.startsWith('bill-gas-') ||
+    id.startsWith('bill-preset-') ||
+    id.startsWith('bill-streaming-') ||
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id === 'bill-gas-pago' ||
+    id === 'bill-condominio' ||
+    id === 'bill-luz' ||
+    id === 'bill-gas' ||
+    id === 'bill-internet' ||
+    id === 'bill-financiamento' ||
+    id === 'bill-mercado' ||
+    id === 'bill-saude'
+  ) {
+    return true;
+  }
+  // Remove any bills migrated from revenue and salary items so salaries never count towards debts!
+  if (id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'))) {
+    return true;
+  }
+  if (b.category === 'Salário & Renda') return true;
+  const lowerName = String(b.name || '').toLowerCase();
+  if (lowerName.includes('salário') || lowerName.includes('salario')) return true;
+  return false;
 }
 
-// Filter out only explicitly marked mock/demo seed revenues
+// Filter out all fictitious seed/mock revenues so user sees only real revenues
 function isMockRevenueServer(r: any): boolean {
-  if (!r) return false;
-  return r.isMockSeed === true || r.isDemoPlaceholder === true;
+  if (!r) return true;
+  if (r.isMockSeed === true || r.isDemoPlaceholder === true) return true;
+  const id = String(r.id || '');
+  if (
+    id.startsWith('rev-carlos-') ||
+    id.startsWith('rev-paula-') ||
+    id.startsWith('rev-rendimentos-') ||
+    id.startsWith('rev-mock-') ||
+    id.startsWith('rev-sample-')
+  ) {
+    return true;
+  }
+  const name = String(r.name || '');
+  const prof = String(r.profileName || '');
+  if (name.includes('Camila') || prof.includes('Camila')) return true;
+  if (
+    name === 'Salário Líquido (Carlos)' ||
+    name === 'Salário Líquido (Paula)' ||
+    name === 'Rendimento CDB / Tesouro Selic'
+  ) {
+    return true;
+  }
+  if (
+    r.notes === 'Salário de Carlos' ||
+    r.notes === 'Salário de Paula' ||
+    r.notes === 'Salário creditado em conta Itaú.' ||
+    r.notes === 'Salário creditado em conta Nubank.' ||
+    r.notes === 'Rendimento da reserva de emergência do casal.'
+  ) {
+    return true;
+  }
+  return false;
 }
 
 function loadHouseholds(): Record<string, HouseholdData> {
@@ -88,6 +146,60 @@ function saveHouseholds(data: Record<string, HouseholdData>) {
   }
 }
 
+function normalizeBillTitleServer(name: string): string {
+  return (name || '')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .toLowerCase()
+    .replace(/\(recuperad[oa]\)/gi, '')
+    .replace(/^conta\s*[-:]\s*/i, '')
+    .replace(/^conta\s*de\s*/i, '')
+    .replace(/^fatura\s*[-:]\s*/i, '')
+    .replace(/^boleto\s*[-:]\s*/i, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function parseInstallmentDetailsServer(name: string, b?: any): { baseName: string; instNum?: number; totalInst?: number } {
+  const norm = normalizeBillTitleServer(name);
+
+  // Padrão 1: Parcela no início (ex: "parcela 1/10 curso", "1/10 empréstimo", "parcela 1 de 10 dentista")
+  const matchStart = norm.match(/^(?:parcela\s*)?(\d+)\s*(?:\/|de)\s*(\d+)\s*[-:–—]?\s*(.*)$/i);
+  if (matchStart && matchStart[3].trim()) {
+    return {
+      baseName: matchStart[3].trim(),
+      instNum: parseInt(matchStart[1], 10),
+      totalInst: parseInt(matchStart[2], 10),
+    };
+  }
+
+  // Padrão 2: Parcela no final (ex: "curso (1/10)", "curso 1/10", "curso parcela 1 de 10", "curso - 1 de 10", "curso (1 de 10)")
+  const matchEnd = norm.match(/^(.*?)(?:[\s\-_(]+(?:parcela\s*)?(\d+)\s*(?:\/|de)\s*(\d+)\)?)$/i);
+  if (matchEnd) {
+    return {
+      baseName: matchEnd[1].replace(/[-–—]\s*$/, '').trim(),
+      instNum: parseInt(matchEnd[2], 10),
+      totalInst: parseInt(matchEnd[3], 10),
+    };
+  }
+
+  // Padrão 3: Parcela única identificada (ex: "curso parcela 1", "curso (parcela 1)", "curso - parcela 2")
+  const matchSingle = norm.match(/^(.*?)(?:[\s\-_(]+parcela\s*(\d+)\)?)$/i);
+  if (matchSingle) {
+    return {
+      baseName: matchSingle[1].replace(/[-–—]\s*$/, '').trim(),
+      instNum: parseInt(matchSingle[2], 10),
+      totalInst: b?.totalInstallments,
+    };
+  }
+
+  return {
+    baseName: norm,
+    instNum: b?.installmentNumber,
+    totalInst: b?.totalInstallments,
+  };
+}
+
 // Server-side bill deduplication to eliminate duplicate bills and phantom 0.00 records
 function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bills: any[]; deletedIds: string[] } {
   if (!Array.isArray(bills)) return { bills: [], deletedIds };
@@ -95,34 +207,134 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
   const map = new Map<string, any>();
   const extraDeleted: string[] = [];
 
-  for (const b of bills) {
-    if (!b || !b.id || isMockBillServer(b) || deletedSet.has(b.id)) {
-      if (b?.id && !deletedSet.has(b.id) && isMockBillServer(b)) {
-        deletedSet.add(b.id);
-        extraDeleted.push(b.id);
-      }
-      continue;
+  // Pre-pass: sanitize false 'paid' statuses, clear corrupted paymentMonth, and distribute collided installments
+  let preProcessed = bills.filter(b => b && b.id && !isMockBillServer(b) && !deletedSet.has(b.id)).map(b => {
+    const isAutoMigrated = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'));
+    const isPreset = b.id.startsWith('bill-preset-') || b.id.startsWith('bill-streaming-') || b.id === 'bill-gas-pago' || b.id.startsWith('bill-condo-');
+    let status = b.status;
+    let paidAt = b.paidAt;
+    let paidBy = b.paidBy;
+
+    // Reset false paid status if debt has no receipt and was marked by Carlos/Paula or seed/preset
+    const isMockPaid = paidBy === 'Carlos' || paidBy === 'Paula' || isPreset || isAutoMigrated;
+    if ((isMockPaid || !b.receiptUrl) && status === 'paid' && (!paidAt || isMockPaid)) {
+      status = 'pending';
+      paidAt = undefined;
+      paidBy = undefined;
     }
 
-    const month = (b.paymentMonth && /^\d{4}-\d{2}$/.test(b.paymentMonth)) ? b.paymentMonth : (b.dueDate || '').substring(0, 7);
-    const cleanName = (b.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const dueMonth = (b.dueDate || '').substring(0, 7);
+    const { instNum, totalInst } = parseInstallmentDetailsServer(b.name, b);
+    const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || (totalInst && totalInst > 1);
+    const isPropagated = Boolean(b.parentRecurringId || (b.id && b.id.startsWith('rec_')));
+    let paymentMonth = b.paymentMonth;
+
+    // Installments MUST strictly belong to their own due date month
+    if (isInstallment || isPropagated) {
+      paymentMonth = undefined;
+    } else if (paymentMonth && paymentMonth === dueMonth) {
+      paymentMonth = undefined;
+    }
+
+    return {
+      ...b,
+      status,
+      paidAt,
+      paidBy,
+      paymentMonth,
+    };
+  });
+
+  // Spread collided installments across consecutive months
+  const installmentGroups = new Map<string, any[]>();
+  preProcessed.forEach(b => {
+    const { baseName, instNum, totalInst } = parseInstallmentDetailsServer(b.name, b);
+    const isInst = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || (totalInst && totalInst > 1);
+    if (isInst) {
+      const groupKey = baseName;
+      if (!installmentGroups.has(groupKey)) {
+        installmentGroups.set(groupKey, []);
+      }
+      installmentGroups.get(groupKey)!.push(b);
+    }
+  });
+
+  installmentGroups.forEach((groupBills) => {
+    if (groupBills.length > 1) {
+      groupBills.sort((a, b) => {
+        const numA = a.installmentNumber || parseInstallmentDetailsServer(a.name, a).instNum || 1;
+        const numB = b.installmentNumber || parseInstallmentDetailsServer(b.name, b).instNum || 1;
+        return numA - numB;
+      });
+
+      const firstBill = groupBills[0];
+      const firstDue = firstBill.dueDate || '2026-10-10';
+      const [baseYearStr, baseMonthStr, baseDayStr] = firstDue.split('-');
+      const baseYear = parseInt(baseYearStr, 10) || 2026;
+      const baseMonth = parseInt(baseMonthStr, 10) || 10;
+      const baseDay = parseInt(baseDayStr, 10) || 10;
+      const firstInstNum = firstBill.installmentNumber || parseInstallmentDetailsServer(firstBill.name, firstBill).instNum || 1;
+
+      groupBills.forEach(b => {
+        const instNum = b.installmentNumber || parseInstallmentDetailsServer(b.name, b).instNum || 1;
+        const offset = instNum - firstInstNum;
+        const targetMonthIndex = baseMonth + offset;
+        const targetYear = baseYear + Math.floor((targetMonthIndex - 1) / 12);
+        const targetMonthNum = ((targetMonthIndex - 1) % 12) + 1;
+        const maxDays = new Date(targetYear, targetMonthNum, 0).getDate();
+        const validDay = Math.min(baseDay, maxDays);
+        b.dueDate = `${targetYear}-${String(targetMonthNum).padStart(2, '0')}-${String(validDay).padStart(2, '0')}`;
+        b.paymentMonth = undefined;
+      });
+    }
+  });
+
+  for (const b of preProcessed) {
+    if (!b || !b.id || deletedSet.has(b.id)) continue;
+
+    const month = (b.dueDate || '').substring(0, 7) || '2026-10';
     const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
-    const key = cleanBarcode.length >= 10 ? `barcode_${month}_${cleanBarcode}` : `name_${month}_${cleanName}`;
+    const { baseName, instNum } = parseInstallmentDetailsServer(b.name, b);
+    const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum) || Boolean(b.installmentNumber);
+
+    let key: string;
+    if (cleanBarcode.length >= 10) {
+      key = `barcode_${month}_${cleanBarcode}`;
+    } else if (isInstallment) {
+      const num = instNum || b.installmentNumber || 1;
+      key = `inst_${month}_${baseName}_${num}`;
+    } else {
+      key = `name_${month}_${baseName}`;
+    }
 
     if (map.has(key)) {
       const existing = map.get(key);
       let keepIncoming = false;
-      if (b.status === 'paid' && existing.status !== 'paid') {
-        keepIncoming = true;
-      } else if (existing.status === 'paid' && b.status !== 'paid') {
+
+      const isMigratedB = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente'));
+      const isMigratedE = existing.id.startsWith('bill-migrated-') || (existing.notes && existing.notes.includes('Transferido automaticamente'));
+
+      if (isMigratedB && !isMigratedE) {
         keepIncoming = false;
+      } else if (!isMigratedB && isMigratedE) {
+        keepIncoming = true;
       } else if (b.receiptUrl && !existing.receiptUrl) {
         keepIncoming = true;
       } else if (existing.receiptUrl && !b.receiptUrl) {
         keepIncoming = false;
+      } else if (b.status === 'paid' && existing.status !== 'paid' && b.receiptUrl) {
+        // Only prioritize paid status if verified by attached receipt proof
+        keepIncoming = true;
+      } else if (existing.status === 'paid' && b.status !== 'paid' && !existing.receiptUrl) {
+        // Revert unverified paid status in favor of user's pending bill
+        keepIncoming = true;
       } else if (b.isProjected && !existing.isProjected) {
         keepIncoming = false;
       } else if (!b.isProjected && existing.isProjected) {
+        keepIncoming = true;
+      } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
+        keepIncoming = false;
+      } else if (!b.id.startsWith('bill-rec-') && existing.id.startsWith('bill-rec-')) {
         keepIncoming = true;
       } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
         keepIncoming = true;
@@ -165,7 +377,7 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
     }
 
     const bMonth = (b.paymentMonth && /^\d{4}-\d{2}$/.test(b.paymentMonth)) ? b.paymentMonth : (b.dueDate || '').substring(0, 7);
-    const bName = (b.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const bName = normalizeBillTitleServer(b.name);
     const bBarcode = (b.barcode || '').replace(/\D/g, '');
 
     // Check if there is a newer scheduled version of this single pontual bill in a later month
@@ -176,7 +388,7 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
       if (otherMonth <= bMonth) return false;
       const otherBarcode = (other.barcode || '').replace(/\D/g, '');
       if (bBarcode.length >= 10 && otherBarcode === bBarcode) return true;
-      return (other.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '') === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
+      return normalizeBillTitleServer(other.name) === bName && (b.id.startsWith('bill-carried-') || b.isCarriedOver);
     });
 
     if (hasLaterMonthVersion) {

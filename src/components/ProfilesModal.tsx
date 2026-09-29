@@ -253,7 +253,7 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                         type="text"
                         value={newName}
                         onChange={(e) => setNewName(e.target.value)}
-                        placeholder="Ex: Carlos, Paula, etc."
+                        placeholder="Ex: Clara, etc."
                         className="w-full text-xs px-3 py-2 rounded-xl border border-slate-300 dark:border-slate-700 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-medium"
                       />
                     </div>

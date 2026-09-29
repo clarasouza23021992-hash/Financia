@@ -46,7 +46,7 @@ export const BillCard: React.FC<BillCardProps> = ({
       `🏢 Favorecido: ${bill.favored}\n` +
       (bill.pixKey ? `🔑 Chave Pix (${bill.pixType}): ${bill.pixKey}\n` : '') +
       (bill.barcode ? `📄 Código de Barras: ${bill.barcode}\n` : '') +
-      `👥 Divisão: Carlos 50% e Paula 50%`;
+      `👥 Divisão: Casal 50% / 50%`;
 
     if (navigator.share) {
       navigator.share({ title: bill.name, text: shareText }).catch(() => {});
@@ -151,17 +151,23 @@ export const BillCard: React.FC<BillCardProps> = ({
               </motion.button>
             )}
             {bill.status === 'paid' && (
-              <motion.span
+              <motion.button
+                type="button"
                 key="paid"
                 initial={{ opacity: 0, scale: 0.88, y: -2 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
                 exit={{ opacity: 0, scale: 0.88, y: 2 }}
                 transition={{ duration: 0.22, ease: 'easeOut' }}
-                className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-xs shrink-0"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onTogglePaid(bill);
+                }}
+                title="Conta marcada como paga. Toque para desfazer e voltar para pendente."
+                className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-xs shrink-0 hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer active-press transition-colors"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Pago</span>
-              </motion.span>
+                <span>Pago (Desfazer)</span>
+              </motion.button>
             )}
           </AnimatePresence>
         </div>
@@ -335,7 +341,7 @@ export const BillCard: React.FC<BillCardProps> = ({
         {Boolean(bill.isEdited && bill.lastEditedAt) ? (
           <div 
             className="flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 font-mono bg-amber-50/90 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200/70 dark:border-amber-900/50 shrink-0 whitespace-nowrap"
-            title={`Alterado por ${bill.updatedByDevice || 'Carlos'} em ${(() => {
+            title={`Alterado por ${bill.updatedByDevice || 'Morador'} em ${(() => {
               try {
                 const d = new Date(bill.lastEditedAt!);
                 return isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR');

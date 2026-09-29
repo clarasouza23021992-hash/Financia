@@ -47,7 +47,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
   const [purchaseInstallments, setPurchaseInstallments] = useState<number>(1);
   const [purchaseDescription, setPurchaseDescription] = useState<string>('');
   const [purchaseCategory, setPurchaseCategory] = useState<string>('Alimentação & Mercado');
-  const [purchaseHolder, setPurchaseHolder] = useState<string>('Paula');
+  const [purchaseHolder, setPurchaseHolder] = useState<string>('Você');
   const [purchaseDate, setPurchaseDate] = useState<string>(() => new Date().toISOString().slice(0, 10));
   const [isPublishing, setIsPublishing] = useState(false);
   const [lastPublishedResult, setLastPublishedResult] = useState<CardPurchaseResult | null>(null);
@@ -239,8 +239,8 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
     try {
       const samplePayload = {
         house: webhookInfo.householdId,
-        text: 'Compra aprovada no seu Nubank de R$ 890,00 em 5x na Fast Shop',
-        cardHolder: 'Paula',
+        text: 'Compra aprovada no seu cartão de R$ 890,00 em 5x na Fast Shop',
+        cardHolder: 'Titular',
       };
       const res = await fetch('/api/cards/webhook', {
         method: 'POST',
@@ -469,7 +469,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
                     >
                       {creditCards.map(c => (
                         <option key={c.id} value={c.id}>
-                          💳 {c.institution} ({c.cardHolder || 'Paula'}) — {c.accountNumber} — Fechamento dia {c.closingDay || 5} | Vencimento dia {c.dueDay || 15}
+                          💳 {c.institution} ({c.cardHolder || 'Titular'}) — {c.accountNumber} — Fechamento dia {c.closingDay || 5} | Vencimento dia {c.dueDay || 15}
                         </option>
                       ))}
                     </select>
@@ -638,8 +638,8 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
                       onChange={(e) => setPurchaseHolder(e.target.value)}
                       className="w-full px-3 py-2 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-900 dark:text-white"
                     >
-                      <option value="Paula">👩🏻‍💼 Paula</option>
-                      <option value="Carlos">👨🏻‍💻 Carlos</option>
+                      <option value="Você">👤 Você (Titular)</option>
+                      <option value="Cônjuge">👩🏻‍💼 Cônjuge</option>
                       <option value="Conjunta">👫 Conjunta (Casal)</option>
                     </select>
                   </div>

@@ -779,6 +779,28 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
             <RefreshCw className={`w-4 h-4 ${syncing ? 'animate-spin' : ''}`} />
             <span>{syncing ? 'Sincronizando e Validando Esposa...' : 'Sincronizar Agora com a Nuvem'}</span>
           </button>
+
+          {/* Botão de Correção e Limpeza de Dívidas / Parcelas */}
+          <button
+            onClick={async () => {
+              setSyncing(true);
+              setSyncSuccessMsg(null);
+              try {
+                cloudkit.cleanupAndDeduplicateAllBills();
+                await onForceSync();
+                setSyncSuccessMsg('✅ Dívidas organizadas com sucesso! Parcelas redistribuídas corretamente nos seus meses de vencimento e duplicidades removidas.');
+                setTimeout(() => setSyncSuccessMsg(null), 5000);
+              } catch (err: any) {
+                setSyncSuccessMsg(`Falha ao otimizar dívidas: ${err?.message || 'Erro inesperado'}`);
+              } finally {
+                setSyncing(false);
+              }
+            }}
+            disabled={syncing}
+            className="w-full py-2.5 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-2xl text-xs active-press flex items-center justify-center gap-2 transition-all border border-slate-200 dark:border-slate-700"
+          >
+            <span>🧹 Corrigir Dívidas & Distribuir Parcelas nos Meses</span>
+          </button>
         </div>
       </div>
     </div>

@@ -87,8 +87,8 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs p-4 animate-fade-in">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[92vh]">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs modal-safe-overlay px-4 overflow-y-auto animate-fade-in">
+      <div className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col m-auto max-h-[calc(100vh-3rem)]">
         {/* Header */}
         <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">

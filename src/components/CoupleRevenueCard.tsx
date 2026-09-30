@@ -107,13 +107,13 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   };
 
   return (
-    <div id="couple-revenue-summary" className="px-4 py-2">
-      <div className="bg-gradient-to-br from-[#0A1128] via-[#0E1A38] to-[#12244E] text-white rounded-3xl p-4 shadow-lg border border-slate-700/60 relative overflow-hidden">
+    <div id="couple-revenue-summary" className="px-4 py-1.5">
+      <div className="bg-gradient-to-br from-[#0A1128] via-[#0E1A38] to-[#12244E] text-white rounded-2xl p-3 sm:p-3.5 shadow-md border border-slate-700/60 relative overflow-hidden">
         {/* Background glow decoration */}
         <div className="absolute -right-12 -top-12 w-40 h-40 bg-teal-500/15 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute -left-12 -bottom-12 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
 
-        <div className="relative z-10 space-y-3">
+        <div className="relative z-10 space-y-2">
           {/* Top header line */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
@@ -196,116 +196,83 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
             </button>
           </div>
 
-          {/* HIGHLIGHTED FINANCIAL EQUATION: [RECEITA SOMADA] - [VALOR DA DÍVIDA] = [TOTAL QUE VAI SOBRAR OU FALTAR] */}
-          <div className="pt-2 pb-1 border-t border-white/10 space-y-2.5">
+          {/* COMPACT FINANCIAL EQUATION: [RECEITA SOMADA] - [VALOR DA DÍVIDA] = [TOTAL QUE VAI SOBRAR OU FALTAR] */}
+          <div className="pt-2 border-t border-white/10 space-y-1.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
-                <Scale className="w-3.5 h-3.5 text-[#FFD166]" />
-                Balanço Mensal do Lar:
+              <span className="text-[10.5px] font-bold text-slate-300 uppercase tracking-wider flex items-center gap-1">
+                <Scale className="w-3 h-3 text-[#FFD166]" />
+                Balanço do Mês:
               </span>
-              <span className={`text-[11px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+              <span className={`text-[10px] font-extrabold px-2 py-0.5 rounded-full flex items-center gap-1 ${
                 isSurplus
                   ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
                   : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
               }`}>
                 {isSurplus ? (
                   <>
-                    <CheckCircle2 className="w-3 h-3 text-emerald-400" />
-                    <span>+ Vai Sobrar no Mês</span>
+                    <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                    <span>+ Sobra no Mês</span>
                   </>
                 ) : (
                   <>
-                    <AlertCircle className="w-3 h-3 text-rose-400" />
-                    <span>− Vai Faltar no Mês</span>
+                    <AlertCircle className="w-2.5 h-2.5 text-rose-400" />
+                    <span>− Falta no Mês</span>
                   </>
                 )}
               </span>
             </div>
 
-            {/* Visual Formula Cards: Receita Somada - Dívida = Saldo */}
-            <div className="grid grid-cols-1 sm:grid-cols-7 gap-2 items-center">
+            {/* Compact Equation Grid: 2 side-by-side cards + streamlined result card */}
+            <div className="grid grid-cols-2 gap-1.5 items-stretch">
               {/* 1. Receita Somada */}
-              <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
-                <div className="text-[10px] font-bold text-teal-300 uppercase tracking-wider flex items-center justify-between">
-                  <span>Receita Somada</span>
-                  <span className="text-white/60 font-normal">{userProfileName || 'Você'} + {spouseProfileName || 'Cônjuge'}</span>
+              <div className="p-2 rounded-xl bg-white/5 border border-white/10 text-left">
+                <div className="text-[9.5px] font-bold text-teal-300 uppercase tracking-wider truncate">
+                  Receita Somada
                 </div>
-                <div className="text-lg font-black text-white mt-0.5 tracking-tight">
+                <div className="text-sm font-extrabold text-white mt-0.5 tracking-tight truncate">
                   {formatBRL(grandTotalRevenue)}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  {otherTotal > 0 ? `Salários (${formatBRL(combinedSalaries)}) + Outros (${formatBRL(otherTotal)})` : 'Salários Somados da Casa'}
-                </div>
-              </div>
-
-              {/* Minus sign */}
-              <div className="hidden sm:flex justify-center items-center">
-                <div className="w-7 h-7 rounded-full bg-white/10 border border-white/15 flex items-center justify-center font-black text-slate-300 text-base">
-                  −
+                <div className="text-[9px] text-slate-400 truncate">
+                  {userProfileName || 'Você'} + {spouseProfileName || 'Cônjuge'}
                 </div>
               </div>
 
               {/* 2. Valor da Dívida */}
-              <div className="sm:col-span-3 p-3 rounded-2xl bg-white/5 border border-white/10 text-left">
-                <div className="text-[10px] font-bold text-amber-300 uppercase tracking-wider flex items-center justify-between">
-                  <span>Valor da Dívida</span>
-                  <span className="text-white/60 font-normal">{validDebts.length} {validDebts.length === 1 ? 'conta' : 'contas'}</span>
+              <div className="p-2 rounded-xl bg-white/5 border border-white/10 text-left">
+                <div className="text-[9.5px] font-bold text-amber-300 uppercase tracking-wider truncate">
+                  Total Dívidas
                 </div>
-                <div className="text-lg font-black text-amber-300 mt-0.5 tracking-tight">
+                <div className="text-sm font-extrabold text-amber-300 mt-0.5 tracking-tight truncate">
                   {formatBRL(totalBillsAmount)}
                 </div>
-                <div className="text-[10px] text-slate-400 mt-0.5">
-                  Total de Despesas e Contas do Mês
+                <div className="text-[9px] text-slate-400 truncate">
+                  {validDebts.length} {validDebts.length === 1 ? 'conta' : 'contas'} do mês
                 </div>
               </div>
             </div>
 
-            {/* 3. Final Total: Total que vai sobrar (+) em verde ou faltar (-) em vermelho */}
-            <div className={`p-3.5 rounded-2xl border transition-all ${
+            {/* 3. Final Total: Streamlined Sobra/Falta Banner */}
+            <div className={`px-2.5 py-1.5 rounded-xl border flex items-center justify-between gap-2 transition-all ${
               isSurplus
-                ? 'bg-emerald-950/60 border-emerald-500/40 text-emerald-300 shadow-md shadow-emerald-950/40'
-                : 'bg-rose-950/60 border-rose-500/40 text-rose-300 shadow-md shadow-rose-950/40'
+                ? 'bg-emerald-950/50 border-emerald-500/30 text-emerald-300 shadow-xs'
+                : 'bg-rose-950/50 border-rose-500/30 text-rose-300 shadow-xs'
             }`}>
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                <div>
-                  <div className="flex items-center gap-1.5">
-                    <span className={`w-5 h-5 rounded-full flex items-center justify-center font-black text-xs ${
-                      isSurplus ? 'bg-emerald-500 text-slate-950' : 'bg-rose-600 text-white'
-                    }`}>
-                      {isSurplus ? '+' : '−'}
-                    </span>
-                    <span className="text-xs font-bold uppercase tracking-wide">
-                      {isSurplus ? 'Total que vai Sobrar no Mês:' : 'Total que vai Faltar no Mês:'}
-                    </span>
-                  </div>
-                  <p className="text-[11px] text-slate-300 mt-0.5">
-                    {isSurplus
-                      ? 'Saldo positivo projetado após o pagamento de todas as contas da casa.'
-                      : 'Alerta de déficit: as contas do mês superam a receita somada do casal.'}
-                  </p>
-                </div>
+              <div className="flex items-center gap-1.5 min-w-0">
+                <span className={`w-4 h-4 rounded-full flex items-center justify-center font-black text-[10px] shrink-0 ${
+                  isSurplus ? 'bg-emerald-500 text-slate-950' : 'bg-rose-600 text-white'
+                }`}>
+                  {isSurplus ? '+' : '−'}
+                </span>
+                <span className="text-[11px] font-bold uppercase tracking-tight truncate">
+                  {isSurplus ? 'Total que vai Sobrar:' : 'Total que vai Faltar:'}
+                </span>
+              </div>
 
-                {/* Amount with bold + in green or - in red */}
-                <div className="text-left sm:text-right">
-                  <div className={`text-2xl font-black tracking-tight flex items-baseline sm:justify-end gap-1 ${
-                    isSurplus ? 'text-emerald-400' : 'text-rose-400'
-                  }`}>
-                    {/* Big Signal: Plus in Green (+) or Minus in Red (-) */}
-                    <span className={`text-3xl font-black leading-none ${
-                      isSurplus ? 'text-emerald-400' : 'text-rose-400'
-                    }`}>
-                      {isSurplus ? '+' : '−'}
-                    </span>
-                    <span className="text-2xl font-black">
-                      {formatBRL(Math.abs(projectedBalance))}
-                    </span>
-                  </div>
-                  <div className={`text-[10.5px] font-black uppercase tracking-wider ${
-                    isSurplus ? 'text-emerald-300' : 'text-rose-300'
-                  }`}>
-                    {isSurplus ? 'Sinal de Mais (+) em Verde • Sobra' : 'Sinal de Menos (−) em Vermelho • Falta'}
-                  </div>
-                </div>
+              <div className={`text-sm sm:text-base font-black tracking-tight shrink-0 flex items-center gap-0.5 ${
+                isSurplus ? 'text-emerald-400' : 'text-rose-400'
+              }`}>
+                <span>{isSurplus ? '+' : '−'}</span>
+                <span>{formatBRL(Math.abs(projectedBalance))}</span>
               </div>
             </div>
           </div>

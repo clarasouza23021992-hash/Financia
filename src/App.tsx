@@ -798,7 +798,7 @@ export default function App() {
       )}
 
       {/* Main Content Area with Pull-To-Refresh Support */}
-      <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0 pb-8">
+      <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0 pb-3">
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto min-h-full">
           <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
         {currentTab === 'bills' && (
@@ -1134,60 +1134,60 @@ export default function App() {
       </main>
 
       {/* Native Bottom Tab Bar Navigation */}
-      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 py-1 sm:py-1.5 pb-[max(0.5rem,env(safe-area-inset-bottom))] shadow-lg">
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 pt-1 bottom-nav-safe shadow-lg">
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
           {/* Tab 1: Contas / Dívidas */}
           <button
             onClick={() => setCurrentTab('bills')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl transition-all active-press ${
               currentTab === 'bills'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
+                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
             <div className="relative">
-              <FileText className="w-5 h-5" />
+              <FileText className="w-4.5 h-4.5" />
               {currentMonthBills.length > 0 && (
                 <span className="absolute -top-1 -right-2 bg-amber-500 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
                   {currentMonthBills.length}
                 </span>
               )}
             </div>
-            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Dívidas</span>
+            <span className="text-[10px] tracking-tight whitespace-nowrap">Dívidas</span>
           </button>
 
           {/* Tab 2: Fluxo de Caixa */}
           <button
             onClick={() => setCurrentTab('cashflow')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl transition-all active-press ${
               currentTab === 'cashflow'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold scale-105'
+                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
             }`}
           >
-            <TrendingUp className="w-5 h-5" />
-            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Fluxo</span>
+            <TrendingUp className="w-4.5 h-4.5" />
+            <span className="text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
           </button>
 
           {/* Tab 3: CloudKit Sync Drawer */}
           <button
             onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <div className="relative">
-              <Cloud className="w-5 h-5 text-teal-600 dark:text-teal-400" />
+              <Cloud className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
               <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
-            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">iCloud Sync</span>
+            <span className="text-[10px] tracking-tight whitespace-nowrap">iCloud Sync</span>
           </button>
 
           {/* Tab 4: Moradores & Configurações */}
           <button
             onClick={() => setIsProfilesModalOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
-            <Users className="w-5 h-5" />
-            <span className="text-[10px] sm:text-xs tracking-tight whitespace-nowrap">Moradores</span>
+            <Users className="w-4.5 h-4.5" />
+            <span className="text-[10px] tracking-tight whitespace-nowrap">Moradores</span>
           </button>
         </div>
       </nav>

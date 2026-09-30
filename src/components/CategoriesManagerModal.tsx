@@ -212,9 +212,9 @@ export const CategoriesManagerModal: React.FC<CategoriesManagerModalProps> = ({
   const previewTheme = COLOR_THEMES[formColor] || COLOR_THEMES.teal;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-safe-overlay bg-slate-950/70 backdrop-blur-xs animate-fade-in overflow-y-auto">
       <div 
-        className="bg-white dark:bg-[#10182F] w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col max-h-[90vh] overflow-hidden"
+        className="bg-white dark:bg-[#10182F] w-full max-w-xl rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 flex flex-col m-auto max-h-[calc(100vh-3rem)] overflow-hidden"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}

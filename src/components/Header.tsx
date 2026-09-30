@@ -39,7 +39,7 @@ export const Header: React.FC<HeaderProps> = ({
   isWifeConnected = false,
 }) => {
   return (
-    <header className="bg-[#0A1128] text-white pt-[max(0.75rem,env(safe-area-inset-top))] pb-3 px-3 sm:px-4 sticky top-0 z-30 shadow-sm border-b border-slate-800/80 w-full flex-shrink-0">
+    <header className="bg-[#0A1128] text-white header-safe-top pb-2.5 px-3 sm:px-4 sticky top-0 z-30 shadow-sm border-b border-slate-800/80 w-full flex-shrink-0">
       <div className="flex items-center justify-between max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full gap-2">
         {/* Brand & Month */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">

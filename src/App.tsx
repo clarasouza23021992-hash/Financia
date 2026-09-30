@@ -772,10 +772,10 @@ export default function App() {
 
       {/* Intelligent Due Date Notification Toast Banner */}
       {toastNotification && (
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-4 mt-2.5 flex-shrink-0">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-3 sm:px-4 mt-1 flex-shrink-0">
           <div 
             onClick={() => setIsNotificationCenterOpen(true)}
-            className="cursor-pointer bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs hover:bg-slate-800 transition-colors"
+            className="cursor-pointer bg-slate-900 dark:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl shadow-md border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs hover:bg-slate-800 transition-colors"
           >
             <div className="flex items-center gap-2 min-w-0">
               <Bell className="w-4 h-4 text-[#FFD166] flex-shrink-0 animate-pulse" />
@@ -1134,12 +1134,12 @@ export default function App() {
       </main>
 
       {/* Native Bottom Tab Bar Navigation */}
-      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 pt-1 bottom-nav-safe shadow-lg">
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 py-1 shadow-sm">
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
           {/* Tab 1: Contas / Dívidas */}
           <button
             onClick={() => setCurrentTab('bills')}
-            className={`flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all active-press ${
               currentTab === 'bills'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
@@ -1159,7 +1159,7 @@ export default function App() {
           {/* Tab 2: Fluxo de Caixa */}
           <button
             onClick={() => setCurrentTab('cashflow')}
-            className={`flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl transition-all active-press ${
+            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all active-press ${
               currentTab === 'cashflow'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
@@ -1172,7 +1172,7 @@ export default function App() {
           {/* Tab 3: CloudKit Sync Drawer */}
           <button
             onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <div className="relative">
               <Cloud className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
@@ -1184,7 +1184,7 @@ export default function App() {
           {/* Tab 4: Moradores & Configurações */}
           <button
             onClick={() => setIsProfilesModalOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-0.5 px-2.5 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <Users className="w-4.5 h-4.5" />
             <span className="text-[10px] tracking-tight whitespace-nowrap">Moradores</span>

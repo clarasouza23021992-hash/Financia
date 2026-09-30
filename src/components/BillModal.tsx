@@ -522,8 +522,8 @@ export const BillModal: React.FC<BillModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs modal-safe-overlay px-4 overflow-y-auto">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden m-auto max-h-[calc(100vh-3rem)] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs modal-safe-overlay p-3 sm:p-4 overflow-y-auto">
+      <div className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col">
         {/* Modal Header */}
         <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between">
           <h2 className="text-base font-bold tracking-tight">

@@ -201,8 +201,8 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
   const wifeDevice = otherConnectedDevices[0] || null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs pt-[max(1rem,calc(env(safe-area-inset-top,0px)+0.5rem))]">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-t-3xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[calc(100vh-2.5rem)] flex flex-col bottom-nav-safe">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs pt-[env(safe-area-inset-top,0.5rem)]">
+      <div className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-t-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden max-h-[calc(100dvh-1.5rem)] flex flex-col pb-2 sm:pb-3">
         {/* Header */}
         <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
           <div className="flex items-center gap-2.5">

@@ -43,10 +43,10 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   const categoryEntries = Object.entries(categoryTotals).sort((a, b) => b[1] - a[1]);
 
   return (
-    <div className="space-y-3 pb-4 px-4 pt-2">
+    <div className="space-y-2.5 pb-2 px-3 sm:px-4 pt-1 sm:pt-2">
       {/* Report Header & Export Actions */}
-      <div className="bg-white dark:bg-[#131D38] p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3">
+      <div className="bg-white dark:bg-[#131D38] p-3 sm:p-4 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-2.5">
           <div>
             <h2 className="text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
               <TrendingUp className="w-5 h-5 text-teal-600 dark:text-teal-400" />

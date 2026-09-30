@@ -32,16 +32,16 @@
 
 /* iOS Safe Areas & Header / Modal Viewport Protections */
 .header-safe-top {
-  padding-top: max(1.125rem, calc(env(safe-area-inset-top, 0px) + 0.625rem));
+  padding-top: env(safe-area-inset-top, 0.5rem);
 }
 
 .bottom-nav-safe {
-  padding-bottom: max(0.25rem, env(safe-area-inset-bottom, 0px));
+  padding-bottom: 0px;
 }
 
 .modal-safe-overlay {
-  padding-top: max(1rem, calc(env(safe-area-inset-top, 0px) + 0.75rem));
-  padding-bottom: max(1rem, calc(env(safe-area-inset-bottom, 0px) + 0.75rem));
+  padding-top: env(safe-area-inset-top, 0.75rem);
+  padding-bottom: 0.75rem;
 }
 
 /* Hide scrollbar for tabs while keeping scrollable */

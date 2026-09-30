@@ -150,7 +150,7 @@ export const CalculatorModal: React.FC<CalculatorModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 modal-safe-overlay bg-black/70 backdrop-blur-sm animate-fade-in overflow-y-auto">
-      <div className="bg-[#0A1128] text-white w-full max-w-sm rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col m-auto max-h-[calc(100vh-2.5rem)]">
+      <div className="bg-[#0A1128] text-white w-full max-w-sm rounded-2xl sm:rounded-3xl border border-slate-800 shadow-2xl overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)]">
         {/* Header */}
         <div className="px-4 py-3 border-b border-slate-800/80 flex items-center justify-between">
           <div className="flex items-center gap-2">

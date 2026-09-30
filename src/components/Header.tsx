@@ -1,5 +1,5 @@
 import React from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw, Calculator } from 'lucide-react';
+import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -12,6 +12,9 @@ interface HeaderProps {
   onOpenWifeConnect?: () => void;
   onOpenBoletoScanner?: () => void;
   onOpenProfiles?: () => void;
+  onOpenNotifications?: () => void;
+  unreadNotificationsCount?: number;
+  onOpenBudgets?: () => void;
   onQuickPayFilter?: () => void;
   onShareWhatsApp?: () => void;
   onQuickPixPaste?: () => void;
@@ -26,6 +29,9 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewBill,
   onOpenCloudSync,
   onOpenCalculator,
+  onOpenNotifications,
+  unreadNotificationsCount = 0,
+  onOpenBudgets,
   onOpenWifeConnect,
   onManualRefresh,
   isRefreshing = false,
@@ -63,6 +69,24 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* Header Action Buttons */}
         <div className="flex items-center gap-1.5 sm:gap-2 flex-shrink-0">
+          {/* Notification Bell with Badge */}
+          {onOpenNotifications && (
+            <button
+              id="btn-header-notifications"
+              type="button"
+              onClick={onOpenNotifications}
+              title="Lembretes & Avisos de Vencimento"
+              className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60"
+            >
+              <Bell className="w-4 h-4 text-[#FFD166]" />
+              {unreadNotificationsCount > 0 && (
+                <span className="absolute -top-1 -right-1 w-4 h-4 bg-rose-500 text-white font-extrabold text-[9px] rounded-full flex items-center justify-center border-2 border-[#0A1128] animate-pulse">
+                  {unreadNotificationsCount > 9 ? '9+' : unreadNotificationsCount}
+                </span>
+              )}
+            </button>
+          )}
+
           {/* Calculator Button */}
           {onOpenCalculator && (
             <button
@@ -106,4 +130,5 @@ export const Header: React.FC<HeaderProps> = ({
     </header>
   );
 };
+
 

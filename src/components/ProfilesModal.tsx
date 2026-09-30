@@ -1,9 +1,16 @@
 import React, { useState } from 'react';
 import { 
   X, Users, Bell, Shield, Check, Edit2, Plus, 
-  Trash2, Moon, Sun, User, UserCheck, Smartphone, RefreshCw
+  Trash2, Moon, Sun, User, UserCheck, Smartphone, RefreshCw,
+  Volume2, Clock, Sparkles
 } from 'lucide-react';
 import { UserProfile, NotificationSetting, CloudDevice } from '../types/finance';
+import { 
+  getNotificationPermission, 
+  requestNotificationPermission, 
+  playNotificationChime, 
+  sendNativeNotification 
+} from '../services/notificationService';
 
 interface ProfilesModalProps {
   isOpen: boolean;
@@ -431,10 +438,72 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                   Alertas Inteligentes de Vencimento
                 </h3>
                 <p className="text-xs text-slate-500 dark:text-slate-400">
-                  Notificações automáticas para não esquecer boletos ou pagar multas por atraso.
+                  Notificações automáticas no aparelho para não esquecer boletos ou pagar multas por atraso.
                 </p>
               </div>
 
+              {/* Native Browser / PWA Permission status box */}
+              <div className="p-3.5 rounded-2xl bg-teal-50/70 dark:bg-teal-950/30 border border-teal-200 dark:border-teal-800/60 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-teal-600 dark:text-teal-400 flex items-center justify-center flex-shrink-0">
+                    <Smartphone className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="text-xs font-bold text-slate-900 dark:text-white block">
+                      {getNotificationPermission() === 'granted'
+                        ? '✅ Notificações Ativadas no Aparelho'
+                        : 'Permissão de Notificação do Sistema'}
+                    </span>
+                    <span className="text-[11px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      {getNotificationPermission() === 'granted'
+                        ? 'Alertas locais sonoros e na tela de bloqueio autorizados'
+                        : 'Permita que o navegador/celular exiba avisos de contas a pagar'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2 flex-shrink-0 self-end sm:self-auto">
+                  {getNotificationPermission() !== 'granted' && (
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        const res = await requestNotificationPermission();
+                        if (res === 'granted') {
+                          showFeedback('Notificações no dispositivo autorizadas com sucesso!');
+                          sendNativeNotification('✅ Lembretes Ativados!', {
+                            body: 'Você receberá avisos automáticos dos boletos que vencem no dia.',
+                            sound: true,
+                          });
+                        } else {
+                          showFeedback('Permissão não concedida pelo navegador.');
+                        }
+                      }}
+                      className="px-3 py-1.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-bold text-xs rounded-xl active-press shadow-xs"
+                    >
+                      Autorizar
+                    </button>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      playNotificationChime();
+                      await sendNativeNotification('🔔 Teste de Notificação', {
+                        body: 'O som e o alerta de vencimento estão configurados perfeitamente!',
+                        sound: true,
+                      });
+                      showFeedback('Sinal sonoro e notificação de teste disparados!');
+                    }}
+                    className="px-2.5 py-1.5 bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 font-bold text-xs rounded-xl active-press flex items-center gap-1 hover:bg-slate-100"
+                    title="Testar som de notificação"
+                  >
+                    <Volume2 className="w-3.5 h-3.5 text-teal-500" />
+                    <span>Testar Som</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* Notification Toggles List */}
               <div className="space-y-2.5">
                 {notificationSettings.map((item, idx) => (
                   <div

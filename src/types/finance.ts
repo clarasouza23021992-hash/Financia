@@ -309,3 +309,17 @@ export interface SyncLogEntry {
   latencyMs?: number;
 }
 
+export interface CategoryBudget {
+  category: string;
+  limit: number;
+}
+
+export interface SavingsGoal {
+  id: string;
+  name: string;
+  targetAmount: number;
+  currentAmount: number;
+  targetDate?: string;
+  icon?: string;
+}
+

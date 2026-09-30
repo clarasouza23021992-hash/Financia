@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   FileDown, Table, TrendingUp, TrendingDown, Wallet, 
   ArrowUpRight, ArrowDownRight, PieChart, Plus, Trash2, Calendar,
-  CheckCircle2, Clock, AlertCircle, Receipt, Edit3
+  CheckCircle2, Clock, AlertCircle, Receipt, Edit3, Target
 } from 'lucide-react';
 import { Bill, Revenue } from '../types/finance';
 import { exportFinancialPDF, exportFinancialCSV } from '../services/pdfExporter';
@@ -15,6 +15,7 @@ interface CashFlowReportProps {
   onOpenNewRevenue: () => void;
   onEditRevenue?: (revenue: Revenue) => void;
   onDeleteRevenue: (revenue: Revenue) => void;
+  onOpenBudgets?: () => void;
 }
 
 export const CashFlowReport: React.FC<CashFlowReportProps> = ({
@@ -24,6 +25,7 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   onOpenNewRevenue,
   onEditRevenue,
   onDeleteRevenue,
+  onOpenBudgets,
 }) => {
   const totalRevenues = revenues.reduce((acc, r) => acc + r.amount, 0);
   const totalBills = bills.reduce((acc, b) => acc + b.amount, 0);
@@ -55,7 +57,17 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
+            {onOpenBudgets && (
+              <button
+                type="button"
+                onClick={onOpenBudgets}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3 py-2 bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] border border-teal-500/30 rounded-xl text-xs font-bold active-press shadow-2xs"
+              >
+                <Target className="w-4 h-4 text-teal-600 dark:text-[#00E5B5]" />
+                <span>Metas & Teto</span>
+              </button>
+            )}
             <button
               onClick={() => exportFinancialPDF(bills, revenues, selectedMonth)}
               className="flex-1 sm:flex-none flex items-center justify-center gap-1.5 px-3.5 py-2 bg-slate-900 hover:bg-black dark:bg-slate-800 dark:hover:bg-slate-700 text-white rounded-xl text-xs font-bold active-press shadow-xs"

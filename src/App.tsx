@@ -3,10 +3,20 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip
 } from 'lucide-react';
-import { Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, SyncConflictLog, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from './types/finance';
+import { 
+  Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
+  SyncConflictLog, InAppNotification, getBillEffectiveMonth, 
+  isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr 
+} from './types/finance';
 import { cloudkit, isMockBill, isMockRevenue } from './services/cloudkitSync';
+import { 
+  getStoredInAppNotifications, 
+  saveStoredInAppNotifications, 
+  checkAndNotifyBills, 
+  getDefaultNotificationRule 
+} from './services/notificationService';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
 import { BillCard } from './components/BillCard';
@@ -24,6 +34,8 @@ import { PullToRefresh } from './components/PullToRefresh';
 import { CalculatorModal } from './components/CalculatorModal';
 import { DeleteBillModal } from './components/DeleteBillModal';
 import { DeleteRevenueModal } from './components/DeleteRevenueModal';
+import { NotificationCenterModal } from './components/NotificationCenterModal';
+import { BudgetGoalsModal } from './components/BudgetGoalsModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -82,6 +94,12 @@ export default function App() {
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [viewingReceiptBill, setViewingReceiptBill] = useState<Bill | null>(null);
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
+  const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
+  const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+
+  // In-App Notifications History & Due Date Alerts
+  const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
+  const unreadNotificationsCount = useMemo(() => inAppNotifications.filter(n => !n.read).length, [inAppNotifications]);
 
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
@@ -147,21 +165,69 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Check for upcoming bills in current selected month to notify automatically
+  // Check for upcoming bills and trigger local browser/PWA notifications and toast
   useEffect(() => {
+    const rule = getDefaultNotificationRule();
+    const generated = checkAndNotifyBills(bills, rule, notifications);
+    if (generated.length > 0) {
+      setInAppNotifications((prev) => {
+        const merged = [...generated, ...prev];
+        const unique = merged.filter(
+          (item, idx, self) =>
+            idx ===
+            self.findIndex(
+              (t) =>
+                t.id === item.id ||
+                (t.billId && t.billId === item.billId && t.type === item.type)
+            )
+        );
+        saveStoredInAppNotifications(unique);
+        return unique;
+      });
+    }
+
     const currentMonthPrefix = selectedMonth.id;
     const monthBills = bills.filter(b => getBillEffectiveMonth(b) === currentMonthPrefix);
+    const todayStr = new Date().toISOString().split('T')[0];
+    const dueToday = monthBills.find(b => b.dueDate === todayStr && b.status !== 'paid');
     const overdue = monthBills.find(b => b.status === 'overdue');
-    if (overdue) {
-      setToastNotification(`⚠️ Lembrete de Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2)})`);
+
+    if (dueToday) {
+      setToastNotification(`🔔 Vence Hoje: ${dueToday.name} (R$ ${Number(dueToday.amount || 0).toFixed(2).replace('.', ',')})`);
+    } else if (overdue) {
+      setToastNotification(`⚠️ Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2).replace('.', ',')})`);
     } else {
-      const todayStr = new Date().toISOString().split('T')[0];
       const dueSoon = monthBills.find(b => b.status === 'pending' && (b.dueDate || '') >= todayStr);
       if (dueSoon) {
-        setToastNotification(`⏰ Próximo Vencimento: ${dueSoon.name} vence em breve (R$ ${Number(dueSoon.amount || 0).toFixed(2)})`);
+        setToastNotification(`⏰ Próximo Vencimento: ${dueSoon.name} vence em breve (R$ ${Number(dueSoon.amount || 0).toFixed(2).replace('.', ',')})`);
       }
     }
-  }, [bills, selectedMonth.id]);
+  }, [bills, selectedMonth.id, notifications]);
+
+  // Periodic reminder interval every 5 minutes while app is running
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const rule = getDefaultNotificationRule();
+      const generated = checkAndNotifyBills(bills, rule, notifications);
+      if (generated.length > 0) {
+        setInAppNotifications((prev) => {
+          const merged = [...generated, ...prev];
+          const unique = merged.filter(
+            (item, idx, self) =>
+              idx ===
+              self.findIndex(
+                (t) =>
+                  t.id === item.id ||
+                  (t.billId && t.billId === item.billId && t.type === item.type)
+              )
+          );
+          saveStoredInAppNotifications(unique);
+          return unique;
+        });
+      }
+    }, 5 * 60 * 1000);
+    return () => clearInterval(timer);
+  }, [bills, notifications]);
 
   const showTemporaryToast = (msg: string) => {
     setToastNotification(msg);
@@ -303,25 +369,64 @@ export default function App() {
     }
   };
 
+  // Filter counts for active tab badges
+  const filterCounts = useMemo(() => {
+    const today = new Date().toISOString().split('T')[0];
+    return {
+      all: currentMonthBills.length,
+      dueToday: currentMonthBills.filter(b => b.dueDate === today && b.status !== 'paid').length,
+      overdue: currentMonthBills.filter(b => b.status === 'overdue').length,
+      pending: currentMonthBills.filter(b => b.status === 'pending').length,
+      paid: currentMonthBills.filter(b => b.status === 'paid').length,
+      withReceipt: currentMonthBills.filter(b => Boolean(b.receiptUrl)).length,
+    };
+  }, [currentMonthBills]);
+
   // Filtered Bills sorted alphabetically (A-Z) based on status, search, and category
   const filteredBills = useMemo(() => {
+    const todayStr = new Date().toISOString().split('T')[0];
+
     const list = currentMonthBills.filter(bill => {
-      // Status Filter
-      if (statusFilter === 'pending' && bill.status !== 'pending') return false;
-      if (statusFilter === 'paid' && bill.status !== 'paid') return false;
-      if (statusFilter === 'overdue' && bill.status !== 'overdue') return false;
+      // Status & Advanced Filters
+      if (statusFilter === 'due_today') {
+        if (bill.dueDate !== todayStr || bill.status === 'paid') return false;
+      } else if (statusFilter === 'overdue') {
+        if (bill.status !== 'overdue') return false;
+      } else if (statusFilter === 'pending') {
+        if (bill.status !== 'pending') return false;
+      } else if (statusFilter === 'paid') {
+        if (bill.status !== 'paid') return false;
+      } else if (statusFilter === 'with_receipt') {
+        if (!bill.receiptUrl) return false;
+      } else if (statusFilter === 'without_receipt') {
+        if (bill.receiptUrl) return false;
+      } else if (statusFilter.startsWith('profile_')) {
+        const profName = statusFilter.replace('profile_', '').toLowerCase();
+        const inSplit = bill.splitDetails?.some(s => s.name.toLowerCase().includes(profName) && s.percentage > 0);
+        const isPaidBy = (bill.paidBy || '').toLowerCase().includes(profName);
+        const isFavored = (bill.favored || '').toLowerCase().includes(profName);
+        const isName = (bill.name || '').toLowerCase().includes(profName);
+        if (!inSplit && !isPaidBy && !isFavored && !isName) return false;
+      }
 
       // Category Filter
       if (categoryFilter !== 'Todas' && bill.category !== categoryFilter) return false;
 
-      // Search Query
+      // Enhanced Search Query (name, favored, barcode, pix, notes, amount)
       if (searchQuery.trim()) {
-        const query = searchQuery.toLowerCase();
+        const query = searchQuery.toLowerCase().trim();
+        const cleanDigits = query.replace(/\D/g, '');
         const matchesName = (bill.name || '').toLowerCase().includes(query);
         const matchesFavored = (bill.favored || '').toLowerCase().includes(query);
         const matchesCategory = (bill.category || '').toLowerCase().includes(query);
-        const matchesBarcode = (bill.barcode || '').includes(query);
-        if (!matchesName && !matchesFavored && !matchesCategory && !matchesBarcode) return false;
+        const matchesBarcode = cleanDigits.length >= 3 && (bill.barcode || '').replace(/\D/g, '').includes(cleanDigits);
+        const matchesPix = (bill.pixKey || '').toLowerCase().includes(query);
+        const matchesNotes = (bill.notes || '').toLowerCase().includes(query);
+        const matchesAmount = String(bill.amount || '').includes(query) || (Number(bill.amount || 0).toFixed(2).replace('.', ',')).includes(query);
+
+        if (!matchesName && !matchesFavored && !matchesCategory && !matchesBarcode && !matchesPix && !matchesNotes && !matchesAmount) {
+          return false;
+        }
       }
 
       return true;
@@ -620,6 +725,9 @@ export default function App() {
         }}
         onOpenCloudSync={() => setIsCloudDrawerOpen(true)}
         onOpenCalculator={() => setIsCalculatorOpen(true)}
+        onOpenNotifications={() => setIsNotificationCenterOpen(true)}
+        unreadNotificationsCount={unreadNotificationsCount}
+        onOpenBudgets={() => setIsBudgetModalOpen(true)}
         onOpenWifeConnect={() => setIsWifeConnectModalOpen(true)}
         onOpenBoletoScanner={() => setIsBoletoScannerOpen(true)}
         onOpenProfiles={() => setIsProfilesModalOpen(true)}
@@ -634,17 +742,26 @@ export default function App() {
       {/* Intelligent Due Date Notification Toast Banner */}
       {toastNotification && (
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-4 mt-2.5 flex-shrink-0">
-          <div className="bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs">
+          <div 
+            onClick={() => setIsNotificationCenterOpen(true)}
+            className="cursor-pointer bg-slate-900 dark:bg-slate-800 text-white px-4 py-2.5 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs hover:bg-slate-800 transition-colors"
+          >
             <div className="flex items-center gap-2 min-w-0">
               <Bell className="w-4 h-4 text-[#FFD166] flex-shrink-0 animate-pulse" />
               <span className="font-semibold truncate">{toastNotification}</span>
             </div>
-            <button
-              onClick={() => setToastNotification(null)}
-              className="text-slate-400 hover:text-white text-[11px] font-bold px-1.5 py-0.5 flex-shrink-0"
-            >
-              Dispensar
-            </button>
+            <div className="flex items-center gap-1.5 flex-shrink-0">
+              <span className="text-[10px] text-teal-400 font-bold hidden sm:inline">Ver lembretes</span>
+              <button
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setToastNotification(null);
+                }}
+                className="text-slate-400 hover:text-white text-[11px] font-bold px-1.5 py-0.5"
+              >
+                Dispensar
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -740,21 +857,49 @@ export default function App() {
             <div className="px-4 py-2">
               <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
                 {[
-                  { id: 'all', label: `Todas deste mês (${currentMonthBills.length})` },
-                  { id: 'paid', label: `Pagas (${currentMonthBills.filter(b => b.status === 'paid').length})` },
-                ].map(f => (
-                  <button
-                    key={f.id}
-                    onClick={() => setStatusFilter(f.id)}
-                    className={`px-3.5 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active-press ${
-                      statusFilter === f.id
-                        ? 'bg-[#0A1128] dark:bg-teal-500 text-white dark:text-[#0A1128] shadow-xs'
-                        : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
-                    }`}
-                  >
-                    {f.label}
-                  </button>
-                ))}
+                  { id: 'all', label: 'Todas', count: filterCounts.all },
+                  { id: 'due_today', label: '🚨 Vencem Hoje', count: filterCounts.dueToday, urgent: filterCounts.dueToday > 0 },
+                  { id: 'overdue', label: '⚠️ Atrasadas', count: filterCounts.overdue, warning: filterCounts.overdue > 0 },
+                  { id: 'pending', label: '⏳ Pendentes', count: filterCounts.pending },
+                  { id: 'paid', label: '✅ Pagas', count: filterCounts.paid },
+                  { id: 'with_receipt', label: '📎 Com Comprovante', count: filterCounts.withReceipt },
+                  ...profiles.map(p => ({
+                    id: `profile_${p.name}`,
+                    label: `👤 ${p.name}`,
+                    count: currentMonthBills.filter(b => 
+                      b.splitDetails?.some(s => s.name.toLowerCase() === p.name.toLowerCase() && s.percentage > 0) ||
+                      (b.paidBy || '').toLowerCase() === p.name.toLowerCase()
+                    ).length
+                  })),
+                ].map(f => {
+                  const isSelected = statusFilter === f.id;
+                  return (
+                    <button
+                      key={f.id}
+                      onClick={() => setStatusFilter(f.id)}
+                      className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active-press flex items-center gap-1.5 ${
+                        isSelected
+                          ? 'bg-[#0A1128] dark:bg-teal-500 text-white dark:text-[#0A1128] shadow-xs'
+                          : f.urgent
+                          ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse'
+                          : f.warning
+                          ? 'bg-amber-50 dark:bg-amber-950/40 text-amber-700 dark:text-amber-300 border border-amber-300 dark:border-amber-800'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border border-slate-200 dark:border-slate-700'
+                      }`}
+                    >
+                      <span>{f.label}</span>
+                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                        isSelected
+                          ? 'bg-white/20 dark:bg-black/20 text-white dark:text-[#0A1128]'
+                          : f.urgent
+                          ? 'bg-rose-500 text-white'
+                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                      }`}>
+                        {f.count}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             </div>
 
@@ -762,8 +907,29 @@ export default function App() {
             <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
               <button
                 type="button"
-                onClick={() => setIsCalculatorOpen(true)}
+                onClick={() => setIsBudgetModalOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
+              >
+                <Target className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                <span>Metas & Teto</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsNotificationCenterOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+              >
+                <Bell className="w-3.5 h-3.5 text-[#FFD166]" />
+                <span>Lembretes</span>
+                {unreadNotificationsCount > 0 && (
+                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                )}
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setIsCalculatorOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
               >
                 <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
                 <span>Calculadora</span>
@@ -772,10 +938,10 @@ export default function App() {
               <button
                 type="button"
                 onClick={() => setIsBoletoScannerOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
               >
                 <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                <span>Escanear Boleto / Pix com IA</span>
+                <span>Escanear Boleto / Pix</span>
               </button>
             </div>
 
@@ -908,6 +1074,7 @@ export default function App() {
             }}
             onEditRevenue={handleOpenEditRevenue}
             onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
+            onOpenBudgets={() => setIsBudgetModalOpen(true)}
           />
         )}
           </PullToRefresh>
@@ -1099,6 +1266,41 @@ export default function App() {
         currentMonthLabel={selectedMonth.label}
         onDeleteCurrentMonth={handleDeleteRevenueSingleMonth}
         onDeleteAllMonths={handleDeleteRevenueAllMonths}
+      />
+
+      <NotificationCenterModal
+        isOpen={isNotificationCenterOpen}
+        onClose={() => setIsNotificationCenterOpen(false)}
+        notifications={inAppNotifications}
+        onMarkAsRead={(id) => {
+          const updated = inAppNotifications.map(n => n.id === id ? { ...n, read: true } : n);
+          setInAppNotifications(updated);
+          saveStoredInAppNotifications(updated);
+        }}
+        onMarkAllAsRead={() => {
+          const updated = inAppNotifications.map(n => ({ ...n, read: true }));
+          setInAppNotifications(updated);
+          saveStoredInAppNotifications(updated);
+        }}
+        onClearAll={() => {
+          setInAppNotifications([]);
+          saveStoredInAppNotifications([]);
+        }}
+        bills={bills}
+        onSelectBill={(bill) => {
+          setEditingBill(bill);
+          setIsBillModalOpen(true);
+        }}
+        onOpenSettings={() => {
+          setIsProfilesModalOpen(true);
+        }}
+      />
+
+      <BudgetGoalsModal
+        isOpen={isBudgetModalOpen}
+        onClose={() => setIsBudgetModalOpen(false)}
+        bills={currentMonthBills}
+        selectedMonthLabel={selectedMonth.label}
       />
     </div>
   );

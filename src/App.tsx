@@ -3,7 +3,7 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -17,6 +17,7 @@ import {
   checkAndNotifyBills, 
   getDefaultNotificationRule 
 } from './services/notificationService';
+import { getStoredCategories } from './utils/categories';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
 import { BillCard } from './components/BillCard';
@@ -36,6 +37,7 @@ import { DeleteBillModal } from './components/DeleteBillModal';
 import { DeleteRevenueModal } from './components/DeleteRevenueModal';
 import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { BudgetGoalsModal } from './components/BudgetGoalsModal';
+import { CategoriesManagerModal } from './components/CategoriesManagerModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -96,6 +98,7 @@ export default function App() {
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
+  const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
 
   // In-App Notifications History & Due Date Alerts
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
@@ -436,12 +439,40 @@ export default function App() {
     return list.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'pt-BR', { sensitivity: 'base' }));
   }, [currentMonthBills, statusFilter, categoryFilter, searchQuery]);
 
-  // Categories list for filter chips
+  // Categories list for filter chips & category dropdown
   const categoriesList = useMemo(() => {
     const set = new Set<string>();
-    currentMonthBills.forEach(b => set.add(b.category));
+    const stored = getStoredCategories();
+    stored.forEach(c => set.add(c.name));
+    currentMonthBills.forEach(b => {
+      if (b.category) set.add(b.category);
+    });
     return ['Todas', ...Array.from(set)];
-  }, [currentMonthBills]);
+  }, [currentMonthBills, isCategoriesModalOpen]);
+
+  // Migrate bills when a category is renamed or deleted
+  const handleMigrateBillsCategory = (oldCategory: string, newCategory: string) => {
+    const allBills = cloudkit.getBills();
+    let migratedCount = 0;
+    const updated = allBills.map(b => {
+      if (b.category === oldCategory) {
+        migratedCount++;
+        return {
+          ...b,
+          category: newCategory,
+          version: (b.version || 1) + 1,
+          updatedAt: new Date().toISOString(),
+        };
+      }
+      return b;
+    });
+
+    if (migratedCount > 0) {
+      cloudkit.saveBills(updated);
+      setBills(cloudkit.getBills());
+      showTemporaryToast(`🔄 ${migratedCount} conta(s) reclassificadas de "${oldCategory}" para "${newCategory}".`);
+    }
+  };
 
   // Handlers for Bill operations
   const handleSaveBill = (
@@ -937,6 +968,16 @@ export default function App() {
 
               <button
                 type="button"
+                onClick={() => setIsCategoriesModalOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+                title="Gerenciar categorias de despesas"
+              >
+                <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                <span>Categorias</span>
+              </button>
+
+              <button
+                type="button"
                 onClick={() => setIsBoletoScannerOpen(true)}
                 className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
               >
@@ -967,15 +1008,26 @@ export default function App() {
                   )}
                 </div>
 
-                <select
-                  value={categoryFilter}
-                  onChange={(e) => setCategoryFilter(e.target.value)}
-                  className="bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none max-w-[130px]"
-                >
-                  {categoriesList.map(cat => (
-                    <option key={cat} value={cat}>{cat}</option>
-                  ))}
-                </select>
+                <div className="flex items-center gap-1 flex-shrink-0">
+                  <select
+                    value={categoryFilter}
+                    onChange={(e) => setCategoryFilter(e.target.value)}
+                    className="bg-slate-50 dark:bg-slate-800 text-[11px] font-semibold text-slate-700 dark:text-slate-200 px-2.5 py-1.5 rounded-xl border border-slate-200 dark:border-slate-700 focus:outline-none max-w-[130px] truncate"
+                  >
+                    {categoriesList.map(cat => (
+                      <option key={cat} value={cat}>{cat}</option>
+                    ))}
+                  </select>
+
+                  <button
+                    type="button"
+                    onClick={() => setIsCategoriesModalOpen(true)}
+                    className="p-1.5 bg-slate-50 dark:bg-slate-800 text-slate-500 hover:text-teal-600 dark:hover:text-teal-300 rounded-xl border border-slate-200 dark:border-slate-700 active-press transition-colors"
+                    title="Gerenciar categorias de despesas (criar, renomear, excluir)"
+                  >
+                    <Tag className="w-3.5 h-3.5" />
+                  </button>
+                </div>
               </div>
             </div>
 
@@ -1150,6 +1202,7 @@ export default function App() {
         onSave={handleSaveBill}
         initialBill={editingBill}
         defaultMonth={selectedMonth.id}
+        onOpenManageCategories={() => setIsCategoriesModalOpen(true)}
       />
 
       <RevenueModal
@@ -1301,6 +1354,13 @@ export default function App() {
         onClose={() => setIsBudgetModalOpen(false)}
         bills={currentMonthBills}
         selectedMonthLabel={selectedMonth.label}
+      />
+
+      <CategoriesManagerModal
+        isOpen={isCategoriesModalOpen}
+        onClose={() => setIsCategoriesModalOpen(false)}
+        bills={bills}
+        onMigrateBillsCategory={handleMigrateBillsCategory}
       />
     </div>
   );

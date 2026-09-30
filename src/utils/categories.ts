@@ -16,6 +16,21 @@ import {
   Wrench,
   ReceiptText,
   CircleDollarSign,
+  Utensils,
+  Dumbbell,
+  Plane,
+  Gift,
+  Tag,
+  Coffee,
+  Film,
+  ShoppingBag,
+  Smartphone,
+  Briefcase,
+  Shield,
+  Book,
+  Music,
+  Smile,
+  Laptop,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -28,6 +43,15 @@ export interface CategoryDefinition {
   badgeText: string;
   badgeBorder: string;
   iconColor: string;
+}
+
+export interface CustomCategory {
+  id: string;
+  name: string;
+  shortName: string;
+  iconName: string;
+  color: string;
+  isDefault?: boolean;
 }
 
 export const CATEGORIES_LIST: CategoryDefinition[] = [
@@ -193,23 +217,209 @@ export const CATEGORIES_LIST: CategoryDefinition[] = [
   },
 ];
 
+export const DEFAULT_CUSTOM_CATEGORIES: CustomCategory[] = [
+  { id: 'energia', name: 'Energia Elétrica (Luz)', shortName: 'Energia', iconName: 'Zap', color: 'amber', isDefault: true },
+  { id: 'agua', name: 'Água & Saneamento', shortName: 'Água', iconName: 'Droplets', color: 'cyan', isDefault: true },
+  { id: 'gas', name: 'Gás (Encanado / Botijão)', shortName: 'Gás', iconName: 'Flame', color: 'orange', isDefault: true },
+  { id: 'moradia', name: 'Moradia & Condomínio', shortName: 'Moradia', iconName: 'Building2', color: 'indigo', isDefault: true },
+  { id: 'internet', name: 'Internet, TV & Telefonia', shortName: 'Internet', iconName: 'Wifi', color: 'cyan', isDefault: true },
+  { id: 'alimentacao', name: 'Alimentação & Supermercado', shortName: 'Mercado', iconName: 'ShoppingCart', color: 'emerald', isDefault: true },
+  { id: 'transporte', name: 'Transporte & Combustível', shortName: 'Transporte', iconName: 'Car', color: 'blue', isDefault: true },
+  { id: 'cartao', name: 'Cartão de Crédito', shortName: 'Cartão', iconName: 'CreditCard', color: 'purple', isDefault: true },
+  { id: 'financiamento', name: 'Financiamentos & Empréstimos', shortName: 'Financiamento', iconName: 'Landmark', color: 'slate', isDefault: true },
+  { id: 'saude', name: 'Saúde & Farmácia', shortName: 'Saúde', iconName: 'HeartPulse', color: 'rose', isDefault: true },
+  { id: 'educacao', name: 'Educação & Cursos', shortName: 'Educação', iconName: 'GraduationCap', color: 'teal', isDefault: true },
+  { id: 'lazer', name: 'Lazer & Assinaturas', shortName: 'Lazer', iconName: 'Tv', color: 'purple', isDefault: true },
+  { id: 'pets', name: 'Pets & Animais', shortName: 'Pets', iconName: 'Sparkles', color: 'amber', isDefault: true },
+  { id: 'manutencao', name: 'Manutenção & Reformas', shortName: 'Manutenção', iconName: 'Wrench', color: 'slate', isDefault: true },
+  { id: 'impostos', name: 'Impostos & Tributos (IPTU/IPVA)', shortName: 'Tributos', iconName: 'ReceiptText', color: 'amber', isDefault: true },
+  { id: 'outras', name: 'Outras Despesas', shortName: 'Outras', iconName: 'CircleDollarSign', color: 'slate', isDefault: true },
+];
+
+export const COLOR_THEMES: Record<string, { bg: string; text: string; border: string; icon: string }> = {
+  teal: {
+    bg: 'bg-teal-50 dark:bg-teal-950/40',
+    text: 'text-teal-800 dark:text-teal-300',
+    border: 'border-teal-200 dark:border-teal-800/60',
+    icon: 'text-teal-600 dark:text-teal-400',
+  },
+  emerald: {
+    bg: 'bg-emerald-50 dark:bg-emerald-950/40',
+    text: 'text-emerald-800 dark:text-emerald-300',
+    border: 'border-emerald-200 dark:border-emerald-800/60',
+    icon: 'text-emerald-600 dark:text-emerald-400',
+  },
+  blue: {
+    bg: 'bg-blue-50 dark:bg-blue-950/40',
+    text: 'text-blue-800 dark:text-blue-300',
+    border: 'border-blue-200 dark:border-blue-800/60',
+    icon: 'text-blue-600 dark:text-blue-400',
+  },
+  indigo: {
+    bg: 'bg-indigo-50 dark:bg-indigo-950/40',
+    text: 'text-indigo-800 dark:text-indigo-300',
+    border: 'border-indigo-200 dark:border-indigo-800/60',
+    icon: 'text-indigo-600 dark:text-indigo-400',
+  },
+  purple: {
+    bg: 'bg-purple-50 dark:bg-purple-950/40',
+    text: 'text-purple-800 dark:text-purple-300',
+    border: 'border-purple-200 dark:border-purple-800/60',
+    icon: 'text-purple-600 dark:text-purple-400',
+  },
+  rose: {
+    bg: 'bg-rose-50 dark:bg-rose-950/40',
+    text: 'text-rose-800 dark:text-rose-300',
+    border: 'border-rose-200 dark:border-rose-800/60',
+    icon: 'text-rose-600 dark:text-rose-400',
+  },
+  amber: {
+    bg: 'bg-amber-50 dark:bg-amber-950/40',
+    text: 'text-amber-800 dark:text-amber-300',
+    border: 'border-amber-200 dark:border-amber-800/60',
+    icon: 'text-amber-600 dark:text-amber-400',
+  },
+  orange: {
+    bg: 'bg-orange-50 dark:bg-orange-950/40',
+    text: 'text-orange-800 dark:text-orange-300',
+    border: 'border-orange-200 dark:border-orange-800/60',
+    icon: 'text-orange-600 dark:text-orange-400',
+  },
+  cyan: {
+    bg: 'bg-cyan-50 dark:bg-cyan-950/40',
+    text: 'text-cyan-800 dark:text-cyan-300',
+    border: 'border-cyan-200 dark:border-cyan-800/60',
+    icon: 'text-cyan-600 dark:text-cyan-400',
+  },
+  slate: {
+    bg: 'bg-slate-100 dark:bg-slate-800',
+    text: 'text-slate-800 dark:text-slate-200',
+    border: 'border-slate-300 dark:border-slate-700',
+    icon: 'text-slate-600 dark:text-slate-300',
+  },
+};
+
+export const AVAILABLE_ICONS = [
+  { name: 'Zap', icon: Zap, label: 'Energia / Luz' },
+  { name: 'Droplets', icon: Droplets, label: 'Água / Saneamento' },
+  { name: 'Flame', icon: Flame, label: 'Gás / Cozinha' },
+  { name: 'Building2', icon: Building2, label: 'Moradia / Condomínio' },
+  { name: 'Wifi', icon: Wifi, label: 'Internet / Wi-Fi' },
+  { name: 'ShoppingCart', icon: ShoppingCart, label: 'Mercado / Compras' },
+  { name: 'Car', icon: Car, label: 'Carro / Combustível' },
+  { name: 'CreditCard', icon: CreditCard, label: 'Cartão de Crédito' },
+  { name: 'Landmark', icon: Landmark, label: 'Banco / Financiamento' },
+  { name: 'HeartPulse', icon: HeartPulse, label: 'Saúde / Farmácia' },
+  { name: 'GraduationCap', icon: GraduationCap, label: 'Educação / Cursos' },
+  { name: 'Tv', icon: Tv, label: 'Streaming / Assinaturas' },
+  { name: 'Sparkles', icon: Sparkles, label: 'Pets / Cuidados' },
+  { name: 'Wrench', icon: Wrench, label: 'Manutenção / Obras' },
+  { name: 'ReceiptText', icon: ReceiptText, label: 'Impostos / Tributos' },
+  { name: 'CircleDollarSign', icon: CircleDollarSign, label: 'Dinheiro / Geral' },
+  { name: 'Utensils', icon: Utensils, label: 'Restaurante / Alimentação' },
+  { name: 'Dumbbell', icon: Dumbbell, label: 'Academia / Esporte' },
+  { name: 'Plane', icon: Plane, label: 'Viagem / Lazer' },
+  { name: 'Gift', icon: Gift, label: 'Presentes / Datas' },
+  { name: 'Tag', icon: Tag, label: 'Etiqueta / Outros' },
+  { name: 'Coffee', icon: Coffee, label: 'Café / Padaria' },
+  { name: 'Film', icon: Film, label: 'Cinema / Lazer' },
+  { name: 'ShoppingBag', icon: ShoppingBag, label: 'Roupas / Vestuário' },
+  { name: 'Smartphone', icon: Smartphone, label: 'Celular / Planos' },
+  { name: 'Briefcase', icon: Briefcase, label: 'Trabalho / Empresa' },
+  { name: 'Shield', icon: Shield, label: 'Seguros / Proteção' },
+  { name: 'Book', icon: Book, label: 'Livros / Leitura' },
+  { name: 'Music', icon: Music, label: 'Música / Shows' },
+  { name: 'Smile', icon: Smile, label: 'Beleza / Estética' },
+  { name: 'Laptop', icon: Laptop, label: 'Tecnologia / Hardware' },
+];
+
+const CUSTOM_CATEGORIES_STORAGE_KEY = 'financas_custom_categories_v1';
+
+export function getCategoryIcon(iconName: string): LucideIcon {
+  const found = AVAILABLE_ICONS.find(i => i.name.toLowerCase() === (iconName || '').toLowerCase());
+  return found ? found.icon : Tag;
+}
+
+export function getStoredCategories(): CustomCategory[] {
+  if (typeof window === 'undefined') return DEFAULT_CUSTOM_CATEGORIES;
+  try {
+    const raw = localStorage.getItem(CUSTOM_CATEGORIES_STORAGE_KEY);
+    if (!raw) return DEFAULT_CUSTOM_CATEGORIES;
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      return parsed;
+    }
+    return DEFAULT_CUSTOM_CATEGORIES;
+  } catch {
+    return DEFAULT_CUSTOM_CATEGORIES;
+  }
+}
+
+export function saveStoredCategories(categories: CustomCategory[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CUSTOM_CATEGORIES_STORAGE_KEY, JSON.stringify(categories));
+    window.dispatchEvent(new CustomEvent('financas-categories-updated', { detail: categories }));
+  } catch (err) {
+    console.warn('Failed to save categories:', err);
+  }
+}
+
+export function resetToDefaultCategories(): CustomCategory[] {
+  saveStoredCategories(DEFAULT_CUSTOM_CATEGORIES);
+  return DEFAULT_CUSTOM_CATEGORIES;
+}
+
+export function getCategoryDefinition(cat: CustomCategory): CategoryDefinition {
+  const icon = getCategoryIcon(cat.iconName);
+  const theme = COLOR_THEMES[cat.color] || COLOR_THEMES.teal;
+  return {
+    id: cat.id,
+    name: cat.name,
+    shortName: cat.shortName || cat.name,
+    icon,
+    badgeBg: theme.bg,
+    badgeText: theme.text,
+    badgeBorder: theme.border,
+    iconColor: theme.icon,
+  };
+}
+
 export const CATEGORY_NAMES = CATEGORIES_LIST.map(c => c.name);
 
-// Find category definition with fuzzy/backward compatibility matching
+// Find category definition with fuzzy/backward compatibility matching & custom category support
 export function getCategoryInfo(categoryName: string): CategoryDefinition {
   if (!categoryName) return CATEGORIES_LIST[CATEGORIES_LIST.length - 1];
   const lower = categoryName.toLowerCase().trim();
 
-  // Direct match
+  // 1. Direct match in user custom categories
+  const stored = getStoredCategories();
+  const customMatch = stored.find(
+    c => c.name.toLowerCase() === lower || c.id === lower || (c.shortName && c.shortName.toLowerCase() === lower)
+  );
+  if (customMatch) {
+    return getCategoryDefinition(customMatch);
+  }
+
+  // 2. Direct match in static default list
   const exact = CATEGORIES_LIST.find(c => c.name.toLowerCase() === lower || c.id === lower);
   if (exact) return exact;
 
-  // Use smart inference
+  // 3. Use smart inference
   const inferred = inferCategoryFromName(categoryName);
   if (inferred) return inferred;
 
-  // Fallback to "Outras Despesas"
-  return CATEGORIES_LIST[CATEGORIES_LIST.length - 1];
+  // 4. Dynamic fallback with nice badge
+  return {
+    id: `custom_${lower.replace(/\s+/g, '_')}`,
+    name: categoryName,
+    shortName: categoryName.length > 15 ? categoryName.substring(0, 13) + '...' : categoryName,
+    icon: Tag,
+    badgeBg: 'bg-teal-50 dark:bg-teal-950/40',
+    badgeText: 'text-teal-800 dark:text-teal-300',
+    badgeBorder: 'border-teal-200 dark:border-teal-800/60',
+    iconColor: 'text-teal-600 dark:text-teal-400',
+  };
 }
 
 // Intelligent Category Inference from Bill Name, Description or Favored

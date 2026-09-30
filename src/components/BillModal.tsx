@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2, Calendar } from 'lucide-react';
 import { Bill, PixKeyType, RecurrenceType, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
-import { CATEGORIES_LIST, getCategoryInfo, inferCategoryFromName } from '../utils/categories';
+import { CATEGORIES_LIST, getCategoryInfo, inferCategoryFromName, getStoredCategories } from '../utils/categories';
 
 interface BillModalProps {
   isOpen: boolean;
@@ -17,9 +17,8 @@ interface BillModalProps {
   ) => void;
   initialBill?: Bill | null;
   defaultMonth?: string;
+  onOpenManageCategories?: () => void;
 }
-
-const CATEGORIES = CATEGORIES_LIST.map(c => c.name);
 
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
 const RECURRENCE_OPTIONS: RecurrenceType[] = ['Mensal Fixa', 'Parcelada', 'Única / Pontual'];
@@ -30,7 +29,21 @@ export const BillModal: React.FC<BillModalProps> = ({
   onSave,
   initialBill,
   defaultMonth,
+  onOpenManageCategories,
 }) => {
+  const [availableCategories, setAvailableCategories] = useState<string[]>(() => {
+    return getStoredCategories().map(c => c.name);
+  });
+
+  // Keep categories updated if user creates/renames categories
+  useEffect(() => {
+    const handleUpdate = () => {
+      setAvailableCategories(getStoredCategories().map(c => c.name));
+    };
+    handleUpdate();
+    window.addEventListener('financas-categories-updated', handleUpdate);
+    return () => window.removeEventListener('financas-categories-updated', handleUpdate);
+  }, [isOpen]);
   const [name, setName] = useState('');
   const [amount, setAmount] = useState('');
   const [dueDate, setDueDate] = useState('');
@@ -722,23 +735,35 @@ export const BillModal: React.FC<BillModalProps> = ({
               <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
                 Categoria
               </label>
-              {(() => {
-                const info = getCategoryInfo(category);
-                const IconComp = info.icon;
-                return (
-                  <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full border ${info.badgeBg} ${info.badgeText} ${info.badgeBorder}`}>
-                    <IconComp className={`w-3.5 h-3.5 ${info.iconColor}`} />
-                    <span>{info.shortName || info.name}</span>
-                  </span>
-                );
-              })()}
+              <div className="flex items-center gap-2">
+                {onOpenManageCategories && (
+                  <button
+                    type="button"
+                    onClick={onOpenManageCategories}
+                    className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline flex items-center gap-1 active-press"
+                    title="Criar, renomear ou excluir categorias"
+                  >
+                    <span>⚙️ Gerenciar Categorias</span>
+                  </button>
+                )}
+                {(() => {
+                  const info = getCategoryInfo(category);
+                  const IconComp = info.icon;
+                  return (
+                    <span className={`inline-flex items-center gap-1.5 text-xs font-bold px-2 py-0.5 rounded-full border ${info.badgeBg} ${info.badgeText} ${info.badgeBorder}`}>
+                      <IconComp className={`w-3.5 h-3.5 ${info.iconColor}`} />
+                      <span>{info.shortName || info.name}</span>
+                    </span>
+                  );
+                })()}
+              </div>
             </div>
             <select
               value={category}
               onChange={(e) => setCategory(e.target.value)}
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             >
-              {CATEGORIES.map((cat) => (
+              {availableCategories.map((cat) => (
                 <option key={cat} value={cat}>
                   {cat}
                 </option>

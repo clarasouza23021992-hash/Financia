@@ -1203,6 +1203,7 @@ export default function App() {
         initialBill={editingBill}
         defaultMonth={selectedMonth.id}
         onOpenManageCategories={() => setIsCategoriesModalOpen(true)}
+        existingBills={bills}
       />
 
       <RevenueModal

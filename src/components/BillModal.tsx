@@ -1,8 +1,14 @@
-import React, { useState, useEffect } from 'react';
-import { X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, ClipboardPaste, CheckCircle2, Building2, Calendar } from 'lucide-react';
+import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { 
+  X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, 
+  ClipboardPaste, CheckCircle2, Building2, Calendar, History, 
+  TrendingUp, Check, ArrowRight, Wallet
+} from 'lucide-react';
 import { Bill, PixKeyType, RecurrenceType, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
 import { CATEGORIES_LIST, getCategoryInfo, inferCategoryFromName, getStoredCategories } from '../utils/categories';
+import { getFavoredHistory, getFrequentFavoreds, FavoredHistorySummary, FrequentFavoredItem } from '../utils/historySuggestions';
+import { cloudkit } from '../services/cloudkitSync';
 
 interface BillModalProps {
   isOpen: boolean;
@@ -18,6 +24,7 @@ interface BillModalProps {
   initialBill?: Bill | null;
   defaultMonth?: string;
   onOpenManageCategories?: () => void;
+  existingBills?: Bill[];
 }
 
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
@@ -30,6 +37,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   initialBill,
   defaultMonth,
   onOpenManageCategories,
+  existingBills,
 }) => {
   const [availableCategories, setAvailableCategories] = useState<string[]>(() => {
     return getStoredCategories().map(c => c.name);
@@ -73,6 +81,92 @@ export const BillModal: React.FC<BillModalProps> = ({
   // Mês em que o usuário quer pagar (caso queira pagar antes ou depois do mês de vencimento)
   const [paymentMonth, setPaymentMonth] = useState<string>('');
   const [customPaymentMonthEnabled, setCustomPaymentMonthEnabled] = useState<boolean>(false);
+
+  // History suggestions state & notice
+  const [historyNotice, setHistoryNotice] = useState<string | null>(null);
+
+  // Compute all bills list
+  const allBillsList = useMemo(() => {
+    return existingBills && existingBills.length > 0 ? existingBills : cloudkit.getBills();
+  }, [existingBills, isOpen]);
+
+  // Frequent past favored companies (for 1-tap quick suggestions when favored is empty)
+  const frequentFavoreds = useMemo(() => {
+    return getFrequentFavoreds(allBillsList, 6);
+  }, [allBillsList]);
+
+  // Query to find history: checks both favored and name
+  const historyQuery = favored.trim() || name.trim();
+
+  const favoredHistory = useMemo(() => {
+    if (!historyQuery) return null;
+    return getFavoredHistory(historyQuery, allBillsList, initialBill?.id);
+  }, [historyQuery, allBillsList, initialBill?.id]);
+
+  const handleApplySuggestedCategory = (catName: string) => {
+    setCategory(catName);
+    setHistoryNotice(`📁 Categoria "${catName}" aplicada do histórico!`);
+    setTimeout(() => setHistoryNotice(null), 4000);
+  };
+
+  const handleApplySuggestedAmount = (val: number, label?: string) => {
+    setAmount(val.toFixed(2).replace('.', ','));
+    setHistoryNotice(`💰 Valor R$ ${val.toFixed(2).replace('.', ',')}${label ? ` (${label})` : ''} aplicado!`);
+    setTimeout(() => setHistoryNotice(null), 4000);
+  };
+
+  const handleApplyDueDay = (day: number) => {
+    const currentBase = dueDate || (defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0]);
+    const [y, m] = currentBase.split('-').map(Number);
+    const maxDays = new Date(y, m, 0).getDate();
+    const safeDay = String(Math.min(day, maxDays)).padStart(2, '0');
+    setDueDate(`${String(y)}-${String(m).padStart(2, '0')}-${safeDay}`);
+    setHistoryNotice(`📅 Vencimento ajustado para o dia ${safeDay}!`);
+    setTimeout(() => setHistoryNotice(null), 4000);
+  };
+
+  const handleApplyAllFromHistory = (hist: FavoredHistorySummary) => {
+    if (hist.suggestedCategory) {
+      setCategory(hist.suggestedCategory);
+    }
+    if (hist.lastAmount && hist.lastAmount > 0) {
+      setAmount(hist.lastAmount.toFixed(2).replace('.', ','));
+    }
+    if (hist.matchedFavored && !favored) {
+      setFavored(hist.matchedFavored);
+    }
+    if (hist.lastPixKey && !pixKey) {
+      setPixKey(hist.lastPixKey);
+      if (hist.lastPixType) setPixType(hist.lastPixType as any);
+    }
+    if (hist.lastBarcode && !barcode) {
+      setBarcode(hist.lastBarcode);
+    }
+    if (hist.commonDueDay) {
+      const currentBase = dueDate || (defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0]);
+      const [y, m] = currentBase.split('-').map(Number);
+      const maxDays = new Date(y, m, 0).getDate();
+      const safeDay = String(Math.min(hist.commonDueDay, maxDays)).padStart(2, '0');
+      setDueDate(`${String(y)}-${String(m).padStart(2, '0')}-${safeDay}`);
+    }
+    setHistoryNotice(`✨ Dados do último pagamento aplicados com sucesso!`);
+    setTimeout(() => setHistoryNotice(null), 4500);
+  };
+
+  const handleSelectFrequentFavored = (item: FrequentFavoredItem) => {
+    setFavored(item.favored);
+    if (!name || name === 'Conta sem nome') {
+      setName(item.favored);
+    }
+    if (item.category) {
+      setCategory(item.category);
+    }
+    if (item.lastAmount && item.lastAmount > 0 && !amount) {
+      setAmount(item.lastAmount.toFixed(2).replace('.', ','));
+    }
+    setHistoryNotice(`⚡ Favorecido "${item.favored}" e histórico carregados!`);
+    setTimeout(() => setHistoryNotice(null), 4000);
+  };
 
   const prevIsOpenRef = React.useRef(false);
   const initialBillIdRef = React.useRef<string | undefined>(undefined);
@@ -472,6 +566,24 @@ export const BillModal: React.FC<BillModalProps> = ({
               </div>
             )}
           </div>
+
+          {/* Feedback Notice for Applied History Suggestions */}
+          {historyNotice && (
+            <div className="p-3 bg-gradient-to-r from-emerald-500 to-teal-600 text-white rounded-2xl text-xs font-bold flex items-center justify-between gap-2 shadow-md animate-in fade-in zoom-in-95 duration-200">
+              <div className="flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-white flex-shrink-0" />
+                <span>{historyNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setHistoryNotice(null)}
+                className="text-white/80 hover:text-white p-1 rounded-full hover:bg-white/10 transition-colors"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Nome da Conta */}
           <div>
             <div className="flex items-center justify-between mb-1">
@@ -493,6 +605,264 @@ export const BillModal: React.FC<BillModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             />
           </div>
+
+          {/* Empresa / Beneficiário */}
+          <div>
+            <div className="flex items-center justify-between mb-1">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Empresa / Favorecido (Para sugestões do histórico)
+              </label>
+              {favored && (
+                <span className="text-[11px] font-semibold text-indigo-600 dark:text-indigo-400 flex items-center gap-1">
+                  <Building2 className="w-3 h-3" />
+                  <span>Favorecido</span>
+                </span>
+              )}
+            </div>
+            <input
+              type="text"
+              value={favored}
+              onChange={(e) => handleFavoredChange(e.target.value)}
+              placeholder="Ex: Caixa Econômica, Enel, Sabesp, Claro, Netflix, Imobiliária"
+              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
+            />
+
+            {/* Favorecidos Frequentes (Atalhos rápidos para 1 clique) */}
+            {(!favored || favored.length < 2) && frequentFavoreds.length > 0 && (
+              <div className="mt-2 space-y-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold text-slate-500 dark:text-slate-400">
+                  <span className="flex items-center gap-1">
+                    <Building2 className="w-3 h-3 text-teal-600 dark:text-teal-400" />
+                    <span>Favorecidos Frequentes (toque para carregar histórico):</span>
+                  </span>
+                </div>
+                <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                  {frequentFavoreds.map((item) => (
+                    <button
+                      key={item.favored}
+                      type="button"
+                      onClick={() => handleSelectFrequentFavored(item)}
+                      className="px-2.5 py-1 rounded-lg text-xs font-semibold bg-slate-100 hover:bg-teal-50 dark:bg-slate-800 dark:hover:bg-teal-950/40 text-slate-700 dark:text-slate-300 hover:text-teal-700 dark:hover:text-teal-300 border border-slate-200 dark:border-slate-700 hover:border-teal-300 transition-all flex items-center gap-1.5 flex-shrink-0 active:scale-95 shadow-2xs"
+                      title={`Carregar histórico de ${item.favored} (${item.count} pagamentos)`}
+                    >
+                      <span>{item.favored}</span>
+                      <span className="text-[10px] font-bold px-1.5 py-0.2 rounded-full bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300">
+                        {item.count}x
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* SEÇÃO DE SUGESTÕES COM BASE NO HISTÓRICO DE PAGAMENTOS ANTERIORES PARA O MESMO FAVORECIDO */}
+          {favoredHistory && (
+            <div className="rounded-2xl border-2 border-indigo-200 dark:border-indigo-900/60 bg-gradient-to-br from-indigo-50/70 via-white to-teal-50/50 dark:from-[#111c38] dark:via-[#0e172f] dark:to-[#0f242e] p-3.5 space-y-3 shadow-xs animate-in fade-in duration-200">
+              {/* Header do Card com Título e Botão 'Preencher Tudo' */}
+              <div className="flex items-center justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5 text-xs font-bold text-indigo-950 dark:text-indigo-200">
+                    <History className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0" />
+                    <span className="truncate">Histórico de {favoredHistory.matchedFavored}</span>
+                  </div>
+                  <p className="text-[11px] text-slate-600 dark:text-slate-400 mt-0.5">
+                    {favoredHistory.totalBillsFound} {favoredHistory.totalBillsFound === 1 ? 'pagamento anterior encontrado' : 'pagamentos anteriores encontrados'}
+                  </p>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={() => handleApplyAllFromHistory(favoredHistory)}
+                  className="px-2.5 py-1.5 bg-gradient-to-r from-indigo-600 to-teal-600 hover:from-indigo-500 hover:to-teal-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs transition-transform active:scale-95 flex-shrink-0"
+                  title="Preencher valor, categoria, vencimento e dados com base no histórico"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+                  <span>Preencher Tudo</span>
+                </button>
+              </div>
+
+              {/* Grid de Sugestões de Valores e Categorias */}
+              <div className="grid grid-cols-2 gap-2 pt-0.5">
+                {/* 1. Sugestão do Último Valor Pago */}
+                {favoredHistory.lastAmount !== undefined && favoredHistory.lastAmount > 0 && (
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2.5 rounded-xl border border-indigo-100 dark:border-indigo-900/50 flex flex-col justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">
+                        Último Valor Pago
+                      </span>
+                      <div className="text-sm font-extrabold text-indigo-950 dark:text-indigo-100">
+                        R$ {favoredHistory.lastAmount.toFixed(2).replace('.', ',')}
+                      </div>
+                      {favoredHistory.lastBill?.dueDate && (
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                          Em {getMonthShortPtBr(favoredHistory.lastBill.dueDate.substring(0, 7))}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplySuggestedAmount(favoredHistory.lastAmount!, 'Último')}
+                      className="mt-2 w-full py-1 px-2 bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-950/60 dark:hover:bg-indigo-900/80 text-indigo-700 dark:text-indigo-300 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>Usar este valor</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 2. Sugestão da Média Histórica dos Pagamentos */}
+                {favoredHistory.averageAmount !== undefined && favoredHistory.averageAmount > 0 && (
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2.5 rounded-xl border border-teal-100 dark:border-teal-900/50 flex flex-col justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">
+                        Média Histórica
+                      </span>
+                      <div className="text-sm font-extrabold text-teal-950 dark:text-teal-100">
+                        R$ {favoredHistory.averageAmount.toFixed(2).replace('.', ',')}
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Média de {favoredHistory.totalBillsFound} contas
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplySuggestedAmount(favoredHistory.averageAmount!, 'Média')}
+                      className="mt-2 w-full py-1 px-2 bg-teal-50 hover:bg-teal-100 dark:bg-teal-950/60 dark:hover:bg-teal-900/80 text-teal-700 dark:text-teal-300 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>Usar média</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+
+                {/* 3. Sugestão de Categoria Habitual */}
+                {favoredHistory.suggestedCategory && (
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">
+                        Categoria Habitual
+                      </span>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                        {favoredHistory.suggestedCategory}
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Mais usada no histórico
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplySuggestedCategory(favoredHistory.suggestedCategory!)}
+                      className={`mt-2 w-full py-1 px-2 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1 ${
+                        category === favoredHistory.suggestedCategory
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-950 dark:text-emerald-300'
+                          : 'bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200'
+                      }`}
+                    >
+                      {category === favoredHistory.suggestedCategory ? (
+                        <>
+                          <Check className="w-3 h-3" />
+                          <span>Selecionada</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Aplicar</span>
+                          <ArrowRight className="w-3 h-3" />
+                        </>
+                      )}
+                    </button>
+                  </div>
+                )}
+
+                {/* 4. Sugestão do Dia Habitual de Vencimento */}
+                {favoredHistory.commonDueDay && (
+                  <div className="bg-white/90 dark:bg-slate-900/80 p-2.5 rounded-xl border border-slate-200 dark:border-slate-800 flex flex-col justify-between shadow-2xs">
+                    <div>
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-500 dark:text-slate-400 block mb-0.5">
+                        Dia de Vencimento
+                      </span>
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">
+                        Todo dia {String(favoredHistory.commonDueDay).padStart(2, '0')}
+                      </div>
+                      <span className="text-[10px] text-slate-500 dark:text-slate-400">
+                        Dia habitual desta conta
+                      </span>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => handleApplyDueDay(favoredHistory.commonDueDay!)}
+                      className="mt-2 w-full py-1 px-2 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 rounded-lg text-[11px] font-bold transition-colors flex items-center justify-center gap-1"
+                    >
+                      <span>Dia {String(favoredHistory.commonDueDay).padStart(2, '0')}</span>
+                      <ArrowRight className="w-3 h-3" />
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* Histórico Recente de Pagamentos (Timeline dos últimos meses) */}
+              {favoredHistory.recentRecords && favoredHistory.recentRecords.length > 0 && (
+                <div className="pt-2 border-t border-indigo-100 dark:border-indigo-900/40">
+                  <div className="text-[11px] font-bold text-slate-600 dark:text-slate-400 mb-1.5 flex items-center justify-between">
+                    <span>Últimos pagamentos anteriores:</span>
+                    <span className="text-[10px] font-medium text-indigo-600 dark:text-indigo-400">
+                      Toque no valor para aplicar
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1">
+                    {favoredHistory.recentRecords.map((rec) => (
+                      <button
+                        key={rec.id}
+                        type="button"
+                        onClick={() => handleApplySuggestedAmount(rec.amount, rec.monthLabel)}
+                        className="px-2.5 py-1.5 rounded-xl bg-white dark:bg-slate-800/90 border border-slate-200 dark:border-slate-700 hover:border-indigo-400 text-left transition-all flex-shrink-0 active:scale-95 group shadow-2xs"
+                        title={`Usar valor R$ ${rec.amount.toFixed(2).replace('.', ',')} de ${rec.monthLabel}`}
+                      >
+                        <div className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+                          <span>{rec.monthLabel}</span>
+                          {rec.status === 'paid' && (
+                            <span className="text-[9px] text-emerald-600 dark:text-emerald-400 font-bold">✓ Pago</span>
+                          )}
+                        </div>
+                        <div className="text-xs font-extrabold text-slate-900 dark:text-white group-hover:text-indigo-600 dark:group-hover:text-indigo-400">
+                          {rec.formattedAmount}
+                        </div>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+
+              {/* Reutilizar Chave Pix ou Código de Barras do Histórico */}
+              {((favoredHistory.lastPixKey && !pixKey) || (favoredHistory.lastBarcode && !barcode)) && (
+                <div className="bg-indigo-50/80 dark:bg-indigo-950/40 p-2.5 rounded-xl border border-indigo-200/80 dark:border-indigo-800/60 flex items-center justify-between gap-2">
+                  <div className="min-w-0 text-[11px] text-indigo-900 dark:text-indigo-200">
+                    <span className="font-bold">🔑 Dados de pagamento salvos: </span>
+                    <span className="text-[10.5px] opacity-90 truncate block">
+                      {favoredHistory.lastPixKey ? `Pix (${favoredHistory.lastPixType || 'Chave'}): ${favoredHistory.lastPixKey}` : 'Código de barras do último boleto'}
+                    </span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (favoredHistory.lastPixKey && !pixKey) {
+                        setPixKey(favoredHistory.lastPixKey);
+                        if (favoredHistory.lastPixType) setPixType(favoredHistory.lastPixType as any);
+                      }
+                      if (favoredHistory.lastBarcode && !barcode) {
+                        setBarcode(favoredHistory.lastBarcode);
+                      }
+                      setHistoryNotice('⚡ Dados de pagamento importados do histórico!');
+                      setTimeout(() => setHistoryNotice(null), 4000);
+                    }}
+                    className="px-2.5 py-1 bg-indigo-600 text-white text-[11px] font-bold rounded-lg hover:bg-indigo-700 transition-colors flex-shrink-0 active:scale-95"
+                  >
+                    Reutilizar
+                  </button>
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Valor Total (R$) */}
           <div>
@@ -771,19 +1141,7 @@ export const BillModal: React.FC<BillModalProps> = ({
             </select>
           </div>
 
-          {/* Empresa / Beneficiário */}
-          <div>
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
-              Empresa / Beneficiário
-            </label>
-            <input
-              type="text"
-              value={favored}
-              onChange={(e) => handleFavoredChange(e.target.value)}
-              placeholder="Ex: Caixa Econômica, Enel, Sabesp, Claro, Imobiliária Alfa"
-              className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
-            />
-          </div>
+
 
           {/* Código de Barras / Linha Digitável com Preenchimento Automático */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-2">

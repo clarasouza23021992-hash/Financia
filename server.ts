@@ -442,11 +442,19 @@ async function startServer() {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
   });
 
-  // Helper to ensure wife device is permanently connected on any household
-  const ensureWifeConnectedRecord = (household: HouseholdData) => {
-    household.isWifeConnected = true;
-    if (!household.devices) household.devices = [];
-    const hasWife = household.devices.some(
+  // Helper to deduplicate devices so ghost sessions don't pile up, while permanently keeping wife connected
+  const deduplicateDevicesServer = (devices: CloudDeviceRecord[] = [], callerDevice?: any): CloudDeviceRecord[] => {
+    const list = Array.isArray(devices) ? devices : [];
+    const valid = list.filter(
+      (d) =>
+        d &&
+        d.id !== 'dev_iphone_paula' &&
+        d.id !== 'dev_iphone_carlos' &&
+        d.id !== 'dev_user_main'
+    );
+
+    // Wife device (permanent connection)
+    let wifeDev = valid.find(
       (d) =>
         d.id === 'dev_esposa_permanente' ||
         d.owner === 'Esposa' ||
@@ -454,16 +462,49 @@ async function startServer() {
         d.name?.toLowerCase().includes('esposa') ||
         d.name?.toLowerCase().includes('paula')
     );
-    if (!hasWife) {
-      household.devices.push({
+    if (!wifeDev) {
+      wifeDev = {
         id: 'dev_esposa_permanente',
         name: 'iPhone da Esposa',
         model: 'iPhone (Tela de Início)',
         owner: 'Esposa',
         lastActive: 'Agora mesmo',
         connectedAt: '2026-09-25T12:00:00.000Z',
-      });
+      };
     }
+
+    // User device: choose caller device or the most recent user device
+    const userDevices = valid.filter((d) => d.id !== wifeDev!.id && d.owner !== 'Esposa' && !d.name?.toLowerCase().includes('esposa'));
+    let activeUserDev: CloudDeviceRecord;
+    if (callerDevice && callerDevice.id) {
+      activeUserDev = {
+        id: callerDevice.id,
+        name: callerDevice.name || 'Meu iPhone (Início)',
+        model: callerDevice.model || 'iPhone (Tela de Início)',
+        owner: 'Você',
+        lastActive: 'Agora mesmo',
+        connectedAt: callerDevice.connectedAt || new Date().toISOString(),
+      };
+    } else if (userDevices.length > 0) {
+      activeUserDev = userDevices[userDevices.length - 1];
+    } else {
+      activeUserDev = {
+        id: 'dev_1790686586282_fecb4',
+        name: 'Meu iPhone (Início)',
+        model: 'iPhone (Tela de Início)',
+        owner: 'Você',
+        lastActive: 'Agora mesmo',
+        connectedAt: new Date().toISOString(),
+      };
+    }
+
+    return [activeUserDev, wifeDev];
+  };
+
+  // Helper to ensure wife device is permanently connected on any household
+  const ensureWifeConnectedRecord = (household: HouseholdData) => {
+    household.isWifeConnected = true;
+    household.devices = deduplicateDevicesServer(household.devices);
   };
 
   // Get Household Data
@@ -522,54 +563,8 @@ async function startServer() {
       return res.json({ success: true, household, timestamp: nowIso });
     }
 
-    // Filter out only obsolete mock static placeholder IDs, preserving all real user phones
-    household.devices = (household.devices || []).filter(
-      (d) =>
-        d.id !== 'dev_iphone_paula' &&
-        d.id !== 'dev_iphone_carlos' &&
-        d.id !== 'dev_user_main'
-    );
-
-    // Update devices list with caller
-    if (device && device.id) {
-      const existingDevIdx = household.devices.findIndex((d) => d.id === device.id);
-      const updatedDev: CloudDeviceRecord = {
-        id: device.id,
-        name: device.name || 'Celular Conectado',
-        model: device.model || 'Smartphone',
-        owner: device.owner || 'Morador',
-        lastActive: 'Agora mesmo',
-        connectedAt: existingDevIdx >= 0 ? household.devices[existingDevIdx].connectedAt : nowIso,
-        userAgent: req.headers['user-agent']?.slice(0, 120),
-      };
-
-      if (existingDevIdx >= 0) {
-        household.devices[existingDevIdx] = updatedDev;
-      } else {
-        household.devices.push(updatedDev);
-      }
-    }
-
-    // ALWAYS ensure the wife's device remains permanently connected (user requirement: never disconnect wife)
-    const hasWifeDevice = (household.devices || []).some(
-      (d) =>
-        d.id === 'dev_esposa_permanente' ||
-        d.owner === 'Esposa' ||
-        d.owner === 'Cônjuge' ||
-        d.name?.toLowerCase().includes('esposa') ||
-        d.name?.toLowerCase().includes('paula')
-    );
-    if (!hasWifeDevice) {
-      if (!household.devices) household.devices = [];
-      household.devices.push({
-        id: 'dev_esposa_permanente',
-        name: 'iPhone da Esposa',
-        model: 'iPhone (Tela de Início)',
-        owner: 'Esposa',
-        lastActive: 'Agora mesmo',
-        connectedAt: '2026-09-25T12:00:00.000Z',
-      });
-    }
+    // Deduplicate devices: Keep strictly caller's active phone and permanently preserve wife's phone
+    household.devices = deduplicateDevicesServer(household.devices, device);
     household.isWifeConnected = true;
 
     // Process deleted bills

@@ -1172,22 +1172,13 @@ export default function App() {
           {/* Tab 3: CloudKit Sync Drawer */}
           <button
             onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
+            className="flex flex-col items-center gap-0.5 py-1 px-4 sm:px-6 rounded-xl text-slate-400 hover:text-slate-600 active-press"
           >
             <div className="relative">
               <Cloud className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
               <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
             <span className="text-[10px] tracking-tight whitespace-nowrap">iCloud Sync</span>
-          </button>
-
-          {/* Tab 4: Moradores & Configurações */}
-          <button
-            onClick={() => setIsProfilesModalOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl text-slate-400 hover:text-slate-600 active-press"
-          >
-            <Users className="w-4.5 h-4.5" />
-            <span className="text-[10px] tracking-tight whitespace-nowrap">Moradores</span>
           </button>
         </div>
       </nav>

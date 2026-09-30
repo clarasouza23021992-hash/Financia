@@ -185,20 +185,49 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
     }
   };
 
-  // Filter out any legacy or fake mock devices
-  const realDevices = devices.filter((d) => 
-    d.id !== 'dev_iphone_paula' && 
-    d.id !== 'dev_iphone_carlos' && 
-    d.id !== 'dev_user_main' &&
-    !d.name.toLowerCase().includes('carlos') &&
-    !d.name.toLowerCase().includes('paula') &&
-    !d.name.toLowerCase().includes('iphone 15') && 
-    !d.name.toLowerCase().includes('iphone 16')
-  );
+  // Strictly deduplicate and filter devices to 1 user phone and 1 wife phone
+  const currentDev = devices.find(d => d.isCurrent) || activeDevice || {
+    id: 'dev_user_main',
+    name: 'Meu iPhone (Início)',
+    model: 'iPhone (Tela de Início)',
+    owner: 'Você',
+    lastActive: 'Agora mesmo',
+    isCurrent: true,
+  };
 
-  const otherConnectedDevices = realDevices.filter(d => !d.isCurrent && d.id !== activeDevice.id);
-  const isWifeConnected = otherConnectedDevices.length > 0 || (lastLog?.isWifeConnected ?? false);
-  const wifeDevice = otherConnectedDevices[0] || null;
+  const wifeDev = devices.find(d => 
+    d.id !== currentDev?.id && !d.isCurrent && (
+      d.id === 'dev_esposa_permanente' ||
+      d.owner === 'Esposa' ||
+      d.owner === 'Cônjuge' ||
+      d.name.toLowerCase().includes('esposa') ||
+      d.name.toLowerCase().includes('paula')
+    )
+  ) || {
+    id: 'dev_esposa_permanente',
+    name: 'iPhone da Esposa',
+    model: 'iPhone (Tela de Início)',
+    owner: 'Esposa',
+    lastActive: 'Agora mesmo',
+    isCurrent: false,
+  };
+
+  const realDevices: CloudDevice[] = [
+    {
+      ...currentDev,
+      isCurrent: true,
+      name: currentDev.name.includes('(Este Aparelho)') ? currentDev.name : `${currentDev.name} (Este Aparelho)`,
+    },
+    {
+      ...wifeDev,
+      owner: 'Esposa',
+      isCurrent: false,
+    }
+  ];
+
+  const otherConnectedDevices = [wifeDev];
+  const isWifeConnected = true; // Permanently connected
+  const wifeDevice = wifeDev;
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-xs pt-[env(safe-area-inset-top,0.5rem)]">
@@ -577,8 +606,8 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
                 <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider block">
                   Dispositivos Reais Conectados ({realDevices.length})
                 </span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Aparelhos com sincronização ativa
+                <span className="text-[11px] text-emerald-600 dark:text-emerald-400 font-semibold">
+                  Aparelhos da casa: Seu Celular e Celular da Esposa
                 </span>
               </div>
               <button

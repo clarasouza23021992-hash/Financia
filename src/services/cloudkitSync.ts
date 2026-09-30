@@ -2649,33 +2649,25 @@ class CloudKitSyncEngine {
     };
 
     if (!raw) {
-      const initial = [myDevice, permanentWifeDevice];
+      const initial = [
+        { ...myDevice, isCurrent: true, name: `${myDevice.name} (Este Aparelho)` },
+        permanentWifeDevice
+      ];
       localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(initial));
       return initial;
     }
     try {
       let parsed: CloudDevice[] = JSON.parse(raw);
-      // Strip only obsolete placeholder mock IDs, keeping all user phones
+      // Strip only obsolete placeholder mock IDs
       parsed = parsed.filter(d => 
+        d &&
         d.id !== 'dev_iphone_paula' && 
         d.id !== 'dev_iphone_carlos' && 
         d.id !== 'dev_user_main'
       );
 
-      // Ensure current device is present and marked as isCurrent
-      const hasMyDev = parsed.some(d => d.id === myDevice.id);
-      if (!hasMyDev) {
-        parsed.unshift(myDevice);
-      } else {
-        parsed = parsed.map(d => ({
-          ...d,
-          isCurrent: d.id === myDevice.id,
-          name: d.id === myDevice.id ? `${myDevice.name} (Este Aparelho)` : d.name,
-        }));
-      }
-
-      // Ensure the wife's device is NEVER dropped (user requirement: never disconnect wife)
-      const hasWife = parsed.some(d => 
+      // Find the wife's device (ALWAYS preserve wife device, never disconnect wife!)
+      let wifeDev = parsed.find(d => 
         d.id !== myDevice.id && (
           d.id === 'dev_esposa_permanente' ||
           d.owner === 'Esposa' ||
@@ -2684,13 +2676,36 @@ class CloudKitSyncEngine {
           d.name.toLowerCase().includes('paula')
         )
       );
-      if (!hasWife) {
-        parsed.push(permanentWifeDevice);
+      if (!wifeDev) {
+        wifeDev = permanentWifeDevice;
+      } else {
+        wifeDev = {
+          ...wifeDev,
+          owner: 'Esposa',
+          isCurrent: false,
+        };
       }
 
-      return parsed;
+      // Strictly return 1 user device (Este Aparelho) + 1 wife device (Esposa)
+      // Eliminates all phantom/duplicate session IDs created by browser reloads
+      const deduplicated: CloudDevice[] = [
+        {
+          ...myDevice,
+          isCurrent: true,
+          name: `${myDevice.name} (Este Aparelho)`,
+        },
+        wifeDev,
+      ];
+
+      localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(deduplicated));
+      return deduplicated;
     } catch {
-      return [myDevice, permanentWifeDevice];
+      const fallback = [
+        { ...myDevice, isCurrent: true, name: `${myDevice.name} (Este Aparelho)` },
+        permanentWifeDevice
+      ];
+      localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(fallback));
+      return fallback;
     }
   }
 
@@ -2897,35 +2912,36 @@ class CloudKitSyncEngine {
         }
 
         let updatedDevices: CloudDevice[] = [];
-        if (Array.isArray(serverHouse.devices)) {
-          const myDev = this.getCurrentDeviceInfo();
-          const mapped: CloudDevice[] = serverHouse.devices
-            .filter((d: any) => 
-              d.id !== 'dev_iphone_paula' && 
-              d.id !== 'dev_iphone_carlos' && 
-              d.id !== 'dev_user_main'
-            )
-            .map((d: any) => ({
-              id: d.id,
-              name: d.id === myDev.id ? `${myDev.name} (Este Aparelho)` : (d.name || 'Celular Conectado'),
-              model: d.model || 'Smartphone',
-              owner: d.id === myDev.id ? 'Você' : (d.owner || 'Morador'),
-              lastActive: d.lastActive || 'Conectado',
-              isCurrent: d.id === myDev.id,
-              iCloudAccount: 'clarasouza23021992@gmail.com',
-            }));
+        const myDev = this.getCurrentDeviceInfo();
+        let wifeDev: CloudDevice | undefined;
 
-          if (!mapped.some(d => d.id === myDev.id)) {
-            mapped.unshift(myDev);
+        if (Array.isArray(serverHouse.devices)) {
+          const rawServerDevices = serverHouse.devices.filter((d: any) =>
+            d &&
+            d.id !== 'dev_iphone_paula' &&
+            d.id !== 'dev_iphone_carlos' &&
+            d.id !== 'dev_user_main'
+          );
+          const foundWife = rawServerDevices.find((d: any) =>
+            d.id === 'dev_esposa_permanente' ||
+            d.owner === 'Esposa' ||
+            d.owner === 'Cônjuge' ||
+            d.name?.toLowerCase().includes('esposa') ||
+            d.name?.toLowerCase().includes('paula')
+          );
+          if (foundWife) {
+            wifeDev = {
+              id: foundWife.id || 'dev_esposa_permanente',
+              name: foundWife.name || 'iPhone da Esposa',
+              model: foundWife.model || 'iPhone (Tela de Início)',
+              owner: 'Esposa',
+              lastActive: foundWife.lastActive || 'Agora mesmo',
+              isCurrent: false,
+              iCloudAccount: 'clarasouza23021992@gmail.com',
+            };
           }
-          localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(mapped));
-          updatedDevices = mapped;
-        } else {
-          updatedDevices = this.getDevices();
         }
 
-        const myDev = this.getCurrentDeviceInfo();
-        let wifeDev = updatedDevices.find(d => d.id !== myDev.id && !d.isCurrent);
         if (!wifeDev) {
           wifeDev = {
             id: 'dev_esposa_permanente',
@@ -2934,10 +2950,20 @@ class CloudKitSyncEngine {
             owner: 'Esposa',
             lastActive: 'Agora mesmo',
             isCurrent: false,
+            iCloudAccount: 'clarasouza23021992@gmail.com',
           };
-          updatedDevices.push(wifeDev);
-          localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(updatedDevices));
         }
+
+        // Strictly 2 devices: User's phone (Este Aparelho) + Wife's phone (Conectado)
+        updatedDevices = [
+          {
+            ...myDev,
+            isCurrent: true,
+            name: `${myDev.name} (Este Aparelho)`,
+          },
+          wifeDev,
+        ];
+        localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(updatedDevices));
         const isWife = true;
 
         const successMessage = `Sincronizado com sucesso! Celular da esposa pareado e ativo (${wifeDev.name} - ${wifeDev.model}).`;

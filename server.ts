@@ -1,4 +1,6 @@
 import express from 'express';
+import http from 'http';
+import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
 import { createServer as createViteServer } from 'vite';
@@ -15,6 +17,20 @@ interface CloudDeviceRecord {
   connectedAt?: string;
 }
 
+export interface ChangeNotification {
+  id: string;
+  householdId: string;
+  sourceDeviceId: string;
+  sourceDeviceName: string;
+  sourceUserName: string;
+  actionType: string;
+  title: string;
+  message: string;
+  targetItemName?: string;
+  amount?: number;
+  timestamp: string;
+}
+
 interface HouseholdData {
   id: string;
   name: string;
@@ -27,6 +43,7 @@ interface HouseholdData {
   lastUpdated: string;
   deletedBillIds?: string[];
   deletedRevenueIds?: string[];
+  notifications?: ChangeNotification[];
 }
 
 const PORT = 3000;
@@ -434,6 +451,169 @@ function deduplicateRevenuesServer(revs: any[], deletedIds: string[] = []): any[
 
 async function startServer() {
   const app = express();
+  const server = http.createServer(app);
+  const wss = new WebSocketServer({ server });
+
+  interface WebSocketClient {
+    ws: WebSocket;
+    householdId: string;
+    deviceId: string;
+    deviceName: string;
+    userName: string;
+    isAlive: boolean;
+  }
+
+  const wsClients = new Set<WebSocketClient>();
+
+  const broadcastChangeNotification = (householdId: string, notif: ChangeNotification) => {
+    const cleanHouseId = householdId.trim().toLowerCase();
+    const payload = JSON.stringify({
+      type: 'CHANGE_NOTIFICATION',
+      notification: notif,
+    });
+
+    wsClients.forEach((client) => {
+      if (
+        client.ws.readyState === WebSocket.OPEN &&
+        client.householdId === cleanHouseId &&
+        client.deviceId !== notif.sourceDeviceId
+      ) {
+        try {
+          client.ws.send(payload);
+        } catch (err) {
+          console.error('Error sending WS notification to client:', err);
+        }
+      }
+    });
+  };
+
+  const recordChangeNotification = (householdId: string, params: {
+    sourceDeviceId: string;
+    sourceDeviceName?: string;
+    sourceUserName?: string;
+    actionType: string;
+    title: string;
+    message: string;
+    targetItemName?: string;
+    amount?: number;
+  }): ChangeNotification => {
+    const store = loadHouseholds();
+    const cleanId = householdId.trim().toLowerCase();
+    let household = store[cleanId];
+    if (!household) {
+      household = {
+        id: cleanId,
+        name: 'Minha Casa',
+        code: cleanId.toUpperCase(),
+        bills: [],
+        revenues: [],
+        profiles: [],
+        devices: [],
+        notifications: [],
+        lastUpdated: new Date().toISOString(),
+      };
+    }
+    if (!Array.isArray(household.notifications)) {
+      household.notifications = [];
+    }
+
+    const notif: ChangeNotification = {
+      id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      householdId: cleanId,
+      sourceDeviceId: params.sourceDeviceId,
+      sourceDeviceName: params.sourceDeviceName || 'Smartphone',
+      sourceUserName: params.sourceUserName || 'Morador',
+      actionType: params.actionType,
+      title: params.title,
+      message: params.message,
+      targetItemName: params.targetItemName,
+      amount: params.amount,
+      timestamp: new Date().toISOString(),
+    };
+
+    household.notifications.unshift(notif);
+    if (household.notifications.length > 50) {
+      household.notifications = household.notifications.slice(0, 50);
+    }
+    household.lastUpdated = notif.timestamp;
+    store[cleanId] = household;
+    saveHouseholds(store);
+    return notif;
+  };
+
+  // WebSocket connection handler
+  wss.on('connection', (ws) => {
+    const clientState: WebSocketClient = {
+      ws,
+      householdId: 'casa-familia',
+      deviceId: '',
+      deviceName: '',
+      userName: '',
+      isAlive: true,
+    };
+    wsClients.add(clientState);
+
+    ws.on('pong', () => {
+      clientState.isAlive = true;
+    });
+
+    ws.on('message', (data) => {
+      try {
+        const msg = JSON.parse(data.toString());
+        if (msg.type === 'JOIN') {
+          clientState.householdId = (msg.householdId || 'casa-familia').trim().toLowerCase();
+          clientState.deviceId = msg.deviceId || '';
+          clientState.deviceName = msg.deviceName || 'Smartphone';
+          clientState.userName = msg.userName || 'Morador';
+
+          ws.send(JSON.stringify({
+            type: 'JOINED',
+            householdId: clientState.householdId,
+            timestamp: new Date().toISOString(),
+          }));
+        } else if (msg.type === 'NOTIFY_CHANGE') {
+          const houseId = (msg.householdId || clientState.householdId).trim().toLowerCase();
+          const notif = recordChangeNotification(houseId, {
+            sourceDeviceId: msg.deviceId || clientState.deviceId,
+            sourceDeviceName: msg.deviceName || clientState.deviceName,
+            sourceUserName: msg.userName || clientState.userName,
+            actionType: msg.actionType,
+            title: msg.title,
+            message: msg.message,
+            targetItemName: msg.targetItemName,
+            amount: msg.amount,
+          });
+          broadcastChangeNotification(houseId, notif);
+        }
+      } catch (err) {
+        console.error('WS message error:', err);
+      }
+    });
+
+    ws.on('close', () => {
+      wsClients.delete(clientState);
+    });
+
+    ws.on('error', () => {
+      wsClients.delete(clientState);
+    });
+  });
+
+  const pingInterval = setInterval(() => {
+    wsClients.forEach((client) => {
+      if (!client.isAlive) {
+        client.ws.terminate();
+        wsClients.delete(client);
+        return;
+      }
+      client.isAlive = false;
+      client.ws.ping();
+    });
+  }, 25000);
+
+  wss.on('close', () => {
+    clearInterval(pingInterval);
+  });
 
   app.use(express.json({ limit: '25mb' }));
 
@@ -673,6 +853,21 @@ async function startServer() {
 
     ensureWifeConnectedRecord(household);
 
+    if (req.body.changeEvent) {
+      const ce = req.body.changeEvent;
+      const notif = recordChangeNotification(cleanId, {
+        sourceDeviceId: (device && device.id) || ce.deviceId || 'unknown_dev',
+        sourceDeviceName: (device && device.name) || ce.deviceName || 'Smartphone',
+        sourceUserName: (device && device.owner) || ce.userName || 'Morador',
+        actionType: ce.actionType,
+        title: ce.title,
+        message: ce.message,
+        targetItemName: ce.targetItemName,
+        amount: ce.amount,
+      });
+      broadcastChangeNotification(cleanId, notif);
+    }
+
     household.lastUpdated = nowIso;
     store[cleanId] = household;
     saveHouseholds(store);
@@ -680,8 +875,52 @@ async function startServer() {
     res.json({
       success: true,
       household,
+      notifications: household.notifications || [],
       serverTime: nowIso,
     });
+  });
+
+  // Send a change notification directly via REST
+  app.post('/api/household/:id/notify-change', (req, res) => {
+    const { id } = req.params;
+    const { deviceId, deviceName, userName, actionType, title, message, targetItemName, amount } = req.body;
+    if (!actionType || !title) {
+      return res.status(400).json({ error: 'Dados insuficientes para notificação' });
+    }
+    const cleanId = id.trim().toLowerCase();
+    const notif = recordChangeNotification(cleanId, {
+      sourceDeviceId: deviceId || 'unknown_dev',
+      sourceDeviceName: deviceName || 'Smartphone',
+      sourceUserName: userName || 'Morador',
+      actionType,
+      title,
+      message: message || '',
+      targetItemName,
+      amount,
+    });
+    broadcastChangeNotification(cleanId, notif);
+    res.json({ success: true, notification: notif });
+  });
+
+  // Get notifications for household
+  app.get('/api/household/:id/notifications', (req, res) => {
+    const { id } = req.params;
+    const { since, excludeDeviceId } = req.query;
+    const store = loadHouseholds();
+    const cleanId = id.trim().toLowerCase();
+    const household = store[cleanId];
+    if (!household) {
+      return res.json({ success: true, notifications: [] });
+    }
+    let notifs = household.notifications || [];
+    if (excludeDeviceId) {
+      notifs = notifs.filter((n) => n.sourceDeviceId !== excludeDeviceId);
+    }
+    if (since) {
+      const sinceTime = new Date(String(since)).getTime();
+      notifs = notifs.filter((n) => new Date(n.timestamp).getTime() > sinceTime);
+    }
+    res.json({ success: true, notifications: notifs });
   });
 
   // Remove a device from household
@@ -1046,8 +1285,8 @@ async function startServer() {
     });
   }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://0.0.0.0:${PORT}`);
+  server.listen(PORT, '0.0.0.0', () => {
+    console.log(`Server with WebSockets running on http://0.0.0.0:${PORT}`);
   });
 }
 

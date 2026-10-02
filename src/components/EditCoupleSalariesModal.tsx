@@ -74,13 +74,17 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-xs animate-in fade-in duration-200">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-950/70 backdrop-blur-xs animate-in fade-in duration-200 overflow-y-auto overscroll-contain"
+      onClick={onClose}
+    >
       <div 
         id="edit-couple-salaries-modal"
-        className="w-full max-w-md bg-white dark:bg-[#101935] rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden"
+        className="w-full max-w-md bg-white dark:bg-[#101935] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col max-h-[min(92dvh,calc(100vh-2rem))] my-auto"
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="bg-gradient-to-r from-[#0A1128] to-[#172554] p-4 text-white flex items-center justify-between">
+        <div className="bg-gradient-to-r from-[#0A1128] to-[#172554] p-4 text-white flex items-center justify-between flex-shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-[#00C49F] flex items-center justify-center font-bold">
               <Wallet className="w-5 h-5" />
@@ -103,7 +107,7 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
         </div>
 
         {/* Live Sum Card */}
-        <div className="p-4 bg-slate-50 dark:bg-[#0c142b] border-b border-slate-100 dark:border-slate-800/80">
+        <div className="p-4 bg-slate-50 dark:bg-[#0c142b] border-b border-slate-100 dark:border-slate-800/80 flex-shrink-0">
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold text-slate-600 dark:text-slate-400">
               Total Somado da Renda Familiar:
@@ -117,8 +121,8 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
           </p>
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleSubmit} className="p-4 space-y-4">
+        {/* Form Body */}
+        <form id="salaries-form" onSubmit={handleSubmit} className="p-4 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {error && (
             <div className="p-2.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-200 dark:border-rose-900 text-rose-700 dark:text-rose-300 text-xs rounded-xl">
               {error}
@@ -188,30 +192,31 @@ export const EditCoupleSalariesModal: React.FC<EditCoupleSalariesModalProps> = (
                 setUserInput('');
                 setSpouseInput('');
               }}
-              className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-lg"
+              className="text-[10px] px-2 py-1 bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white font-medium rounded-lg active-press"
             >
               Limpar Campos
             </button>
           </div>
-
-          {/* Action buttons */}
-          <div className="flex items-center gap-2 pt-3">
-            <button
-              type="button"
-              onClick={onClose}
-              className="flex-1 py-3 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-2xl transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="flex-1 py-3 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-extrabold text-xs rounded-2xl shadow-md flex items-center justify-center gap-2 transition-all active-press"
-            >
-              <Check className="w-4 h-4" />
-              <span>Salvar Salários</span>
-            </button>
-          </div>
         </form>
+
+        {/* Pinned Action buttons - 100% visible on screen */}
+        <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center gap-2.5 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex-1 py-2.5 bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 font-bold text-xs rounded-xl transition-colors active-press"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="salaries-form"
+            className="flex-1 py-2.5 bg-gradient-to-r from-teal-500 to-emerald-600 hover:from-teal-600 hover:to-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-teal-500/20 flex items-center justify-center gap-2 transition-all active-press"
+          >
+            <Check className="w-4 h-4" />
+            <span>Salvar Salários</span>
+          </button>
+        </div>
       </div>
     </div>
   );

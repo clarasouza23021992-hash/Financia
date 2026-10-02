@@ -3,11 +3,12 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
+  Smartphone, X
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
-  SyncConflictLog, InAppNotification, getBillEffectiveMonth, 
+  SyncConflictLog, InAppNotification, ChangeNotification, getBillEffectiveMonth, 
   isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr 
 } from './types/finance';
 import { cloudkit, isMockBill, isMockRevenue } from './services/cloudkitSync';
@@ -15,7 +16,9 @@ import {
   getStoredInAppNotifications, 
   saveStoredInAppNotifications, 
   checkAndNotifyBills, 
-  getDefaultNotificationRule 
+  getDefaultNotificationRule,
+  playNotificationChime,
+  sendNativeNotification
 } from './services/notificationService';
 import { getStoredCategories } from './utils/categories';
 import { Header } from './components/Header';

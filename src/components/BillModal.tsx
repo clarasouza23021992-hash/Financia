@@ -522,13 +522,29 @@ export const BillModal: React.FC<BillModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs modal-safe-overlay p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[min(92dvh,calc(100vh-2rem))] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Modal Header */}
-        <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between">
-          <h2 className="text-base font-bold tracking-tight">
-            {initialBill ? 'Editar Conta da Casa' : 'Cadastrar Nova Conta / Dívida'}
-          </h2>
+        <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-[#00C49F] flex items-center justify-center font-bold">
+              <FileText className="w-4 h-4" />
+            </div>
+            <div>
+              <h2 className="text-base font-bold tracking-tight">
+                {initialBill ? 'Editar Conta da Casa' : 'Cadastrar Nova Conta / Dívida'}
+              </h2>
+              <p className="text-[11px] text-slate-400">
+                {initialBill ? 'Altere valores, vencimento ou divisão' : 'Cadastre boletos, faturas ou despesas fixas'}
+              </p>
+            </div>
+          </div>
           <button
             type="button"
             onClick={onClose}
@@ -539,7 +555,7 @@ export const BillModal: React.FC<BillModalProps> = ({
         </div>
 
         {/* Modal Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-4 overflow-y-auto flex-1">
+        <form id="bill-form" onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {/* Quick Pix Auto-Fill Banner */}
           <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
             <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -1546,24 +1562,26 @@ export const BillModal: React.FC<BillModalProps> = ({
               </div>
             </div>
           )}
-
-          {/* Action Buttons */}
-          <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-bold text-xs rounded-xl active-press shadow-md shadow-teal-500/20"
-            >
-              {initialBill ? 'Salvar Alterações' : 'Cadastrar Conta'}
-            </button>
-          </div>
         </form>
+
+        {/* Pinned Action Buttons Footer - 100% visible on screen */}
+        <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="bill-form"
+            className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-extrabold text-xs sm:text-sm rounded-xl active-press shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all"
+          >
+            <Check className="w-4 h-4" />
+            <span>{initialBill ? 'Salvar Alterações' : 'Cadastrar Conta'}</span>
+          </button>
+        </div>
       </div>
     </div>
   );

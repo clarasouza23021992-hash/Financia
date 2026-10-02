@@ -40,8 +40,8 @@
 }
 
 .modal-safe-overlay {
-  padding-top: env(safe-area-inset-top, 0.75rem);
-  padding-bottom: 0.75rem;
+  padding-top: max(env(safe-area-inset-top, 0.75rem), 0.75rem);
+  padding-bottom: max(env(safe-area-inset-bottom, 0.75rem), 0.75rem);
 }
 
 /* Hide scrollbar for tabs while keeping scrollable */

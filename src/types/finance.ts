@@ -323,3 +323,17 @@ export interface SavingsGoal {
   icon?: string;
 }
 
+export interface ChangeNotification {
+  id: string;
+  householdId: string;
+  sourceDeviceId: string;
+  sourceDeviceName: string;
+  sourceUserName: string;
+  actionType: 'bill_created' | 'bill_updated' | 'bill_paid' | 'bill_pending' | 'bill_deleted' | 'revenue_created' | 'revenue_deleted' | 'receipt_attached' | 'bill_rescheduled' | string;
+  title: string;
+  message: string;
+  targetItemName?: string;
+  amount?: number;
+  timestamp: string;
+}
+

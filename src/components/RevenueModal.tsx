@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, TrendingUp, AlertTriangle, ArrowRight } from 'lucide-react';
+import { X, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Check } from 'lucide-react';
 import { Revenue, UserProfile } from '../types/finance';
 
 interface RevenueModalProps {
@@ -113,27 +113,40 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs modal-safe-overlay p-3 sm:p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[calc(100dvh-1.5rem)] flex flex-col">
-        <div className="bg-[#0b2b24] text-white px-5 py-4 flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <div className="w-7 h-7 rounded-lg bg-emerald-500/20 flex items-center justify-center text-emerald-400">
-              <TrendingUp className="w-4 h-4" />
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[min(92dvh,calc(100vh-2rem))] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Pinned Header */}
+        <div className="bg-[#0b2b24] text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-emerald-900/50">
+          <div className="flex items-center gap-2.5">
+            <div className="w-8 h-8 rounded-xl bg-emerald-500/20 flex items-center justify-center text-emerald-400">
+              <TrendingUp className="w-4.5 h-4.5" />
             </div>
-            <h2 className="text-base font-bold tracking-tight">
-              {initialRevenue ? 'Editar Receita / Salário' : 'Adicionar Nova Receita / Salário'}
-            </h2>
+            <div>
+              <h2 className="text-base font-bold tracking-tight">
+                {initialRevenue ? 'Editar Receita / Salário' : 'Adicionar Nova Receita / Salário'}
+              </h2>
+              <p className="text-[11px] text-emerald-300/80">
+                Entradas financeiras da casa
+              </p>
+            </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-5 space-y-4">
+        {/* Scrollable Form Body */}
+        <form id="revenue-form" onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           <div>
             <label className="block text-xs font-bold text-slate-700 dark:text-slate-300 mb-1">
               Nome da Receita / Fonte *
@@ -377,46 +390,49 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white"
             />
           </div>
-
-          <div className="flex items-center justify-between pt-3 border-t border-slate-100 dark:border-slate-800">
-            {initialRevenue && (onDeleteRequest || onDelete) ? (
-              <button
-                type="button"
-                onClick={() => {
-                  if (onDeleteRequest) {
-                    onDeleteRequest(initialRevenue);
-                    onClose();
-                  } else if (onDelete) {
-                    if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
-                      onDelete(initialRevenue.id);
-                      onClose();
-                    }
-                  }
-                }}
-                className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors active-press"
-              >
-                Excluir Receita
-              </button>
-            ) : (
-              <div></div>
-            )}
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs rounded-xl shadow-md active-press"
-              >
-                Salvar Receita
-              </button>
-            </div>
-          </div>
         </form>
+
+        {/* Pinned Action Buttons Footer - 100% visible on all devices */}
+        <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2.5 z-20">
+          {initialRevenue && (onDeleteRequest || onDelete) ? (
+            <button
+              type="button"
+              onClick={() => {
+                if (onDeleteRequest) {
+                  onDeleteRequest(initialRevenue);
+                  onClose();
+                } else if (onDelete) {
+                  if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
+                    onDelete(initialRevenue.id);
+                    onClose();
+                  }
+                }
+              }}
+              className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors active-press"
+            >
+              Excluir
+            </button>
+          ) : (
+            <div />
+          )}
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-3.5 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              form="revenue-form"
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/25 active-press flex items-center gap-1.5 transition-all"
+            >
+              <Check className="w-4 h-4" />
+              <span>Salvar Receita</span>
+            </button>
+          </div>
+        </div>
       </div>
     </div>
   );

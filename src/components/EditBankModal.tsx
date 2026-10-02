@@ -86,10 +86,16 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[92vh] flex flex-col">
+    <div 
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto overscroll-contain animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div 
+        className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[min(92dvh,calc(100vh-2rem))] flex flex-col"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Header */}
-        <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between">
+        <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between flex-shrink-0 border-b border-slate-800">
           <div className="flex items-center gap-2">
             <div className="w-8 h-8 rounded-xl bg-teal-500/20 flex items-center justify-center text-[#00C49F]">
               {accountType === 'Cartão de Crédito' ? <CreditCard className="w-4 h-4" /> : <Building2 className="w-4 h-4" />}
@@ -100,14 +106,14 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
           </div>
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-5 space-y-3.5 overflow-y-auto flex-1 text-xs">
+        <form id="bank-form" onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-3.5 overflow-y-auto flex-1 min-h-0 text-xs overscroll-contain">
           {/* Tipo de Conta */}
           <div>
             <label className="block font-bold text-slate-700 dark:text-slate-300 mb-1">
@@ -307,24 +313,25 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
               </div>
             </div>
           )}
-
-          {/* Footer buttons */}
-          <div className="flex items-center justify-end gap-2.5 pt-3 border-t border-slate-100 dark:border-slate-800">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2 text-slate-500 dark:text-slate-400 font-semibold"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-bold rounded-xl active-press shadow-xs"
-            >
-              {initialData ? 'Salvar Alterações' : 'Adicionar Instrumento Real'}
-            </button>
-          </div>
         </form>
+
+        {/* Pinned Footer buttons */}
+        <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 z-20">
+          <button
+            type="button"
+            onClick={onClose}
+            className="px-4 py-2 text-slate-500 dark:text-slate-400 font-semibold active-press"
+          >
+            Cancelar
+          </button>
+          <button
+            type="submit"
+            form="bank-form"
+            className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-bold rounded-xl active-press shadow-xs"
+          >
+            {initialData ? 'Salvar Alterações' : 'Adicionar Instrumento Real'}
+          </button>
+        </div>
       </div>
     </div>
   );

@@ -5,6 +5,7 @@ import {
   CloudDevice,
   SyncConflictLog,
   SyncLogEntry,
+  ChangeNotification,
   getBillEffectiveMonth,
   isBillRescheduled,
   normalizeBillTitle,
@@ -114,6 +115,9 @@ class CloudKitSyncEngine {
   private channel: BroadcastChannel | null = null;
   private syncListeners: Array<(event: { type: string; payload?: any }) => void> = [];
   private isSyncingToServer: boolean = false;
+  private ws: WebSocket | null = null;
+  private wsReconnectTimer: any = null;
+  private lastSeenNotificationTime: string = (typeof window !== 'undefined' ? localStorage.getItem('financas_last_seen_notif_time') : null) || new Date(Date.now() - 300000).toISOString();
 
   constructor() {
     if (typeof window !== 'undefined') {
@@ -146,6 +150,11 @@ class CloudKitSyncEngine {
         this.syncWithServer();
       }, 300);
 
+      // Connect real-time WebSocket for instant cross-device notifications
+      setTimeout(() => {
+        this.connectWebSocket();
+      }, 600);
+
       // Periodic auto-sync every 4 seconds when online and page visible
       setInterval(() => {
         if (!document.hidden && navigator.onLine) {
@@ -154,15 +163,143 @@ class CloudKitSyncEngine {
       }, 4000);
 
       window.addEventListener('online', () => {
+        this.connectWebSocket();
         this.syncWithServer();
       });
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
+          this.connectWebSocket();
           this.syncWithServer();
         }
       });
     }
+  }
+
+  public getCurrentUserName(): string {
+    if (typeof window === 'undefined') return 'Você';
+    const storedRole = localStorage.getItem('financas_my_role');
+    if (storedRole === 'Esposa') return 'Esposa';
+    const customName = localStorage.getItem('financas_my_device_custom_name');
+    if (customName && customName.toLowerCase().includes('esposa')) return 'Esposa';
+    return 'Você';
+  }
+
+  public formatCurrency(val?: number): string {
+    if (val === undefined || val === null || isNaN(val)) return 'R$ 0,00';
+    return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  public connectWebSocket(): void {
+    if (typeof window === 'undefined') return;
+    if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
+      return;
+    }
+
+    try {
+      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+      const wsUrl = `${protocol}//${window.location.host}`;
+      this.ws = new WebSocket(wsUrl);
+
+      this.ws.onopen = () => {
+        const myDev = this.getCurrentDeviceInfo();
+        const houseId = this.getHouseholdId();
+        const userName = this.getCurrentUserName();
+
+        this.ws?.send(
+          JSON.stringify({
+            type: 'JOIN',
+            householdId: houseId,
+            deviceId: myDev.id,
+            deviceName: myDev.name,
+            userName,
+          })
+        );
+      };
+
+      this.ws.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          if (data.type === 'CHANGE_NOTIFICATION' && data.notification) {
+            const notif: ChangeNotification = data.notification;
+            const myDev = this.getCurrentDeviceInfo();
+            if (notif.sourceDeviceId !== myDev.id) {
+              this.lastSeenNotificationTime = notif.timestamp || new Date().toISOString();
+              localStorage.setItem('financas_last_seen_notif_time', this.lastSeenNotificationTime);
+              this.broadcastUpdate('REMOTE_CHANGE_NOTIFICATION', notif);
+              // Trigger auto-sync to refresh local bills and revenues immediately
+              this.syncWithServer();
+            }
+          }
+        } catch (e) {
+          console.error('Error parsing WS message:', e);
+        }
+      };
+
+      this.ws.onclose = () => {
+        this.ws = null;
+        if (!this.wsReconnectTimer) {
+          this.wsReconnectTimer = setTimeout(() => {
+            this.wsReconnectTimer = null;
+            this.connectWebSocket();
+          }, 3000);
+        }
+      };
+
+      this.ws.onerror = () => {
+        this.ws?.close();
+      };
+    } catch (e) {
+      console.warn('WebSocket connection not available:', e);
+    }
+  }
+
+  public async notifyRemoteChange(
+    actionType: string,
+    title: string,
+    message: string,
+    targetItemName?: string,
+    amount?: number
+  ): Promise<void> {
+    if (typeof window === 'undefined') return;
+    const myDev = this.getCurrentDeviceInfo();
+    const houseId = this.getHouseholdId();
+    const userName = this.getCurrentUserName();
+
+    const payload = {
+      householdId: houseId,
+      deviceId: myDev.id,
+      deviceName: myDev.name,
+      userName,
+      actionType,
+      title,
+      message,
+      targetItemName,
+      amount,
+    };
+
+    // 1. Ultra-fast real-time WebSocket delivery (<30ms)
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(
+          JSON.stringify({
+            type: 'NOTIFY_CHANGE',
+            ...payload,
+          })
+        );
+      } catch (err) {
+        console.warn('WS send failed, falling back to REST:', err);
+      }
+    }
+
+    // 2. Guaranteed REST delivery fallback
+    try {
+      fetch(`/api/household/${encodeURIComponent(houseId)}/notify-change`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      }).catch(() => {});
+    } catch {}
   }
 
   public getHouseholdId(): string {
@@ -1586,6 +1723,30 @@ class CloudKitSyncEngine {
 
     this.broadcastUpdate('BILL_UPSERTED', savedBill);
     this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
+
+    const isNew = existingIndex === -1;
+    const actor = this.getCurrentUserName();
+    if (isNew) {
+      const title = 'Nova Conta Cadastrada 🧾';
+      const dueFormatted = savedBill.dueDate ? savedBill.dueDate.split('-').reverse().join('/') : '';
+      const msg = `${actor} adicionou a conta "${savedBill.name}" (${this.formatCurrency(savedBill.amount)})${dueFormatted ? ` para pagar em ${dueFormatted}` : ''}`;
+      this.notifyRemoteChange('bill_created', title, msg, savedBill.name, savedBill.amount);
+    } else {
+      const hadReceipt = Boolean(bills[existingIndex]?.receiptUrl);
+      const nowHasReceipt = Boolean(savedBill.receiptUrl);
+      const isReceiptNewlyAttached = !hadReceipt && nowHasReceipt;
+
+      if (isReceiptNewlyAttached) {
+        const title = 'Comprovante Anexado 📎';
+        const msg = `${actor} anexou o comprovante de pagamento da conta "${savedBill.name}"`;
+        this.notifyRemoteChange('receipt_attached', title, msg, savedBill.name, savedBill.amount);
+      } else {
+        const title = 'Conta Atualizada ✏️';
+        const msg = `${actor} alterou a conta "${savedBill.name}" (${this.formatCurrency(savedBill.amount)})`;
+        this.notifyRemoteChange('bill_updated', title, msg, savedBill.name, savedBill.amount);
+      }
+    }
+
     this.syncWithServer();
     return savedBill;
   }
@@ -1609,6 +1770,15 @@ class CloudKitSyncEngine {
     bills[existingIndex] = updated;
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
     this.broadcastUpdate('BILL_UPSERTED', updated);
+
+    const actor = this.getCurrentUserName();
+    const isPaid = status === 'paid';
+    const title = isPaid ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄';
+    const msg = isPaid
+      ? `${actor} marcou a conta "${existing.name}" (${this.formatCurrency(existing.amount)}) como PAGA! ✅`
+      : `${actor} reabriu a conta "${existing.name}" como Pendente.`;
+    this.notifyRemoteChange(isPaid ? 'bill_paid' : 'bill_pending', title, msg, existing.name, existing.amount);
+
     this.syncWithServer();
     return updated;
   }
@@ -1720,11 +1890,18 @@ class CloudKitSyncEngine {
   // Delete Bill (single month instance)
   public deleteBill(id: string): void {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    const toDelete = this.getBills().find(b => b.id === id);
+    const bName = toDelete?.name || 'Conta';
+
     this.recordDeletedBill(id);
     const bills = this.getBills().filter(b => b.id !== id);
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(bills));
     this.broadcastUpdate('BILL_DELETED', { id });
+
+    const actor = this.getCurrentUserName();
+    this.notifyRemoteChange('bill_deleted', 'Conta Excluída 🗑️', `${actor} excluiu a conta "${bName}"`, bName);
+
     this.syncWithServer();
   }
 
@@ -1790,6 +1967,10 @@ class CloudKitSyncEngine {
     localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(remainingBills));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(remainingBills));
     this.broadcastUpdate('BILLS_SERIES_DELETED', { deletedIds, billName: bill.name });
+
+    const actor = this.getCurrentUserName();
+    this.notifyRemoteChange('bill_deleted', 'Conta Excluída 🗑️', `${actor} excluiu a conta "${bill.name}" de todos os meses`, bill.name);
+
     this.syncWithServer();
     return deletedIds;
   }
@@ -2295,6 +2476,12 @@ class CloudKitSyncEngine {
 
     this.broadcastUpdate('REVENUE_UPSERTED', saved);
     this.broadcastUpdate('REVENUES_UPDATED', { count: deduped.length });
+
+    const actor = this.getCurrentUserName();
+    const title = 'Nova Receita / Salário 💰';
+    const msg = `${actor} cadastrou a receita "${saved.name}" (${this.formatCurrency(saved.amount)})`;
+    this.notifyRemoteChange('revenue_created', title, msg, saved.name, saved.amount);
+
     this.syncWithServer();
     return saved;
   }
@@ -2490,11 +2677,18 @@ class CloudKitSyncEngine {
 
   public deleteRevenue(id: string): void {
     localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    const toDelete = this.getRevenues().find(r => r.id === id);
+    const rName = toDelete?.name || 'Receita';
+
     this.recordDeletedRevenue(id);
     const revenues = this.getRevenues().filter(r => r.id !== id);
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(revenues));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(revenues));
     this.broadcastUpdate('REVENUE_DELETED', { id });
+
+    const actor = this.getCurrentUserName();
+    this.notifyRemoteChange('revenue_deleted', 'Receita Removida 🗑️', `${actor} removeu a receita "${rName}"`, rName);
+
     this.syncWithServer();
   }
 
@@ -2569,6 +2763,10 @@ class CloudKitSyncEngine {
     localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(remaining));
     localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(remaining));
     this.broadcastUpdate('REVENUE_SERIES_DELETED', { deletedIds, revenueName: revenue.name });
+
+    const actor = this.getCurrentUserName();
+    this.notifyRemoteChange('revenue_deleted', 'Receita Removida 🗑️', `${actor} removeu a receita "${revenue.name}" de todos os meses`, revenue.name);
+
     this.syncWithServer();
     return deletedIds;
   }
@@ -2983,6 +3181,28 @@ class CloudKitSyncEngine {
         this.broadcastUpdate('SYNC_COMPLETED', serverHouse);
         this.broadcastUpdate('DEVICES_UPDATED');
         this.broadcastUpdate('BILLS_UPDATED');
+
+        // Process any notifications from the server generated by other devices
+        const notificationsList = data.notifications || serverHouse.notifications;
+        if (Array.isArray(notificationsList)) {
+          const myDev = this.getCurrentDeviceInfo();
+          const newNotifs = notificationsList.filter((n: any) => 
+            n &&
+            n.sourceDeviceId !== myDev.id &&
+            new Date(n.timestamp).getTime() > new Date(this.lastSeenNotificationTime).getTime()
+          );
+          if (newNotifs.length > 0) {
+            newNotifs.forEach((n: any) => {
+              this.broadcastUpdate('REMOTE_CHANGE_NOTIFICATION', n);
+            });
+            const latest = newNotifs[0];
+            if (latest?.timestamp) {
+              this.lastSeenNotificationTime = latest.timestamp;
+              localStorage.setItem('financas_last_seen_notif_time', latest.timestamp);
+            }
+          }
+        }
+
         return { success: true, message: successMessage };
       }
 

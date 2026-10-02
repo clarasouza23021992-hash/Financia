@@ -426,6 +426,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
             <button
               type="submit"
               form="revenue-form"
+              onClick={handleSubmit}
               className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/25 active-press flex items-center gap-1.5 transition-all"
             >
               <Check className="w-4 h-4" />

@@ -327,6 +327,7 @@ export const EditBankModal: React.FC<EditBankModalProps> = ({
           <button
             type="submit"
             form="bank-form"
+            onClick={handleSubmit}
             className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-bold rounded-xl active-press shadow-xs"
           >
             {initialData ? 'Salvar Alterações' : 'Adicionar Instrumento Real'}

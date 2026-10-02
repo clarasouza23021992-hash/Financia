@@ -30,6 +30,94 @@ interface BillModalProps {
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
 const RECURRENCE_OPTIONS: RecurrenceType[] = ['Mensal Fixa', 'Parcelada', 'Única / Pontual'];
 
+// Automatic receipt image compression to prevent browser localStorage quota exceeded
+const compressReceiptFile = (file: File): Promise<{ dataUrl: string; sizeFormatted: string }> => {
+  return new Promise((resolve) => {
+    // If not an image (e.g. PDF), read directly
+    if (!file.type.startsWith('image/') && !file.name.match(/\.(jpg|jpeg|png|webp|heic|bmp)$/i)) {
+      const reader = new FileReader();
+      reader.onload = () => {
+        const sizeKb = Math.round(file.size / 1024);
+        resolve({
+          dataUrl: reader.result as string,
+          sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+        });
+      };
+      reader.onerror = () => {
+        resolve({ dataUrl: '', sizeFormatted: '' });
+      };
+      reader.readAsDataURL(file);
+      return;
+    }
+
+    // For images, load into an HTMLImageElement and resize via Canvas
+    const reader = new FileReader();
+    reader.onload = () => {
+      const rawDataUrl = reader.result as string;
+      const img = new Image();
+      img.onload = () => {
+        try {
+          const canvas = document.createElement('canvas');
+          let width = img.width;
+          let height = img.height;
+          const maxDim = 1200; // 1200px max dimension: crisp receipts & readable barcodes
+
+          if (width > maxDim || height > maxDim) {
+            if (width > height) {
+              height = Math.round((height * maxDim) / width);
+              width = maxDim;
+            } else {
+              width = Math.round((width * maxDim) / height);
+              height = maxDim;
+            }
+          }
+
+          canvas.width = width;
+          canvas.height = height;
+          const ctx = canvas.getContext('2d');
+          if (!ctx) {
+            const sizeKb = Math.round(file.size / 1024);
+            resolve({
+              dataUrl: rawDataUrl,
+              sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+            });
+            return;
+          }
+
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
+          const compressedSizeKb = Math.round((compressedDataUrl.length * 3) / 4 / 1024);
+          const formatted = compressedSizeKb > 1024 ? `${(compressedSizeKb / 1024).toFixed(1)} MB` : `${compressedSizeKb} KB`;
+
+          resolve({
+            dataUrl: compressedDataUrl,
+            sizeFormatted: `${formatted} (Otimizado)`,
+          });
+        } catch (err) {
+          console.warn('Canvas compression error:', err);
+          const sizeKb = Math.round(file.size / 1024);
+          resolve({
+            dataUrl: rawDataUrl,
+            sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+          });
+        }
+      };
+      img.onerror = () => {
+        const sizeKb = Math.round(file.size / 1024);
+        resolve({
+          dataUrl: rawDataUrl,
+          sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+        });
+      };
+      img.src = rawDataUrl;
+    };
+    reader.onerror = () => {
+      resolve({ dataUrl: '', sizeFormatted: '' });
+    };
+    reader.readAsDataURL(file);
+  });
+};
+
 export const BillModal: React.FC<BillModalProps> = ({
   isOpen,
   onClose,
@@ -65,6 +153,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [receiptName, setReceiptName] = useState('');
   const [receiptUrl, setReceiptUrl] = useState('');
   const [receiptSize, setReceiptSize] = useState('');
+  const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
   const [pixDetectedNotice, setPixDetectedNotice] = useState<string | null>(null);
   const [barcodeDetectedNotice, setBarcodeDetectedNotice] = useState<string | null>(null);
   const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
@@ -457,24 +546,43 @@ export const BillModal: React.FC<BillModalProps> = ({
 
   if (!isOpen) return null;
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        setReceiptUrl(reader.result as string);
-        setReceiptName(file.name);
-        const sizeKb = Math.round(file.size / 1024);
-        setReceiptSize(sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`);
-      };
-      reader.readAsDataURL(file);
+      setIsProcessingReceipt(true);
+      try {
+        const result = await compressReceiptFile(file);
+        if (result.dataUrl) {
+          setReceiptUrl(result.dataUrl);
+          setReceiptName(file.name);
+          setReceiptSize(result.sizeFormatted);
+        }
+      } catch (err) {
+        console.error('File compression error:', err);
+      } finally {
+        setIsProcessingReceipt(false);
+      }
     }
   };
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (e?: React.FormEvent) => {
+    if (e && typeof e.preventDefault === 'function') {
+      e.preventDefault();
+    }
+    if (isProcessingReceipt) {
+      alert('Por favor, aguarde o comprovante terminar de ser processado.');
+      return;
+    }
+    const cleanName = name.trim();
+    if (!cleanName) {
+      alert('Por favor, preencha o Nome da Conta.');
+      return;
+    }
+    if (!dueDate) {
+      alert('Por favor, selecione a Data de Vencimento.');
+      return;
+    }
     const parsedAmount = parseFloat(amount.replace(',', '.')) || 0;
-    const halfAmount = parsedAmount / 2;
     const isParcelada = recurrence === 'Parcelada';
     const summary = calculateInstallmentSummary();
 
@@ -482,43 +590,48 @@ export const BillModal: React.FC<BillModalProps> = ({
       ? paymentMonth
       : undefined;
 
-    onSave(
-      {
-        id: initialBill?.id,
-        name: name.trim() || 'Conta sem nome',
-        amount: parsedAmount,
-        dueDate,
-        originalDueDate: initialBill?.originalDueDate || dueDate,
-        paymentMonth: effectivePaymentMonth,
-        category,
-        favored: favored.trim() || 'Não especificado',
-        barcode: barcode.trim(),
-        pixKey: pixKey.trim(),
-        pixType,
-        recurrence,
-        fixedValueType: recurrence === 'Mensal Fixa' ? fixedValueType : undefined,
-        splitHousehold: false,
-        splitDetails: [],
-        notes: notes.trim(),
-        receiptName: receiptName || undefined,
-        receiptUrl: receiptUrl || undefined,
-        receiptSize: receiptSize || undefined,
-        status: initialBill?.status || 'pending',
-        installmentNumber: isParcelada ? summary.validCurrent : undefined,
-        totalInstallments: isParcelada ? summary.validTotal : undefined,
-        endMonth: isParcelada ? summary.shortEnd : undefined,
-        applyToFutureMonths,
-        previousName: initialBill?.name,
-      },
-      isParcelada
-        ? {
-            totalInstallments: summary.validTotal,
-            currentInstallment: summary.validCurrent,
-            valueIsPerInstallment,
-          }
-        : undefined
-    );
-    onClose();
+    try {
+      onSave(
+        {
+          id: initialBill?.id,
+          name: cleanName || 'Conta sem nome',
+          amount: parsedAmount,
+          dueDate,
+          originalDueDate: initialBill?.originalDueDate || dueDate,
+          paymentMonth: effectivePaymentMonth,
+          category,
+          favored: favored.trim() || 'Não especificado',
+          barcode: barcode.trim(),
+          pixKey: pixKey.trim(),
+          pixType,
+          recurrence,
+          fixedValueType: recurrence === 'Mensal Fixa' ? fixedValueType : undefined,
+          splitHousehold: false,
+          splitDetails: [],
+          notes: notes.trim(),
+          receiptName: receiptName || undefined,
+          receiptUrl: receiptUrl || undefined,
+          receiptSize: receiptSize || undefined,
+          status: initialBill?.status || 'pending',
+          installmentNumber: isParcelada ? summary.validCurrent : undefined,
+          totalInstallments: isParcelada ? summary.validTotal : undefined,
+          endMonth: isParcelada ? summary.shortEnd : undefined,
+          applyToFutureMonths,
+          previousName: initialBill?.name,
+        },
+        isParcelada
+          ? {
+              totalInstallments: summary.validTotal,
+              currentInstallment: summary.validCurrent,
+              valueIsPerInstallment,
+            }
+          : undefined
+      );
+      onClose();
+    } catch (err) {
+      console.error('Error saving bill:', err);
+      onClose();
+    }
   };
 
   return (
@@ -554,8 +667,9 @@ export const BillModal: React.FC<BillModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Form Body */}
-        <form id="bill-form" onSubmit={handleSubmit} className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+        {/* Modal Form Body & Pinned Footer wrapped inside form */}
+        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+          <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {/* Quick Pix Auto-Fill Banner */}
           <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
             <div className="flex items-center justify-between gap-2 mb-1.5">
@@ -1500,10 +1614,17 @@ export const BillModal: React.FC<BillModalProps> = ({
                     setReceiptUrl('');
                     setReceiptSize('');
                   }}
-                  className="text-slate-400 hover:text-rose-600 p-1"
+                  className="text-slate-400 hover:text-rose-600 p-1 active-press"
+                  title="Remover comprovante"
                 >
                   <Trash2 className="w-4 h-4" />
                 </button>
+              </div>
+            ) : isProcessingReceipt ? (
+              <div className="border-2 border-dashed border-teal-500 rounded-xl p-4 flex flex-col items-center justify-center gap-2 bg-teal-50/50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200">
+                <Sparkles className="w-5 h-5 text-teal-600 animate-spin" />
+                <span className="text-xs font-bold">Otimizando e preparando comprovante...</span>
+                <span className="text-[10px] text-teal-600 dark:text-teal-400">Reduzindo tamanho para salvar instantaneamente</span>
               </div>
             ) : (
               <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-teal-500 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 transition-colors">
@@ -1512,7 +1633,7 @@ export const BillModal: React.FC<BillModalProps> = ({
                   Toque para anexar o comprovante
                 </span>
                 <span className="text-[10px] text-slate-400">
-                  PDF, JPG ou PNG de até 15MB
+                  PDF, JPG ou PNG de até 15MB (otimizado automaticamente)
                 </span>
                 <input
                   type="file"
@@ -1562,26 +1683,28 @@ export const BillModal: React.FC<BillModalProps> = ({
               </div>
             </div>
           )}
-        </form>
+          </div>
 
-        {/* Pinned Action Buttons Footer - 100% visible on screen */}
-        <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 z-20">
-          <button
-            type="button"
-            onClick={onClose}
-            className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
-          >
-            Cancelar
-          </button>
-          <button
-            type="submit"
-            form="bill-form"
-            className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-extrabold text-xs sm:text-sm rounded-xl active-press shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all"
-          >
-            <Check className="w-4 h-4" />
-            <span>{initialBill ? 'Salvar Alterações' : 'Cadastrar Conta'}</span>
-          </button>
-        </div>
+          {/* Pinned Action Buttons Footer - 100% visible on screen & inside form */}
+          <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 z-20">
+            <button
+              type="button"
+              onClick={onClose}
+              className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
+            >
+              Cancelar
+            </button>
+            <button
+              type="submit"
+              disabled={isProcessingReceipt}
+              onClick={handleSubmit}
+              className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] disabled:opacity-50 text-[#0A1128] font-extrabold text-xs sm:text-sm rounded-xl active-press shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
+            >
+              <Check className="w-4 h-4" />
+              <span>{isProcessingReceipt ? 'Otimizando Comprovante...' : (initialBill ? 'Salvar Alterações' : 'Cadastrar Conta')}</span>
+            </button>
+          </div>
+        </form>
       </div>
     </div>
   );

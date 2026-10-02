@@ -707,6 +707,32 @@ class CloudKitSyncEngine {
     }
   }
 
+  // Safe helper to write bills to localStorage with automatic QuotaExceededError protection
+  public safeSaveBillsToStorage(bills: Bill[]): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const serialized = JSON.stringify(bills);
+      localStorage.setItem(STORAGE_KEY_BILLS, serialized);
+      try {
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, serialized);
+      } catch {}
+    } catch (err) {
+      console.warn('LocalStorage QuotaExceededError while saving bills. Pruning older receipts to preserve storage...', err);
+      try {
+        // Strip heavy base64 receipt data from older bills while keeping receiptName and receiptSize
+        const pruned = bills.map((b, idx) => {
+          if (idx > 2 && b.receiptUrl && b.receiptUrl.length > 50000) {
+            return { ...b, receiptUrl: undefined };
+          }
+          return b;
+        });
+        localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(pruned));
+      } catch (retryErr) {
+        console.error('Failed to save bills to localStorage even after pruning:', retryErr);
+      }
+    }
+  }
+
   // Merge two bill lists safely, never dropping local user edits
   public mergeBillsLists(localBills: Bill[], incomingBills: Bill[]): Bill[] {
     const map = new Map<string, Bill>();
@@ -962,8 +988,7 @@ class CloudKitSyncEngine {
 
     // 5. Run thorough deduplication
     const deduped = this.deduplicateBills(bills);
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
-    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
+    this.safeSaveBillsToStorage(deduped);
     
     // Clear temporary deep scan cache keys
     localStorage.removeItem('financas_bills_deep_scan');
@@ -1335,11 +1360,7 @@ class CloudKitSyncEngine {
       updatedByDevice: b.updatedByDevice || currentDevice,
       isSynced: true,
     }));
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(updated));
-    // Keep in permanent safety vault whenever bills are not empty
-    if (updated.length > 0) {
-      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(updated));
-    }
+    this.safeSaveBillsToStorage(updated);
     this.broadcastUpdate('BILLS_UPDATED', { count: updated.length });
     this.syncWithServer();
   }
@@ -1713,8 +1734,7 @@ class CloudKitSyncEngine {
     }
 
     let deduped = this.deduplicateBills(bills);
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(deduped));
-    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(deduped));
+    this.safeSaveBillsToStorage(deduped);
 
     // If recurring or installment bill was updated/added, auto-propagate to subsequent months
     if (savedBill.recurrence === 'Mensal Fixa' || savedBill.recurrence === 'Parcelada' || savedBill.fixedValueType !== undefined) {
@@ -1768,7 +1788,7 @@ class CloudKitSyncEngine {
       isSynced: true,
     };
     bills[existingIndex] = updated;
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
+    this.safeSaveBillsToStorage(bills);
     this.broadcastUpdate('BILL_UPSERTED', updated);
 
     const actor = this.getCurrentUserName();
@@ -1895,8 +1915,7 @@ class CloudKitSyncEngine {
 
     this.recordDeletedBill(id);
     const bills = this.getBills().filter(b => b.id !== id);
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
-    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(bills));
+    this.safeSaveBillsToStorage(bills);
     this.broadcastUpdate('BILL_DELETED', { id });
 
     const actor = this.getCurrentUserName();
@@ -1964,8 +1983,7 @@ class CloudKitSyncEngine {
       this.recordDeletedSeriesSlug(cleanBarcode);
     }
 
-    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(remainingBills));
-    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(remainingBills));
+    this.safeSaveBillsToStorage(remainingBills);
     this.broadcastUpdate('BILLS_SERIES_DELETED', { deletedIds, billName: bill.name });
 
     const actor = this.getCurrentUserName();

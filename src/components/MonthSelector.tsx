@@ -1,18 +1,18 @@
 import React, { useState } from 'react';
-import { Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2 } from 'lucide-react';
+import { Calendar, ChevronLeft, ChevronRight, Plus, CheckCircle2, Clock } from 'lucide-react';
 import { Bill, getBillEffectiveMonth } from '../types/finance';
 
 export interface MonthOption {
-  id: string; // e.g., '2026-10'
-  label: string; // 'Outubro de 2026'
-  shortLabel: string; // 'Out 2026'
+  id: string; // e.g., '2026-11'
+  label: string; // 'Novembro de 2026'
+  shortLabel: string; // 'Nov 2026'
   isCurrent?: boolean;
 }
 
 export const INITIAL_SUBSEQUENT_MONTHS: MonthOption[] = [
   { id: '2026-09', label: 'Setembro de 2026', shortLabel: 'Set 2026' },
-  { id: '2026-10', label: 'Outubro de 2026', shortLabel: 'Out 2026', isCurrent: true },
-  { id: '2026-11', label: 'Novembro de 2026', shortLabel: 'Nov 2026' },
+  { id: '2026-10', label: 'Outubro de 2026', shortLabel: 'Out 2026' },
+  { id: '2026-11', label: 'Novembro de 2026', shortLabel: 'Nov 2026', isCurrent: true },
   { id: '2026-12', label: 'Dezembro de 2026', shortLabel: 'Dez 2026' },
   { id: '2027-01', label: 'Janeiro de 2027', shortLabel: 'Jan 2027' },
   { id: '2027-02', label: 'Fevereiro de 2027', shortLabel: 'Fev 2027' },
@@ -49,22 +49,33 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
   bills,
 }) => {
   const [monthsList, setMonthsList] = useState<MonthOption[]>(() => {
+    let list = INITIAL_SUBSEQUENT_MONTHS;
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('financas_custom_months_list');
       if (saved) {
         try {
-          return JSON.parse(saved);
+          const parsed = JSON.parse(saved);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            list = parsed;
+          }
         } catch {
           // fallback
         }
       }
     }
-    return INITIAL_SUBSEQUENT_MONTHS;
+    // Always mark Novembro de 2026 as isCurrent: true
+    return list.map(m => ({
+      ...m,
+      isCurrent: m.id === '2026-11',
+    }));
   });
 
   const currentIndex = monthsList.findIndex(m => m.id === selectedMonthId);
-  const safeIndex = currentIndex >= 0 ? currentIndex : 1; // default to Outubro 2026 (index 1)
+  const novIndex = monthsList.findIndex(m => m.id === '2026-11');
+  const safeIndex = currentIndex >= 0 ? currentIndex : (novIndex >= 0 ? novIndex : 2); // default to Novembro 2026
   const currentMonthOption = monthsList[safeIndex] || monthsList[0];
+  const currentCalendarMonth = monthsList.find(m => m.id === '2026-11') || monthsList[2];
+  const isViewingCurrentMonth = selectedMonthId === '2026-11';
 
   const currentMonthBillsCount = bills.filter(b => getBillEffectiveMonth(b) === selectedMonthId).length;
 
@@ -120,9 +131,26 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
               <Calendar className="w-4 h-4" />
             </div>
             <div className="min-w-0">
-              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
-                Navegação de Meses
-              </span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-[10px] font-bold text-slate-400 uppercase tracking-wider block truncate">
+                  Navegação de Meses
+                </span>
+                {isViewingCurrentMonth ? (
+                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
+                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                    <span>Mês Atual</span>
+                  </span>
+                ) : (
+                  <button
+                    onClick={() => onSelectMonth(currentCalendarMonth)}
+                    className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition-colors flex items-center gap-1 active-press"
+                    title="Ir para o mês atual (Novembro)"
+                  >
+                    <Clock className="w-2.5 h-2.5" />
+                    <span>Ir p/ Mês Atual</span>
+                  </button>
+                )}
+              </div>
               <span className="text-xs font-extrabold text-slate-900 dark:text-white truncate block">
                 {currentMonthOption.label}
               </span>
@@ -164,18 +192,24 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar pb-1 pt-0.5">
           {monthsList.map((month) => {
             const isSelected = month.id === selectedMonthId;
+            const isMonthCurrent = month.id === '2026-11';
             const count = bills.filter(b => getBillEffectiveMonth(b) === month.id).length;
 
             return (
               <button
                 key={month.id}
                 onClick={() => onSelectMonth(month)}
-                className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active-press ${
+                className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active-press relative ${
                   isSelected
                     ? 'bg-[#0A1128] dark:bg-teal-500 text-white dark:text-[#0A1128] shadow-sm ring-2 ring-teal-500/30'
+                    : isMonthCurrent
+                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/80 hover:bg-emerald-100'
                     : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                 }`}
               >
+                {isMonthCurrent && (
+                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" title="Mês Atual do Calendário" />
+                )}
                 <span>{month.shortLabel}</span>
                 <span
                   className={`text-[9px] px-1.5 py-0.2 rounded-full font-extrabold ${

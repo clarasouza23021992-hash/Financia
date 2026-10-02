@@ -3,12 +3,11 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Smartphone, X
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
-  SyncConflictLog, InAppNotification, ChangeNotification, getBillEffectiveMonth, 
+  SyncConflictLog, InAppNotification, getBillEffectiveMonth, 
   isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr 
 } from './types/finance';
 import { cloudkit, isMockBill, isMockRevenue } from './services/cloudkitSync';
@@ -16,9 +15,7 @@ import {
   getStoredInAppNotifications, 
   saveStoredInAppNotifications, 
   checkAndNotifyBills, 
-  getDefaultNotificationRule,
-  playNotificationChime,
-  sendNativeNotification
+  getDefaultNotificationRule 
 } from './services/notificationService';
 import { getStoredCategories } from './utils/categories';
 import { Header } from './components/Header';
@@ -68,11 +65,22 @@ export default function App() {
 
   // App Navigation, Months & Filters
   const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow'>('bills');
-  const [selectedMonth, setSelectedMonth] = useState<MonthOption>({
-    id: '2026-10',
-    label: 'Outubro de 2026',
-    shortLabel: 'Out 2026',
-    isCurrent: true,
+  const [selectedMonth, setSelectedMonth] = useState<MonthOption>(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('financas_selected_month_id');
+      // If user had previously stuck on 2026-10, migrate them to 2026-11 as requested
+      if (saved && saved !== '2026-10') {
+        const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === saved);
+        if (found) return found;
+      }
+    }
+    // Default to November 2026 (current month requested and synchronized with calendar)
+    return INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === '2026-11') || {
+      id: '2026-11',
+      label: 'Novembro de 2026',
+      shortLabel: 'Nov 2026',
+      isCurrent: true,
+    };
   });
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
@@ -806,11 +814,14 @@ export default function App() {
           <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
         {currentTab === 'bills' && (
           <div className="space-y-1">
-            {/* 1. Month Selector with Subsequent Months starting October 2026 */}
+            {/* 1. Month Selector with Subsequent Months */}
             <MonthSelector
               selectedMonthId={selectedMonth.id}
               onSelectMonth={(month) => {
                 setSelectedMonth(month);
+                if (typeof window !== 'undefined') {
+                  localStorage.setItem('financas_selected_month_id', month.id);
+                }
                 const updated = cloudkit.autoPropagateRecurringBills([month.id]);
                 setBills(updated);
               }}

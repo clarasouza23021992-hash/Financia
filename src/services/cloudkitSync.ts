@@ -2094,10 +2094,10 @@ class CloudKitSyncEngine {
   }
 
   // Direct helper to edit and persist household salaries with automatic propagation to subsequent months
-  public updateCoupleSalaries(userAmount: number, spouseAmount: number, selectedMonthId: string = '2026-10'): Revenue[] {
+  public updateCoupleSalaries(userAmount: number, spouseAmount: number, selectedMonthId: string = '2026-11'): Revenue[] {
     const rawRevenues = this.getRevenues().filter(r => !isMockRevenue(r));
     const activeDev = this.getActiveDevice().name;
-    const monthPrefix = selectedMonthId || '2026-10';
+    const monthPrefix = selectedMonthId || '2026-11';
     const profiles = this.getProfiles();
     const userPName = profiles[0]?.name || 'Você';
     const spousePName = profiles[1]?.name || 'Cônjuge';
@@ -3512,8 +3512,8 @@ class CloudKitSyncEngine {
   }
 
   // Restore complete household preset (Carlos & Paula) with realistic household bills
-  public restoreCouplePresetData(targetMonthId: string = '2026-10'): { bills: Bill[]; revenues: Revenue[] } {
-    const month = targetMonthId || '2026-10';
+  public restoreCouplePresetData(targetMonthId: string = '2026-11'): { bills: Bill[]; revenues: Revenue[] } {
+    const month = targetMonthId || '2026-11';
     const activeDev = this.getActiveDevice().name || 'iPhone Carlos';
     const nowIso = new Date().toISOString();
 

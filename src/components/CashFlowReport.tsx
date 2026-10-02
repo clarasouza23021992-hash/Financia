@@ -21,7 +21,7 @@ interface CashFlowReportProps {
 export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   bills,
   revenues,
-  selectedMonth = 'Outubro de 2026',
+  selectedMonth = 'Novembro de 2026',
   onOpenNewRevenue,
   onEditRevenue,
   onDeleteRevenue,

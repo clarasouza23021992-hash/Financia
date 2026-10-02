@@ -1,5 +1,5 @@
-import React from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target } from 'lucide-react';
+import React, { useState, useEffect } from 'react';
+import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target, Calendar, Clock } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -25,7 +25,7 @@ interface HeaderProps {
 }
 
 export const Header: React.FC<HeaderProps> = ({
-  selectedMonth = 'Outubro de 2026',
+  selectedMonth = 'Novembro de 2026',
   onOpenNewBill,
   onOpenCloudSync,
   onOpenCalculator,
@@ -38,6 +38,20 @@ export const Header: React.FC<HeaderProps> = ({
   isOffline,
   isWifeConnected = false,
 }) => {
+  const [currentClock, setCurrentClock] = useState<string>(() => {
+    const d = new Date();
+    return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  });
+
+  useEffect(() => {
+    const updateTime = () => {
+      const d = new Date();
+      setCurrentClock(d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }));
+    };
+    const interval = setInterval(updateTime, 10000);
+    return () => clearInterval(interval);
+  }, []);
+
   return (
     <header className="bg-[#0A1128] text-white header-safe-top pb-1.5 px-3 sm:px-4 sticky top-0 z-30 shadow-sm border-b border-slate-800/80 w-full flex-shrink-0">
       <div className="flex items-center justify-between max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full gap-2">
@@ -54,16 +68,22 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 type="button"
                 onClick={onOpenCloudSync}
-                title={isOffline ? 'Modo Offline' : 'Sincronizado'}
+                title={isOffline ? 'Modo Offline' : 'Sincronizado com Nuvem'}
                 className="flex items-center gap-1 text-[11px] text-teal-300/80 hover:text-teal-200 flex-shrink-0"
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${isOffline ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
                 <Cloud className="w-3.5 h-3.5 text-teal-400" />
               </button>
             </div>
-            <p className="text-[10px] sm:text-[11px] text-slate-400 font-medium truncate">
-              {selectedMonth}
-            </p>
+            <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-300 font-medium truncate mt-0.5">
+              <Calendar className="w-3 h-3 text-[#00C49F] flex-shrink-0" />
+              <span className="font-bold text-white truncate">{selectedMonth}</span>
+              <span className="text-slate-500">•</span>
+              <span className="text-teal-300 font-semibold flex items-center gap-1 flex-shrink-0" title="Horário do aparelho sincronizado">
+                <Clock className="w-2.5 h-2.5 text-teal-400" />
+                <span>{currentClock}</span>
+              </span>
+            </div>
           </div>
         </div>
 

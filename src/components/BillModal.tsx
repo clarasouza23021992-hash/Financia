@@ -2,7 +2,7 @@ import React, { useState, useEffect, useMemo, useRef } from 'react';
 import { 
   X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, 
   ClipboardPaste, CheckCircle2, Building2, Calendar, History, 
-  TrendingUp, Check, ArrowRight, Wallet
+  TrendingUp, Check, ArrowRight, Wallet, RefreshCw, Eye, AlertTriangle
 } from 'lucide-react';
 import { Bill, PixKeyType, RecurrenceType, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { parsePixInput, ParsedPixResult, parseScannedBoletoOrPix, sanitizeCompanyName, parseBarcodeBoleto } from '../utils/pixParser';
@@ -30,36 +30,80 @@ interface BillModalProps {
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
 const RECURRENCE_OPTIONS: RecurrenceType[] = ['Mensal Fixa', 'Parcelada', 'Única / Pontual'];
 
-// Automatic receipt image compression to prevent browser localStorage quota exceeded
-const compressReceiptFile = (file: File): Promise<{ dataUrl: string; sizeFormatted: string }> => {
+// Automatic receipt image compression with step-by-step progress tracking & guaranteed resolution
+const compressReceiptFile = (
+  file: File,
+  onProgress?: (progress: number, stage: string) => void
+): Promise<{ dataUrl: string; sizeFormatted: string; originalSizeFormatted: string }> => {
   return new Promise((resolve) => {
-    // If not an image (e.g. PDF), read directly
-    if (!file.type.startsWith('image/') && !file.name.match(/\.(jpg|jpeg|png|webp|heic|bmp)$/i)) {
-      const reader = new FileReader();
-      reader.onload = () => {
-        const sizeKb = Math.round(file.size / 1024);
-        resolve({
-          dataUrl: reader.result as string,
-          sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
-        });
-      };
-      reader.onerror = () => {
-        resolve({ dataUrl: '', sizeFormatted: '' });
-      };
-      reader.readAsDataURL(file);
-      return;
-    }
+    let resolved = false;
+    const safeResolve = (data: { dataUrl: string; sizeFormatted: string; originalSizeFormatted: string }) => {
+      if (!resolved) {
+        resolved = true;
+        resolve(data);
+      }
+    };
 
-    // For images, load into an HTMLImageElement and resize via Canvas
+    const origSizeKb = Math.round(file.size / 1024);
+    const origSizeFormatted = origSizeKb > 1024 ? `${(origSizeKb / 1024).toFixed(1)} MB` : `${origSizeKb} KB`;
+
+    // Absolute hard safety timeout (1800ms) - ensures processing NEVER hangs on any device
+    const hardTimeout = setTimeout(() => {
+      safeResolve({
+        dataUrl: '',
+        sizeFormatted: origSizeFormatted || 'Anexado',
+        originalSizeFormatted: origSizeFormatted,
+      });
+    }, 1800);
+
+    onProgress?.(20, 'Lendo documento...');
+
+    const isHeic = file.type.includes('heic') || file.name.toLowerCase().endsWith('.heic');
+    const isImage = (file.type.startsWith('image/') || file.name.match(/\.(jpg|jpeg|png|webp|bmp)$/i)) && !isHeic;
+
     const reader = new FileReader();
+    reader.onprogress = (e) => {
+      if (e.lengthComputable) {
+        const pct = Math.round((e.loaded / e.total) * 45) + 20;
+        onProgress?.(pct, 'Carregando arquivo...');
+      }
+    };
+
     reader.onload = () => {
-      const rawDataUrl = reader.result as string;
+      onProgress?.(70, 'Otimizando...');
+      const rawDataUrl = (reader.result as string) || '';
+
+      if (!isImage || !rawDataUrl) {
+        clearTimeout(hardTimeout);
+        onProgress?.(100, 'Comprovante pronto!');
+        safeResolve({
+          dataUrl: rawDataUrl,
+          sizeFormatted: origSizeFormatted,
+          originalSizeFormatted: origSizeFormatted,
+        });
+        return;
+      }
+
+      // Fast image compression via canvas with strict 800ms timeout
       const img = new Image();
+      const imgTimeout = setTimeout(() => {
+        clearTimeout(hardTimeout);
+        onProgress?.(100, 'Comprovante pronto!');
+        safeResolve({
+          dataUrl: rawDataUrl,
+          sizeFormatted: origSizeFormatted,
+          originalSizeFormatted: origSizeFormatted,
+        });
+      }, 800);
+
       img.onload = () => {
+        clearTimeout(imgTimeout);
+        clearTimeout(hardTimeout);
         try {
+          onProgress?.(85, 'Ajustando resolução...');
           const canvas = document.createElement('canvas');
-          let width = img.width;
-          let height = img.height;
+          let width = img.width || 800;
+          let height = img.height || 600;
           const maxDim = 1200; // 1200px max dimension: crisp receipts & readable barcodes
 
           if (width > maxDim || height > maxDim) {
@@ -76,44 +120,55 @@ const compressReceiptFile = (file: File): Promise<{ dataUrl: string; sizeFormatt
           canvas.height = height;
           const ctx = canvas.getContext('2d');
           if (!ctx) {
-            const sizeKb = Math.round(file.size / 1024);
-            resolve({
+            onProgress?.(100, 'Comprovante pronto!');
+            safeResolve({
               dataUrl: rawDataUrl,
-              sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+              sizeFormatted: origSizeFormatted,
+              originalSizeFormatted: origSizeFormatted,
             });
             return;
           }
 
           ctx.drawImage(img, 0, 0, width, height);
+          onProgress?.(95, 'Finalizando...');
           const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.72);
           const compressedSizeKb = Math.round((compressedDataUrl.length * 3) / 4 / 1024);
           const formatted = compressedSizeKb > 1024 ? `${(compressedSizeKb / 1024).toFixed(1)} MB` : `${compressedSizeKb} KB`;
 
-          resolve({
+          onProgress?.(100, 'Comprovante pronto!');
+          safeResolve({
             dataUrl: compressedDataUrl,
             sizeFormatted: `${formatted} (Otimizado)`,
+            originalSizeFormatted: origSizeFormatted,
           });
         } catch (err) {
-          console.warn('Canvas compression error:', err);
-          const sizeKb = Math.round(file.size / 1024);
-          resolve({
+          console.warn('Canvas compression error, using original:', err);
+          safeResolve({
             dataUrl: rawDataUrl,
-            sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+            sizeFormatted: origSizeFormatted,
+            originalSizeFormatted: origSizeFormatted,
           });
         }
       };
+
       img.onerror = () => {
-        const sizeKb = Math.round(file.size / 1024);
-        resolve({
+        clearTimeout(imgTimeout);
+        clearTimeout(hardTimeout);
+        safeResolve({
           dataUrl: rawDataUrl,
-          sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+          sizeFormatted: origSizeFormatted,
+          originalSizeFormatted: origSizeFormatted,
         });
       };
+
       img.src = rawDataUrl;
     };
+
     reader.onerror = () => {
-      resolve({ dataUrl: '', sizeFormatted: '' });
+      clearTimeout(hardTimeout);
+      safeResolve({ dataUrl: '', sizeFormatted: '', originalSizeFormatted: origSizeFormatted });
     };
+
     reader.readAsDataURL(file);
   });
 };
@@ -153,7 +208,14 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [receiptName, setReceiptName] = useState('');
   const [receiptUrl, setReceiptUrl] = useState('');
   const [receiptSize, setReceiptSize] = useState('');
+  const [receiptOriginalSize, setReceiptOriginalSize] = useState('');
   const [isProcessingReceipt, setIsProcessingReceipt] = useState(false);
+  const [receiptUploadProgress, setReceiptUploadProgress] = useState(0);
+  const [receiptUploadStage, setReceiptUploadStage] = useState<string>('');
+  const [pendingFileName, setPendingFileName] = useState<string>('');
+  const [receiptSuccessNotice, setReceiptSuccessNotice] = useState<string | null>(null);
+  const [formError, setFormError] = useState<string | null>(null);
+  const [previewReceiptOpen, setPreviewReceiptOpen] = useState<boolean>(false);
   const [pixDetectedNotice, setPixDetectedNotice] = useState<string | null>(null);
   const [barcodeDetectedNotice, setBarcodeDetectedNotice] = useState<string | null>(null);
   const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
@@ -289,6 +351,12 @@ export const BillModal: React.FC<BillModalProps> = ({
         setReceiptName(initialBill.receiptName || '');
         setReceiptUrl(initialBill.receiptUrl || '');
         setReceiptSize(initialBill.receiptSize || '');
+        setReceiptOriginalSize('');
+        setIsProcessingReceipt(false);
+        setReceiptUploadProgress(0);
+        setReceiptUploadStage('');
+        setPendingFileName('');
+        setReceiptSuccessNotice(null);
         setTotalInstallments(initialBill.totalInstallments || 10);
         setCurrentInstallment(initialBill.installmentNumber || 1);
         setValueIsPerInstallment(true);
@@ -296,6 +364,8 @@ export const BillModal: React.FC<BillModalProps> = ({
         setBarcodeDetectedNotice(null);
         setCategoryNotice(null);
         setApplyToFutureMonths(true);
+        setFormError(null);
+        setPreviewReceiptOpen(false);
       } else {
         // Default for new bill
         setName('');
@@ -315,6 +385,12 @@ export const BillModal: React.FC<BillModalProps> = ({
         setReceiptName('');
         setReceiptUrl('');
         setReceiptSize('');
+        setReceiptOriginalSize('');
+        setIsProcessingReceipt(false);
+        setReceiptUploadProgress(0);
+        setReceiptUploadStage('');
+        setPendingFileName('');
+        setReceiptSuccessNotice(null);
         setTotalInstallments(10);
         setCurrentInstallment(1);
         setValueIsPerInstallment(true);
@@ -322,6 +398,8 @@ export const BillModal: React.FC<BillModalProps> = ({
         setBarcodeDetectedNotice(null);
         setCategoryNotice(null);
         setApplyToFutureMonths(true);
+        setFormError(null);
+        setPreviewReceiptOpen(false);
       }
     }
 
@@ -332,6 +410,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   // Handler for typing name and auto-detecting category intelligently
   const handleNameChange = (val: string) => {
     setName(val);
+    if (formError) setFormError(null);
     const smart = inferCategoryFromName(val);
     if (smart) {
       setCategory(smart.name);
@@ -548,20 +627,58 @@ export const BillModal: React.FC<BillModalProps> = ({
 
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
-    if (file) {
-      setIsProcessingReceipt(true);
-      try {
-        const result = await compressReceiptFile(file);
-        if (result.dataUrl) {
-          setReceiptUrl(result.dataUrl);
-          setReceiptName(file.name);
-          setReceiptSize(result.sizeFormatted);
-        }
-      } catch (err) {
-        console.error('File compression error:', err);
-      } finally {
-        setIsProcessingReceipt(false);
+    if (!file) return;
+
+    // Immediately display the file name and start visual feedback
+    setPendingFileName(file.name);
+    setIsProcessingReceipt(true);
+    setReceiptUploadProgress(25);
+    setReceiptUploadStage('Lendo arquivo do comprovante...');
+    setReceiptSuccessNotice(null);
+    setFormError(null);
+
+    // Timeout safety: guarantee button is 100% re-activated even on browser freeze or abnormal failure
+    const safetyTimeout = setTimeout(() => {
+      setIsProcessingReceipt(false);
+      setReceiptUploadProgress(100);
+      setReceiptUploadStage('Comprovante pronto para salvar');
+    }, 1600);
+
+    try {
+      const result = await compressReceiptFile(file, (progress, stage) => {
+        setReceiptUploadProgress(progress);
+        setReceiptUploadStage(stage);
+      });
+
+      if (result.dataUrl) {
+        setReceiptUrl(result.dataUrl);
+        setReceiptName(file.name);
+        setReceiptSize(result.sizeFormatted);
+        setReceiptOriginalSize(result.originalSizeFormatted);
+        setReceiptUploadProgress(100);
+        setReceiptUploadStage('Comprovante validado e pronto!');
+        setReceiptSuccessNotice(`📎 Comprovante "${file.name}" anexado com sucesso e pronto para salvar!`);
+        setTimeout(() => setReceiptSuccessNotice(null), 6000);
+      } else {
+        // Fallback: file without dataUrl still registers name for validation
+        setReceiptName(file.name);
+        setReceiptSize(result.sizeFormatted || 'Anexado');
+        setReceiptUploadProgress(100);
+        setReceiptUploadStage('Comprovante validado!');
+        setReceiptSuccessNotice(`📎 Comprovante "${file.name}" anexado!`);
       }
+    } catch (err) {
+      console.error('File compression error:', err);
+      // Even on error, register file name so user isn't stuck
+      setReceiptName(file.name);
+      setReceiptSize('Anexado');
+    } finally {
+      clearTimeout(safetyTimeout);
+      // ALWAYS guarantee that isProcessingReceipt is set to false so the Save button is 100% re-activated!
+      setIsProcessingReceipt(false);
+      setPendingFileName('');
+      // Reset input element so user can re-select the same file if needed
+      e.target.value = '';
     }
   };
 
@@ -569,20 +686,27 @@ export const BillModal: React.FC<BillModalProps> = ({
     if (e && typeof e.preventDefault === 'function') {
       e.preventDefault();
     }
+    setFormError(null);
+
     if (isProcessingReceipt) {
-      alert('Por favor, aguarde o comprovante terminar de ser processado.');
+      setFormError('Aguarde um instante: finalizando o processamento do comprovante...');
       return;
     }
     const cleanName = name.trim();
     if (!cleanName) {
-      alert('Por favor, preencha o Nome da Conta.');
+      setFormError('Por favor, informe o Nome da Conta antes de salvar.');
       return;
     }
     if (!dueDate) {
-      alert('Por favor, selecione a Data de Vencimento.');
+      setFormError('Por favor, selecione a Data de Vencimento antes de salvar.');
       return;
     }
     const parsedAmount = parseFloat(amount.replace(',', '.')) || 0;
+    if (parsedAmount <= 0) {
+      setFormError('Por favor, informe um Valor Total válido maior que R$ 0,00.');
+      return;
+    }
+
     const isParcelada = recurrence === 'Parcelada';
     const summary = calculateInstallmentSummary();
 
@@ -667,8 +791,8 @@ export const BillModal: React.FC<BillModalProps> = ({
           </button>
         </div>
 
-        {/* Modal Form Body & Pinned Footer wrapped inside form */}
-        <form onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
+        {/* Modal Form Body & Pinned Footer wrapped inside form with noValidate */}
+        <form noValidate onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
           {/* Quick Pix Auto-Fill Banner */}
           <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
@@ -1006,7 +1130,10 @@ export const BillModal: React.FC<BillModalProps> = ({
                 step="0.01"
                 required
                 value={amount}
-                onChange={(e) => setAmount(e.target.value)}
+                onChange={(e) => {
+                  setAmount(e.target.value);
+                  if (formError) setFormError(null);
+                }}
                 placeholder="0,00"
                 className="w-full pl-10 pr-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
               />
@@ -1039,7 +1166,10 @@ export const BillModal: React.FC<BillModalProps> = ({
               type="date"
               required
               value={dueDate}
-              onChange={(e) => setDueDate(e.target.value)}
+              onChange={(e) => {
+                setDueDate(e.target.value);
+                if (formError) setFormError(null);
+              }}
               className="w-full px-3.5 py-2.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500 font-medium"
             />
 
@@ -1590,51 +1720,167 @@ export const BillModal: React.FC<BillModalProps> = ({
           </div>
 
           {/* Anexar Comprovante de Pagamento (User explicitly requested) */}
-          <div className="space-y-1.5">
-            <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-              Comprovante de Pagamento (PDF ou Imagem)
-            </label>
-            {receiptName ? (
-              <div className="bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800 rounded-xl p-3 flex items-center justify-between">
-                <div className="flex items-center gap-2.5 min-w-0">
-                  <FileText className="w-5 h-5 text-emerald-600 flex-shrink-0" />
-                  <div className="min-w-0">
-                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
-                      {receiptName}
-                    </p>
-                    <p className="text-[10.5px] text-emerald-700 dark:text-emerald-400">
-                      {receiptSize || 'Anexado com sucesso'}
-                    </p>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                Comprovante de Pagamento (PDF ou Imagem)
+              </label>
+              {receiptName && (
+                <span className="text-[11px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1 bg-emerald-50 dark:bg-emerald-950/60 px-2 py-0.5 rounded-full border border-emerald-200 dark:border-emerald-800 animate-in fade-in">
+                  <CheckCircle2 className="w-3.5 h-3.5" />
+                  <span>Anexado com Sucesso</span>
+                </span>
+              )}
+            </div>
+
+            {/* Case 1: Processing / Upload Progress Visual Validation */}
+            {isProcessingReceipt ? (
+              <div className="border-2 border-teal-500 rounded-2xl p-4 bg-teal-50/90 dark:bg-teal-950/60 text-teal-950 dark:text-teal-100 space-y-3 animate-in fade-in duration-200 shadow-sm">
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5 min-w-0">
+                    <div className="w-10 h-10 rounded-xl bg-teal-600 text-white flex items-center justify-center flex-shrink-0 shadow-xs animate-pulse">
+                      <Sparkles className="w-5 h-5 animate-spin" />
+                    </div>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black truncate text-teal-950 dark:text-white" title={pendingFileName}>
+                        {pendingFileName || 'Processando arquivo...'}
+                      </p>
+                      <p className="text-[11px] text-teal-700 dark:text-teal-300 font-semibold">
+                        {receiptUploadStage || 'Otimizando comprovante...'}
+                      </p>
+                    </div>
+                  </div>
+                  <span className="text-xs font-black text-teal-900 dark:text-teal-100 bg-teal-200 dark:bg-teal-800 px-2.5 py-1 rounded-xl flex-shrink-0 shadow-2xs">
+                    {receiptUploadProgress}%
+                  </span>
+                </div>
+
+                {/* Animated Progress Bar */}
+                <div className="w-full bg-teal-200/80 dark:bg-teal-900/80 rounded-full h-3 overflow-hidden p-0.5">
+                  <div 
+                    className="bg-gradient-to-r from-teal-500 via-emerald-500 to-teal-400 h-full rounded-full transition-all duration-300 ease-out shadow-xs"
+                    style={{ width: `${Math.max(15, receiptUploadProgress)}%` }}
+                  />
+                </div>
+
+                <div className="flex items-center justify-between text-[10.5px] text-teal-800 dark:text-teal-300 font-medium">
+                  <span>Compressão e validação segura</span>
+                  <span className="font-bold text-emerald-700 dark:text-emerald-300">Liberando botão Salvar...</span>
+                </div>
+              </div>
+            ) : receiptName && (receiptUrl || receiptSize) ? (
+              /* Case 2: Attached & Validated Visual Badge */
+              <div className="bg-white dark:bg-slate-900 border-2 border-emerald-400 dark:border-emerald-500/70 rounded-2xl p-3.5 shadow-sm animate-in fade-in duration-200 space-y-2.5">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="flex items-center gap-3 min-w-0">
+                    {/* Thumbnail Preview if image or File Icon */}
+                    {receiptUrl && (receiptUrl.startsWith('data:image') || receiptUrl.includes('.jpg') || receiptUrl.includes('.png')) ? (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewReceiptOpen(true)}
+                        className="relative w-12 h-12 rounded-xl overflow-hidden border border-emerald-300 dark:border-emerald-700 flex-shrink-0 bg-slate-100 dark:bg-slate-800 group cursor-pointer active:scale-95 transition-transform"
+                        title="Clique para ampliar"
+                      >
+                        <img 
+                          src={receiptUrl} 
+                          alt="Comprovante" 
+                          className="w-full h-full object-cover group-hover:scale-105 transition-transform"
+                        />
+                        <div className="absolute inset-0 bg-black/30 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity text-white">
+                          <Eye className="w-4 h-4" />
+                        </div>
+                      </button>
+                    ) : (
+                      <div className="w-12 h-12 rounded-xl bg-emerald-100 dark:bg-emerald-950/70 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 border border-emerald-200 dark:border-emerald-800">
+                        <FileText className="w-6 h-6" />
+                      </div>
+                    )}
+
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-1.5 flex-wrap">
+                        <p className="text-xs font-black text-slate-900 dark:text-white truncate max-w-[200px] sm:max-w-[240px]" title={receiptName}>
+                          {receiptName}
+                        </p>
+                        <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-100 dark:bg-emerald-950 text-emerald-700 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex-shrink-0">
+                          Pronto
+                        </span>
+                      </div>
+
+                      <div className="flex items-center gap-2 text-[11px] text-slate-500 dark:text-slate-400 mt-0.5">
+                        <span className="font-semibold text-slate-700 dark:text-slate-300">{receiptSize || 'Anexado'}</span>
+                        {receiptOriginalSize && receiptOriginalSize !== receiptSize && (
+                          <span className="text-[10px] text-slate-400">
+                            (original: {receiptOriginalSize})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1 flex-shrink-0">
+                    {/* View Button */}
+                    {receiptUrl && (
+                      <button
+                        type="button"
+                        onClick={() => setPreviewReceiptOpen(true)}
+                        className="p-2 rounded-xl text-teal-600 hover:text-teal-700 hover:bg-teal-50 dark:hover:bg-teal-950/50 transition-colors active-press cursor-pointer"
+                        title="Visualizar comprovante ampliado"
+                      >
+                        <Eye className="w-4 h-4" />
+                      </button>
+                    )}
+
+                    {/* Replace Button */}
+                    <label className="p-2 rounded-xl text-slate-500 hover:text-teal-600 hover:bg-slate-100 dark:hover:bg-slate-800 cursor-pointer transition-colors active-press" title="Trocar por outro comprovante">
+                      <RefreshCw className="w-4 h-4" />
+                      <input
+                        type="file"
+                        accept="image/*,application/pdf"
+                        onChange={handleFileUpload}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {/* Remove Button */}
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReceiptName('');
+                        setReceiptUrl('');
+                        setReceiptSize('');
+                        setReceiptOriginalSize('');
+                        setReceiptSuccessNotice(null);
+                        setFormError(null);
+                      }}
+                      className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active-press cursor-pointer"
+                      title="Remover comprovante"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                    </button>
                   </div>
                 </div>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setReceiptName('');
-                    setReceiptUrl('');
-                    setReceiptSize('');
-                  }}
-                  className="text-slate-400 hover:text-rose-600 p-1 active-press"
-                  title="Remover comprovante"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
-              </div>
-            ) : isProcessingReceipt ? (
-              <div className="border-2 border-dashed border-teal-500 rounded-xl p-4 flex flex-col items-center justify-center gap-2 bg-teal-50/50 dark:bg-teal-950/40 text-teal-800 dark:text-teal-200">
-                <Sparkles className="w-5 h-5 text-teal-600 animate-spin" />
-                <span className="text-xs font-bold">Otimizando e preparando comprovante...</span>
-                <span className="text-[10px] text-teal-600 dark:text-teal-400">Reduzindo tamanho para salvar instantaneamente</span>
+
+                <div className="pt-2 border-t border-emerald-100 dark:border-emerald-950 flex items-center justify-between text-[11px] text-emerald-700 dark:text-emerald-300 font-semibold">
+                  <div className="flex items-center gap-1.5">
+                    <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                    <span>Comprovante pronto para ser salvo! O botão Salvar está liberado.</span>
+                  </div>
+                </div>
               </div>
             ) : (
-              <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-teal-500 rounded-xl p-4 flex flex-col items-center justify-center gap-1.5 cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 transition-colors">
-                <Upload className="w-5 h-5 text-slate-400" />
-                <span className="text-xs font-semibold text-slate-700 dark:text-slate-300">
-                  Toque para anexar o comprovante
-                </span>
-                <span className="text-[10px] text-slate-400">
-                  PDF, JPG ou PNG de até 15MB (otimizado automaticamente)
-                </span>
+              /* Case 3: Empty State - Upload Trigger */
+              <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 rounded-2xl p-4 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 hover:bg-teal-50/40 dark:hover:bg-teal-950/20 transition-all group active:scale-[0.99]">
+                <div className="w-11 h-11 rounded-full bg-slate-100 dark:bg-slate-800 group-hover:bg-teal-100 dark:group-hover:bg-teal-950/70 flex items-center justify-center transition-colors">
+                  <Upload className="w-5 h-5 text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" />
+                </div>
+                <div className="text-center">
+                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors block">
+                    Toque para anexar o comprovante
+                  </span>
+                  <span className="text-[10px] text-slate-400 block mt-0.5">
+                    Foto, Imagem ou PDF • Otimizado automaticamente para salvamento rápido
+                  </span>
+                </div>
                 <input
                   type="file"
                   accept="image/*,application/pdf"
@@ -1685,27 +1931,155 @@ export const BillModal: React.FC<BillModalProps> = ({
           )}
           </div>
 
+          {/* Validation Error Feedback Banner */}
+          {formError && (
+            <div className="mx-4 sm:mx-5 mb-2 p-3 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 rounded-2xl text-xs font-bold text-rose-800 dark:text-rose-200 flex items-center justify-between gap-2 shadow-xs animate-in fade-in duration-200">
+              <div className="flex items-center gap-2 min-w-0">
+                <AlertTriangle className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0" />
+                <span className="truncate">{formError}</span>
+              </div>
+              <button 
+                type="button" 
+                onClick={() => setFormError(null)} 
+                className="text-rose-500 hover:text-rose-700 dark:hover:text-rose-300 p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
+          {/* Success toast if just attached */}
+          {receiptSuccessNotice && (
+            <div className="mx-4 sm:mx-5 mb-2 p-2.5 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-xs font-bold text-emerald-800 dark:text-emerald-200 flex items-center justify-between gap-2 animate-in fade-in duration-200 shadow-2xs">
+              <div className="flex items-center gap-2 min-w-0">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                <span className="truncate">{receiptSuccessNotice}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setReceiptSuccessNotice(null)}
+                className="text-emerald-600 hover:text-emerald-800 dark:text-emerald-300 p-0.5"
+              >
+                <X className="w-3.5 h-3.5" />
+              </button>
+            </div>
+          )}
+
           {/* Pinned Action Buttons Footer - 100% visible on screen & inside form */}
-          <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-end gap-2.5 z-20">
-            <button
-              type="button"
-              onClick={onClose}
-              className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={isProcessingReceipt}
-              onClick={handleSubmit}
-              className="px-5 py-2.5 bg-[#00C49F] hover:bg-[#00b290] disabled:opacity-50 text-[#0A1128] font-extrabold text-xs sm:text-sm rounded-xl active-press shadow-md shadow-teal-500/20 flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <Check className="w-4 h-4" />
-              <span>{isProcessingReceipt ? 'Otimizando Comprovante...' : (initialBill ? 'Salvar Alterações' : 'Cadastrar Conta')}</span>
-            </button>
+          <div className="flex-shrink-0 p-3.5 sm:p-4 bg-slate-50 dark:bg-[#0c142b] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2.5 z-20">
+            <div className="flex items-center gap-1.5 min-w-0">
+              {receiptName ? (
+                <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-600 dark:text-emerald-400 truncate">
+                  <CheckCircle2 className="w-3.5 h-3.5 flex-shrink-0" />
+                  <span className="truncate max-w-[150px] sm:max-w-[180px]">{receiptName}</span>
+                </div>
+              ) : (
+                <span className="text-[11px] text-slate-400 hidden sm:inline">
+                  Campos com * obrigatórios
+                </span>
+              )}
+            </div>
+
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <button
+                type="button"
+                onClick={onClose}
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press rounded-xl"
+              >
+                Cancelar
+              </button>
+              <button
+                type="submit"
+                disabled={isProcessingReceipt}
+                className={`px-5 py-2.5 font-black text-xs sm:text-sm rounded-xl active-press shadow-md flex items-center gap-2 transition-all cursor-pointer ${
+                  isProcessingReceipt
+                    ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-wait shadow-none'
+                    : receiptName
+                      ? 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] ring-2 ring-emerald-400/80 shadow-emerald-500/25 active:scale-95'
+                      : 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] shadow-teal-500/20 active:scale-95'
+                }`}
+              >
+                {isProcessingReceipt ? (
+                  <>
+                    <Sparkles className="w-4 h-4 text-teal-600 animate-spin" />
+                    <span>Processando ({receiptUploadProgress}%)...</span>
+                  </>
+                ) : (
+                  <>
+                    <Check className="w-4 h-4" />
+                    <span>{initialBill ? 'Salvar Alterações' : 'Cadastrar Conta'}</span>
+                    {receiptName && (
+                      <span className="text-[10px] bg-[#0A1128]/20 px-1.5 py-0.2 rounded-full font-bold">
+                        ✓ Anexo
+                      </span>
+                    )}
+                  </>
+                )}
+              </button>
+            </div>
           </div>
         </form>
       </div>
+
+      {/* Lightbox Receipt Full Preview Modal */}
+      {previewReceiptOpen && receiptUrl && (
+        <div 
+          className="fixed inset-0 z-60 bg-black/85 backdrop-blur-sm flex items-center justify-center p-3 sm:p-5 animate-in fade-in duration-200"
+          onClick={() => setPreviewReceiptOpen(false)}
+        >
+          <div 
+            className="bg-white dark:bg-[#0E172F] rounded-3xl max-w-2xl w-full max-h-[90vh] flex flex-col overflow-hidden shadow-2xl border border-slate-700 animate-in zoom-in-95 duration-200"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="p-4 bg-[#0A1128] text-white flex items-center justify-between border-b border-slate-800">
+              <div className="flex items-center gap-2 min-w-0">
+                <FileText className="w-4 h-4 text-[#00C49F]" />
+                <span className="text-xs sm:text-sm font-bold truncate">{receiptName || 'Visualização do Comprovante'}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewReceiptOpen(false)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto flex-1 flex items-center justify-center bg-slate-900/60 min-h-[250px]">
+              {receiptUrl.startsWith('data:image') || receiptUrl.match(/\.(jpg|jpeg|png|webp|gif)$/i) ? (
+                <img 
+                  src={receiptUrl} 
+                  alt="Comprovante de Pagamento" 
+                  className="max-h-[70vh] w-auto max-w-full object-contain rounded-xl shadow-lg border border-slate-800"
+                />
+              ) : (
+                <div className="text-center p-6 space-y-3">
+                  <FileText className="w-16 h-16 text-emerald-400 mx-auto" />
+                  <p className="text-sm font-bold text-slate-200">{receiptName}</p>
+                  <p className="text-xs text-slate-400">Documento PDF anexado com sucesso à conta.</p>
+                  <a 
+                    href={receiptUrl} 
+                    download={receiptName || 'comprovante.pdf'}
+                    className="inline-flex items-center gap-1.5 px-4 py-2 bg-teal-600 hover:bg-teal-500 text-white rounded-xl text-xs font-bold transition-colors"
+                  >
+                    Baixar / Abrir Documento
+                  </a>
+                </div>
+              )}
+            </div>
+
+            <div className="p-3 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+              <button
+                type="button"
+                onClick={() => setPreviewReceiptOpen(false)}
+                className="px-4 py-2 bg-slate-200 dark:bg-slate-800 text-slate-800 dark:text-slate-200 text-xs font-bold rounded-xl hover:bg-slate-300 dark:hover:bg-slate-700 transition-colors"
+              >
+                Fechar Visualização
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

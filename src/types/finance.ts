@@ -337,3 +337,29 @@ export interface ChangeNotification {
   timestamp: string;
 }
 
+export interface WeeklyExtraExpense {
+  id: string;
+  description: string;
+  amount: number;
+}
+
+export interface WeeklyCoffeeRoutine {
+  id: string;
+  completedAt: string;
+  completedBy: string;
+  weekRange: string;
+  streakCount: number;
+  billsDueCount: number;
+  billsDueTotal: number;
+  missingReceiptsCount: number;
+  projectedSurplus: number;
+  extraExpenses: WeeklyExtraExpense[];
+  notes?: string;
+  itemsChecked: {
+    billsReviewed: boolean;
+    receiptsReviewed: boolean;
+    surplusReviewed: boolean;
+    extraExpensesAligned: boolean;
+  };
+}
+

@@ -11,7 +11,7 @@ import {
   normalizeBillTitle,
   parseInstallmentDetails,
 } from '../types/finance';
-import { inferCategoryFromName } from '../utils/categories';
+import { inferCategoryFromName, getStoredCategories } from '../utils/categories';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
 const STORAGE_KEY_REVENUES = 'financas_cloudkit_revenues_v3';
@@ -2666,6 +2666,238 @@ class CloudKitSyncEngine {
       totalAmount,
       filename,
     };
+  }
+
+  /**
+   * 1-Click Complete Household Backup:
+   * Downloads JSON file, sends a snapshot to server, and prepares prefilled email
+   */
+  public async createFullBackup(userEmail: string = 'l.carlosramos92@gmail.com'): Promise<{
+    success: boolean;
+    filename: string;
+    billsCount: number;
+    revenuesCount: number;
+    totalAmount: number;
+    emailMailtoUrl: string;
+    serverBackup?: any;
+  }> {
+    const allBills = this.getBills().filter(b => !isMockBill(b));
+    const allRevs = this.getRevenues().filter(r => !isMockRevenue(r));
+    const profiles = this.getProfiles();
+    const devices = this.getDevices();
+    const categories = getStoredCategories();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const dateFormatted = now.toLocaleDateString('pt-BR');
+    const timeFormatted = now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+    const filename = `backup_financas_minha_casa_${nowIso.slice(0, 10)}_${nowIso.slice(11, 16).replace(':', 'h')}.json`;
+
+    const totalBillsAmount = allBills.reduce((acc, b) => acc + (b.amount || 0), 0);
+    const totalRevenuesAmount = allRevs.reduce((acc, r) => acc + (r.amount || 0), 0);
+    const estimatedBalance = totalRevenuesAmount - totalBillsAmount;
+
+    const fullPayload = {
+      backupType: 'household_full_backup',
+      version: '2.0',
+      createdAt: nowIso,
+      householdId: this.getHouseholdId(),
+      householdCode: this.getHouseholdCode(),
+      userEmail,
+      summary: {
+        exportedAtFormatted: `${dateFormatted} às ${timeFormatted}`,
+        totalBills: allBills.length,
+        totalBillsAmount,
+        totalRevenues: allRevs.length,
+        totalRevenuesAmount,
+        projectedBalance: estimatedBalance,
+        devicesCount: devices.length,
+        activeDevice: this.getActiveDevice().name,
+      },
+      household: {
+        id: this.getHouseholdId(),
+        name: 'Finanças da Minha Casa',
+        code: this.getHouseholdCode(),
+        bills: allBills,
+        revenues: allRevs,
+        profiles,
+        devices,
+        categories,
+        lastUpdated: nowIso,
+      },
+    };
+
+    // 1. Client-side instant download (.json)
+    if (typeof window !== 'undefined') {
+      const blob = new Blob([JSON.stringify(fullPayload, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    }
+
+    // 2. Persist snapshot on server
+    let serverBackup = null;
+    try {
+      const res = await fetch('/api/backup/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          householdId: this.getHouseholdId(),
+          userEmail,
+          clientData: {
+            bills: allBills,
+            revenues: allRevs,
+            profiles,
+          },
+          notes: `Backup gerado pelo dispositivo ${this.getActiveDevice().name} em ${dateFormatted} às ${timeFormatted}`,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        serverBackup = data.backup;
+      }
+    } catch (err) {
+      console.warn('Failed to upload backup snapshot to server:', err);
+    }
+
+    // 3. Format prefilled email body and mailto link
+    const subject = encodeURIComponent(`💾 Backup Finanças da Minha Casa - ${dateFormatted}`);
+    const emailBody = encodeURIComponent(
+      `Olá Carlos,\n\n` +
+      `Aqui está o resumo do seu backup de segurança das Finanças da Minha Casa gerado em ${dateFormatted} às ${timeFormatted}:\n\n` +
+      `📊 RESUMO DO PATRIMÔNIO E CONTAS:\n` +
+      `• Total de Contas Cadastradas: ${allBills.length} (R$ ${totalBillsAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})\n` +
+      `• Total de Receitas/Salários: ${allRevs.length} (R$ ${totalRevenuesAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })})\n` +
+      `• Saldo / Sobra Projetada: R$ ${estimatedBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}\n` +
+      `• Dispositivos Conectados: ${devices.length} aparelhos (incluindo iPhone do Casal)\n\n` +
+      `O arquivo "${filename}" foi baixado com sucesso em seu dispositivo.\n` +
+      `Guarde este e-mail para manter seu histórico financeiro 100% seguro.\n\n` +
+      `Finanças da Minha Casa • Sincronização Segura`
+    );
+
+    const emailMailtoUrl = `mailto:${userEmail}?subject=${subject}&body=${emailBody}`;
+
+    return {
+      success: true,
+      filename,
+      billsCount: allBills.length,
+      revenuesCount: allRevs.length,
+      totalAmount: totalBillsAmount,
+      emailMailtoUrl,
+      serverBackup,
+    };
+  }
+
+  /**
+   * Fetches list of server backups
+   */
+  public async getServerBackups(): Promise<any[]> {
+    try {
+      const res = await fetch(`/api/backup/list/${this.getHouseholdId()}`);
+      if (res.ok) {
+        const data = await res.json();
+        return data.backups || [];
+      }
+      return [];
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Restores a backup from server file
+   */
+  public async restoreServerBackup(filename: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; message: string }> {
+    try {
+      const res = await fetch('/api/backup/restore', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          householdId: this.getHouseholdId(),
+          filename,
+          mode,
+        }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.household) {
+          if (data.household.bills) {
+            this.safeSaveBillsToStorage(data.household.bills);
+          }
+          if (data.household.revenues) {
+            this.saveRevenues(data.household.revenues);
+          }
+          this.broadcastUpdate('BILLS_UPDATED', { count: (data.household.bills || []).length });
+          this.broadcastUpdate('REVENUES_UPDATED', { count: (data.household.revenues || []).length });
+        }
+        return { success: true, message: data.message || 'Backup restaurado com sucesso!' };
+      }
+      return { success: false, message: 'Falha ao restaurar backup do servidor.' };
+    } catch (err: any) {
+      return { success: false, message: err?.message || 'Erro de conexão ao restaurar.' };
+    }
+  }
+
+  /**
+   * Restores data from imported client-side JSON string
+   */
+  public async restoreFromLocalJson(rawJson: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; message: string; billsCount: number; revenuesCount: number }> {
+    try {
+      const parsed = JSON.parse(rawJson);
+      const targetHousehold = parsed.household || parsed;
+      const incomingBills: Bill[] = (targetHousehold.bills || []).filter((b: any) => !isMockBill(b));
+      const incomingRevs: Revenue[] = (targetHousehold.revenues || []).filter((r: any) => !isMockRevenue(r));
+
+      if (incomingBills.length === 0 && incomingRevs.length === 0) {
+        return { success: false, message: 'O arquivo não contém contas ou receitas válidas.', billsCount: 0, revenuesCount: 0 };
+      }
+
+      // 1. Safety snapshot of current state
+      this.safeSaveBillsToStorage(this.getBills());
+
+      // 2. Apply bills
+      let finalBills: Bill[] = [];
+      if (mode === 'merge') {
+        const current = this.getBills();
+        const existingIds = new Set(current.map(b => b.id));
+        const newOnes = incomingBills.filter(b => !existingIds.has(b.id));
+        finalBills = [...current, ...newOnes];
+      } else {
+        finalBills = incomingBills;
+      }
+      this.safeSaveBillsToStorage(finalBills);
+
+      // 3. Apply revenues
+      let finalRevs: Revenue[] = [];
+      if (mode === 'merge') {
+        const current = this.getRevenues();
+        const existingIds = new Set(current.map(r => r.id));
+        const newOnes = incomingRevs.filter(r => !existingIds.has(r.id));
+        finalRevs = [...current, ...newOnes];
+      } else {
+        finalRevs = incomingRevs;
+      }
+      this.saveRevenues(finalRevs);
+
+      // 4. Sync with server
+      this.syncWithServer();
+      this.broadcastUpdate('BILLS_UPDATED', { count: finalBills.length });
+      this.broadcastUpdate('REVENUES_UPDATED', { count: finalRevs.length });
+
+      return {
+        success: true,
+        message: `Sucesso! Foram restauradas ${incomingBills.length} contas e ${incomingRevs.length} receitas.`,
+        billsCount: finalBills.length,
+        revenuesCount: finalRevs.length,
+      };
+    } catch (err: any) {
+      return { success: false, message: `Arquivo inválido ou corrompido: ${err?.message || ''}`, billsCount: 0, revenuesCount: 0 };
+    }
   }
 
   // Ensure user data is preserved and any fictitious data is purged

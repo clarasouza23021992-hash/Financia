@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target, Calendar, Clock } from 'lucide-react';
+import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target, Calendar, Clock, ShieldCheck } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -9,6 +9,7 @@ interface HeaderProps {
   onOpenNewRevenue?: () => void;
   onOpenCloudSync: () => void;
   onOpenCalculator?: () => void;
+  onOpenBackup?: () => void;
   onOpenWifeConnect?: () => void;
   onOpenBoletoScanner?: () => void;
   onOpenProfiles?: () => void;
@@ -29,6 +30,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNewBill,
   onOpenCloudSync,
   onOpenCalculator,
+  onOpenBackup,
   onOpenNotifications,
   unreadNotificationsCount = 0,
   onOpenBudgets,
@@ -117,6 +119,19 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60"
             >
               <Calculator className="w-4 h-4 text-[#00E5B5]" />
+            </button>
+          )}
+
+          {/* Backup & Segurança Button */}
+          {onOpenBackup && (
+            <button
+              id="btn-header-backup"
+              type="button"
+              onClick={onOpenBackup}
+              title="Backup & Segurança dos Dados (E-mail / Arquivo)"
+              className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60 cursor-pointer"
+            >
+              <ShieldCheck className="w-4 h-4 text-[#00C49F]" />
             </button>
           )}
 

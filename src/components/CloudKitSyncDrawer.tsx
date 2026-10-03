@@ -22,6 +22,7 @@ interface CloudKitSyncDrawerProps {
   onForceSync: () => Promise<void>;
   onUpdateDevice?: (deviceId: string, updates: Partial<CloudDevice>) => void;
   onRemoveDevice?: (deviceId: string) => void;
+  onOpenBackup?: () => void;
 }
 
 export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
@@ -36,6 +37,7 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
   onForceSync,
   onUpdateDevice,
   onRemoveDevice,
+  onOpenBackup,
 }) => {
   const [syncing, setSyncing] = useState(false);
   const [syncSuccessMsg, setSyncSuccessMsg] = useState<string | null>(null);
@@ -797,6 +799,35 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
             <p className="text-[11px] text-slate-500 dark:text-slate-400">
               Quando ambos os celulares alteram dados ao mesmo tempo, nenhuma edição é sobrescrita.
             </p>
+          </div>
+
+          {/* Backup & Segurança da Casa Card */}
+          <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs flex items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 min-w-0">
+              <div className="w-9 h-9 rounded-xl bg-teal-600 text-white flex items-center justify-center flex-shrink-0">
+                <ShieldCheck className="w-5 h-5" />
+              </div>
+              <div className="min-w-0">
+                <span className="text-xs font-black text-teal-950 dark:text-teal-100 block">
+                  Backup Completo da Casa
+                </span>
+                <span className="text-[11px] text-teal-700 dark:text-teal-300 block">
+                  Baixe cópia segura ou envie para seu e-mail em 1 clique
+                </span>
+              </div>
+            </div>
+            {onOpenBackup && (
+              <button
+                type="button"
+                onClick={() => {
+                  onClose();
+                  onOpenBackup();
+                }}
+                className="px-3 py-1.5 bg-teal-600 hover:bg-teal-500 text-white font-bold text-xs rounded-xl active-press flex-shrink-0 cursor-pointer shadow-xs"
+              >
+                Abrir Central
+              </button>
+            )}
           </div>
 
           {/* Sincronizar Agora Button */}

@@ -49,10 +49,14 @@ interface HouseholdData {
 const PORT = 3000;
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'households.json');
+const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
 
-// Ensure data folder and file exists
+// Ensure data folder and backups folder exist
 if (!fs.existsSync(DATA_DIR)) {
   fs.mkdirSync(DATA_DIR, { recursive: true });
+}
+if (!fs.existsSync(BACKUPS_DIR)) {
+  fs.mkdirSync(BACKUPS_DIR, { recursive: true });
 }
 
 // Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
@@ -944,6 +948,226 @@ async function startServer() {
     }
 
     res.json({ success: true, devices: household.devices });
+  });
+
+  // ==========================================
+  // BACKUP & RESTORE API ENDPOINTS
+  // ==========================================
+
+  // 1. Create a full backup snapshot
+  app.post('/api/backup/create', (req, res) => {
+    try {
+      const { householdId, userEmail, clientData, notes } = req.body;
+      const cleanHouseId = (householdId || 'default').trim().toLowerCase();
+      const store = loadHouseholds();
+      const household = store[cleanHouseId] || {
+        id: cleanHouseId,
+        name: 'Minha Casa',
+        bills: [],
+        revenues: [],
+        profiles: [],
+        devices: [],
+        lastUpdated: new Date().toISOString(),
+      };
+
+      const realBills = (clientData?.bills || household.bills || []).filter((b: any) => !isMockBillServer(b));
+      const realRevs = (clientData?.revenues || household.revenues || []).filter((r: any) => !isMockRevenueServer(r));
+
+      const backupPayload = {
+        backupType: 'household_full_backup',
+        version: '2.0',
+        createdAt: new Date().toISOString(),
+        householdId: cleanHouseId,
+        userEmail: userEmail || 'l.carlosramos92@gmail.com',
+        notes: notes || 'Backup gerado pelo usuário',
+        summary: {
+          billsCount: realBills.length,
+          revenuesCount: realRevs.length,
+          devicesCount: (household.devices || []).length,
+          profilesCount: (clientData?.profiles || household.profiles || []).length,
+          totalBillsAmount: realBills.reduce((acc: number, b: any) => acc + (b.amount || 0), 0),
+          totalRevenuesAmount: realRevs.reduce((acc: number, r: any) => acc + (r.amount || 0), 0),
+        },
+        household: {
+          ...household,
+          bills: realBills,
+          revenues: realRevs,
+          profiles: clientData?.profiles || household.profiles || [],
+        },
+      };
+
+      const timestampStr = new Date().toISOString().replace(/[:.]/g, '-');
+      const filename = `backup_${cleanHouseId}_${timestampStr}.json`;
+      const filePath = path.join(BACKUPS_DIR, filename);
+
+      fs.writeFileSync(filePath, JSON.stringify(backupPayload, null, 2), 'utf-8');
+      const stat = fs.statSync(filePath);
+      const sizeKb = Math.round(stat.size / 1024);
+
+      console.log(`[BACKUP] Snapshot created: ${filename} (${sizeKb} KB) for ${cleanHouseId}`);
+
+      res.json({
+        success: true,
+        backup: {
+          filename,
+          createdAt: backupPayload.createdAt,
+          sizeKb,
+          sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+          billsCount: backupPayload.summary.billsCount,
+          revenuesCount: backupPayload.summary.revenuesCount,
+          totalBillsAmount: backupPayload.summary.totalBillsAmount,
+          totalRevenuesAmount: backupPayload.summary.totalRevenuesAmount,
+          downloadUrl: `/api/backup/download/${filename}`,
+        },
+        backupPayload,
+      });
+    } catch (err: any) {
+      console.error('[BACKUP] Error creating backup:', err);
+      res.status(500).json({ error: 'Erro ao gerar backup', details: err?.message });
+    }
+  });
+
+  // 2. List available backup snapshots for household
+  app.get('/api/backup/list/:householdId', (req, res) => {
+    try {
+      const { householdId } = req.params;
+      const cleanHouseId = (householdId || 'default').trim().toLowerCase();
+
+      if (!fs.existsSync(BACKUPS_DIR)) {
+        return res.json({ success: true, backups: [] });
+      }
+
+      const files = fs.readdirSync(BACKUPS_DIR);
+      const backups = files
+        .filter((f) => f.endsWith('.json') && f.includes(cleanHouseId))
+        .map((f) => {
+          const filePath = path.join(BACKUPS_DIR, f);
+          const stat = fs.statSync(filePath);
+          const sizeKb = Math.max(1, Math.round(stat.size / 1024));
+          let meta: any = {};
+          try {
+            const raw = fs.readFileSync(filePath, 'utf-8');
+            meta = JSON.parse(raw);
+          } catch {}
+          return {
+            filename: f,
+            createdAt: meta.createdAt || stat.mtime.toISOString(),
+            sizeKb,
+            sizeFormatted: sizeKb > 1024 ? `${(sizeKb / 1024).toFixed(1)} MB` : `${sizeKb} KB`,
+            billsCount: meta.summary?.billsCount || (meta.household?.bills || []).length || 0,
+            revenuesCount: meta.summary?.revenuesCount || (meta.household?.revenues || []).length || 0,
+            totalBillsAmount: meta.summary?.totalBillsAmount,
+            userEmail: meta.userEmail || 'l.carlosramos92@gmail.com',
+            notes: meta.notes || '',
+            downloadUrl: `/api/backup/download/${f}`,
+          };
+        })
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+
+      res.json({ success: true, backups });
+    } catch (err: any) {
+      console.error('[BACKUP] Error listing backups:', err);
+      res.json({ success: true, backups: [] });
+    }
+  });
+
+  // 3. Download a backup file
+  app.get('/api/backup/download/:filename', (req, res) => {
+    const { filename } = req.params;
+    const sanitized = path.basename(filename);
+    const filePath = path.join(BACKUPS_DIR, sanitized);
+    if (!fs.existsSync(filePath)) {
+      return res.status(404).send('Arquivo de backup não encontrado');
+    }
+    res.download(filePath, sanitized);
+  });
+
+  // 4. Restore from backup
+  app.post('/api/backup/restore', (req, res) => {
+    try {
+      const { householdId, filename, backupData, mode = 'replace' } = req.body;
+      const cleanHouseId = (householdId || 'default').trim().toLowerCase();
+      const store = loadHouseholds();
+      let household = store[cleanHouseId];
+
+      let dataToRestore = backupData;
+      if (!dataToRestore && filename) {
+        const sanitized = path.basename(filename);
+        const filePath = path.join(BACKUPS_DIR, sanitized);
+        if (fs.existsSync(filePath)) {
+          dataToRestore = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
+        }
+      }
+
+      if (!dataToRestore) {
+        return res.status(400).json({ error: 'Nenhum dado válido para restaurar' });
+      }
+
+      const targetHousehold = dataToRestore.household || dataToRestore;
+      const incomingBills = (targetHousehold.bills || []).filter((b: any) => !isMockBillServer(b));
+      const incomingRevs = (targetHousehold.revenues || []).filter((r: any) => !isMockRevenueServer(r));
+
+      // Safety snapshot before restore
+      if (household) {
+        const safetyFile = `safety_before_restore_${cleanHouseId}_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+        fs.writeFileSync(path.join(BACKUPS_DIR, safetyFile), JSON.stringify({ household }, null, 2), 'utf-8');
+      }
+
+      if (!household) {
+        household = {
+          id: cleanHouseId,
+          name: targetHousehold.name || 'Minha Casa',
+          code: (targetHousehold.code || cleanHouseId).toUpperCase(),
+          bills: incomingBills,
+          revenues: incomingRevs,
+          profiles: targetHousehold.profiles || [],
+          devices: targetHousehold.devices || [],
+          notifications: [],
+          lastUpdated: new Date().toISOString(),
+          isWifeConnected: true,
+        };
+      } else {
+        if (mode === 'merge') {
+          const existingIds = new Set((household.bills || []).map((b) => b.id));
+          const toAdd = incomingBills.filter((b: any) => !existingIds.has(b.id));
+          household.bills = [...(household.bills || []), ...toAdd];
+
+          const existingRevIds = new Set((household.revenues || []).map((r) => r.id));
+          const toAddRevs = incomingRevs.filter((r: any) => !existingRevIds.has(r.id));
+          household.revenues = [...(household.revenues || []), ...toAddRevs];
+        } else {
+          household.bills = incomingBills;
+          household.revenues = incomingRevs;
+          if (targetHousehold.profiles) household.profiles = targetHousehold.profiles;
+        }
+        household.lastUpdated = new Date().toISOString();
+        household.isWifeConnected = true;
+      }
+
+      store[cleanHouseId] = household;
+      saveHouseholds(store);
+
+      const notif = recordChangeNotification(cleanHouseId, {
+        sourceDeviceId: 'system_backup',
+        sourceDeviceName: 'Backup Manager',
+        sourceUserName: 'Sistema de Backup',
+        actionType: 'backup_restored',
+        title: 'Backup Restaurado 💾',
+        message: `Restauração concluída: ${incomingBills.length} contas e ${incomingRevs.length} receitas restauradas com sucesso!`,
+      });
+      broadcastChangeNotification(cleanHouseId, notif);
+
+      console.log(`[BACKUP] Restore completed for ${cleanHouseId}: ${incomingBills.length} bills, ${incomingRevs.length} revenues`);
+
+      res.json({
+        success: true,
+        message: `Backup restaurado com sucesso! ${incomingBills.length} contas e ${incomingRevs.length} receitas sincronizadas.`,
+        household,
+      });
+    } catch (err: any) {
+      console.error('[BACKUP] Error restoring backup:', err);
+      res.status(500).json({ error: 'Erro ao restaurar backup', details: err?.message });
+    }
   });
 
   // Helper to parse bank push/SMS notification text

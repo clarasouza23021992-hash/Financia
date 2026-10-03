@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  X, Heart, Smartphone, QrCode, MessageCircle, Copy, Check, 
+  X, ArrowLeft, Heart, Smartphone, QrCode, MessageCircle, Copy, Check, 
   RefreshCw, CheckCircle2, AlertCircle, ExternalLink, ShieldCheck, Wifi
 } from 'lucide-react';
 import QRCode from 'qrcode';
@@ -90,23 +90,30 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/65 backdrop-blur-xs modal-safe-overlay p-3 sm:p-4 overflow-y-auto animate-fade-in">
       <div className="bg-white dark:bg-[#0E172F] w-full max-w-lg rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden flex flex-col my-auto max-h-[calc(100dvh-1.5rem)]">
         {/* Header */}
-        <div className="bg-[#0A1128] text-white px-5 py-4 flex items-center justify-between border-b border-slate-800">
-          <div className="flex items-center gap-2.5">
-            <div className="w-9 h-9 rounded-2xl bg-pink-500/20 text-pink-400 flex items-center justify-center">
-              <Heart className="w-5 h-5 fill-current" />
-            </div>
-            <div>
-              <h2 className="text-sm font-bold tracking-tight">
-                Conectar o Celular da Esposa
-              </h2>
-              <p className="text-[11px] text-slate-400">
-                Pareamento real para acompanharem as contas juntos
-              </p>
-            </div>
+        <div className="bg-[#0A1128] text-white px-4 sm:px-5 py-3.5 flex items-center justify-between border-b border-slate-800 flex-shrink-0">
+          <button
+            type="button"
+            onClick={onClose}
+            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-xl bg-white/10 hover:bg-white/20 text-white font-bold text-xs active-press transition-colors cursor-pointer"
+            title="Voltar para a página anterior"
+          >
+            <ArrowLeft className="w-4 h-4 text-pink-400" />
+            <span>Voltar</span>
+          </button>
+
+          <div className="text-center min-w-0 px-2">
+            <h2 className="text-xs sm:text-sm font-extrabold tracking-tight truncate">
+              Conectar Celular da Esposa
+            </h2>
+            <p className="text-[10px] text-pink-300 font-semibold truncate">
+              Pareamento em Tempo Real
+            </p>
           </div>
+
           <button
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-slate-300 hover:text-white transition-colors cursor-pointer"
+            title="Fechar"
           >
             <X className="w-4 h-4" />
           </button>
@@ -295,13 +302,17 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="p-4 bg-slate-50 dark:bg-slate-900 border-t border-slate-200 dark:border-slate-800 flex justify-end">
+        <div className="p-3.5 bg-slate-50 dark:bg-[#0A1128] border-t border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 flex-shrink-0">
+          <span className="text-[11px] text-slate-500 dark:text-slate-400 truncate flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-pink-500 flex-shrink-0" />
+            <span>Dados da casa protegidos</span>
+          </span>
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2.5 bg-slate-800 dark:bg-slate-700 hover:bg-slate-700 text-white font-bold text-xs rounded-xl active-press"
+            className="py-2 px-5 bg-slate-900 hover:bg-slate-800 dark:bg-white dark:hover:bg-slate-100 text-white dark:text-[#0A1128] font-extrabold text-xs rounded-xl active-press shadow-xs transition-all cursor-pointer"
           >
-            Fechar
+            ← Voltar para as Contas
           </button>
         </div>
       </div>

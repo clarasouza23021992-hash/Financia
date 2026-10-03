@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
@@ -834,8 +835,16 @@ export default function App() {
       <main className="flex-1 overflow-y-auto overflow-x-hidden w-full min-h-0 pb-3">
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto min-h-full">
           <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
-        {currentTab === 'bills' && (
-          <div className="space-y-1">
+            <AnimatePresence mode="wait" initial={false}>
+              {currentTab === 'bills' ? (
+                <motion.div
+                  key="bills-tab"
+                  initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -8, filter: 'blur(1px)' }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                  className="space-y-1"
+                >
             {/* 1. Month Selector with Subsequent Months */}
             <MonthSelector
               selectedMonthId={selectedMonth.id}
@@ -1189,24 +1198,31 @@ export default function App() {
                 ))
               )}
             </div>
-          </div>
-        )}
-
-        {/* Tab 2: Monthly Cash Flow Report */}
-        {currentTab === 'cashflow' && (
-          <CashFlowReport
-            bills={currentMonthBills}
-            revenues={currentMonthRevenues}
-            selectedMonth={selectedMonth.label}
-            onOpenNewRevenue={() => {
-              setEditingRevenue(null);
-              setIsRevenueModalOpen(true);
-            }}
-            onEditRevenue={handleOpenEditRevenue}
-            onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
-            onOpenBudgets={() => setIsBudgetModalOpen(true)}
-          />
-        )}
+                </motion.div>
+              ) : (
+                <motion.div
+                  key="cashflow-tab"
+                  initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -8, filter: 'blur(1px)' }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  {/* Tab 2: Monthly Cash Flow Report */}
+                  <CashFlowReport
+                    bills={currentMonthBills}
+                    revenues={currentMonthRevenues}
+                    selectedMonth={selectedMonth.label}
+                    onOpenNewRevenue={() => {
+                      setEditingRevenue(null);
+                      setIsRevenueModalOpen(true);
+                    }}
+                    onEditRevenue={handleOpenEditRevenue}
+                    onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
+                    onOpenBudgets={() => setIsBudgetModalOpen(true)}
+                  />
+                </motion.div>
+              )}
+            </AnimatePresence>
           </PullToRefresh>
         </div>
       </main>
@@ -1215,9 +1231,10 @@ export default function App() {
       <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 py-1 shadow-sm">
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
           {/* Tab 1: Contas / Dívidas */}
-          <button
+          <motion.button
+            whileTap={{ scale: 0.92 }}
             onClick={() => setCurrentTab('bills')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all active-press ${
+            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
               currentTab === 'bills'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
@@ -1232,12 +1249,13 @@ export default function App() {
               )}
             </div>
             <span className="text-[10px] tracking-tight whitespace-nowrap">Dívidas</span>
-          </button>
+          </motion.button>
 
           {/* Tab 2: Fluxo de Caixa */}
-          <button
+          <motion.button
+            whileTap={{ scale: 0.92 }}
             onClick={() => setCurrentTab('cashflow')}
-            className={`flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all active-press ${
+            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
               currentTab === 'cashflow'
                 ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
                 : 'text-slate-400 hover:text-slate-600'
@@ -1245,7 +1263,7 @@ export default function App() {
           >
             <TrendingUp className="w-4.5 h-4.5" />
             <span className="text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
-          </button>
+          </motion.button>
 
           {/* Tab 3: CloudKit Sync Drawer */}
           <button

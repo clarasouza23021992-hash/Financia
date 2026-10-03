@@ -3,8 +3,7 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Coffee
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -40,8 +39,6 @@ import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { BudgetGoalsModal } from './components/BudgetGoalsModal';
 import { CategoriesManagerModal } from './components/CategoriesManagerModal';
 import { BackupModal } from './components/BackupModal';
-import { CoffeeFinanceModal } from './components/CoffeeFinanceModal';
-import { CoffeeFinanceBanner } from './components/CoffeeFinanceBanner';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -115,7 +112,6 @@ export default function App() {
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
-  const [isCoffeeModalOpen, setIsCoffeeModalOpen] = useState(false);
 
   // In-App Notifications History & Due Date Alerts
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
@@ -148,6 +144,16 @@ export default function App() {
 
   // Automatic check to ensure bills & revenues are safe and thoroughly deduplicated
   useEffect(() => {
+    // Ensure app opens on current month (Novembro 2026) synchronized with calendar
+    const savedMonth = localStorage.getItem('financas_selected_month_id');
+    if (!savedMonth || savedMonth === '2026-10') {
+      localStorage.setItem('financas_selected_month_id', '2026-11');
+      const nov = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === '2026-11');
+      if (nov && selectedMonth.id !== '2026-11') {
+        setSelectedMonth(nov);
+      }
+    }
+
     cloudkit.cleanupAndDeduplicateAllBills();
     cloudkit.ensureDefaultDataIfEmpty();
     const updatedBills = cloudkit.getBills();
@@ -881,15 +887,6 @@ export default function App() {
               spouseProfileName={profiles[1]?.name || 'Esposa'}
             />
 
-            {/* Rotina Semanal do Casal: Café com Finanças (2 min) */}
-            <CoffeeFinanceBanner
-              bills={bills}
-              revenues={revenues}
-              onOpenCoffeeModal={() => setIsCoffeeModalOpen(true)}
-              userProfileName={profiles[0]?.name || 'Carlos'}
-              spouseProfileName={profiles[1]?.name || 'Paula'}
-            />
-
             {/* Banner to clear mock demo data if user desires only their real bills */}
             {hasMockBills && (
               <div className="mx-4 my-1 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 rounded-2xl flex items-center justify-between gap-2 text-xs">
@@ -966,18 +963,6 @@ export default function App() {
 
             {/* Quick Actions Row */}
             <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setIsCoffeeModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-amber-500/15 via-orange-500/20 to-amber-500/20 hover:from-amber-500/25 hover:to-orange-500/30 text-amber-900 dark:text-amber-300 font-bold text-xs border border-amber-500/40 active-press whitespace-nowrap transition-all shadow-2xs"
-              >
-                <Coffee className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
-                <span>Café com Finanças</span>
-                <span className="px-1.5 py-0.2 rounded-full text-[9px] font-black bg-amber-500 text-slate-950">
-                  2 min
-                </span>
-              </button>
-
               <button
                 type="button"
                 onClick={() => setIsBudgetModalOpen(true)}
@@ -1301,6 +1286,16 @@ export default function App() {
           setIsProfilesModalOpen(false);
           setIsWifeConnectModalOpen(true);
         }}
+        onOpenBackup={() => {
+          setIsProfilesModalOpen(false);
+          setIsBackupModalOpen(true);
+        }}
+        onDataRestored={() => {
+          setBills(cloudkit.getBills());
+          setRevenues(cloudkit.getRevenues());
+          setDevices(cloudkit.getDevices());
+          showTemporaryToast('✅ Dívidas e receitas atualizadas com sucesso a partir do arquivo do e-mail!');
+        }}
       />
 
       <WifeConnectionModal
@@ -1389,18 +1384,6 @@ export default function App() {
         onClose={() => setIsBudgetModalOpen(false)}
         bills={currentMonthBills}
         selectedMonthLabel={selectedMonth.label}
-      />
-
-      <CoffeeFinanceModal
-        isOpen={isCoffeeModalOpen}
-        onClose={() => setIsCoffeeModalOpen(false)}
-        bills={bills}
-        revenues={revenues}
-        selectedMonthLabel={selectedMonth.label}
-        userProfileName={profiles[0]?.name || 'Carlos'}
-        spouseProfileName={profiles[1]?.name || 'Paula'}
-        onPayBill={handleTogglePaid}
-        onOpenBillDetail={handleAttachReceipt}
       />
 
       <CategoriesManagerModal

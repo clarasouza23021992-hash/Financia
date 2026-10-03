@@ -11,7 +11,7 @@ import {
   normalizeBillTitle,
   parseInstallmentDetails,
 } from '../types/finance';
-import { inferCategoryFromName, getStoredCategories } from '../utils/categories';
+import { inferCategoryFromName, getStoredCategories, saveStoredCategories } from '../utils/categories';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
 const STORAGE_KEY_REVENUES = 'financas_cloudkit_revenues_v3';
@@ -2672,7 +2672,7 @@ class CloudKitSyncEngine {
    * 1-Click Complete Household Backup:
    * Downloads JSON file, sends a snapshot to server, and prepares prefilled email
    */
-  public async createFullBackup(userEmail: string = 'l.carlosramos92@gmail.com'): Promise<{
+  public async createFullBackup(userEmail: string = 'clarasouza23021992@gmail.com'): Promise<{
     success: boolean;
     filename: string;
     billsCount: number;
@@ -2680,6 +2680,8 @@ class CloudKitSyncEngine {
     totalAmount: number;
     emailMailtoUrl: string;
     serverBackup?: any;
+    backupPayload: any;
+    backupJsonString: string;
   }> {
     const allBills = this.getBills().filter(b => !isMockBill(b));
     const allRevs = this.getRevenues().filter(r => !isMockRevenue(r));
@@ -2789,6 +2791,8 @@ class CloudKitSyncEngine {
       totalAmount: totalBillsAmount,
       emailMailtoUrl,
       serverBackup,
+      backupPayload: fullPayload,
+      backupJsonString: JSON.stringify(fullPayload, null, 2),
     };
   }
 
@@ -2844,20 +2848,61 @@ class CloudKitSyncEngine {
   }
 
   /**
-   * Restores data from imported client-side JSON string
+   * Helper to parse JSON from raw text or email bodies (tolerant to surrounding text)
    */
-  public async restoreFromLocalJson(rawJson: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; message: string; billsCount: number; revenuesCount: number }> {
+  public parseBackupPayload(rawInput: string): any {
+    const trimmed = (rawInput || '').trim();
+    if (!trimmed) throw new Error('O conteúdo fornecido está vazio.');
     try {
-      const parsed = JSON.parse(rawJson);
-      const targetHousehold = parsed.household || parsed;
-      const incomingBills: Bill[] = (targetHousehold.bills || []).filter((b: any) => !isMockBill(b));
-      const incomingRevs: Revenue[] = (targetHousehold.revenues || []).filter((r: any) => !isMockRevenue(r));
+      return JSON.parse(trimmed);
+    } catch {
+      // Find JSON object boundary { ... }
+      const firstBrace = trimmed.indexOf('{');
+      const lastBrace = trimmed.lastIndexOf('}');
+      if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+        const sub = trimmed.slice(firstBrace, lastBrace + 1);
+        return JSON.parse(sub);
+      }
+      // Check for array [ ... ]
+      const firstBracket = trimmed.indexOf('[');
+      const lastBracket = trimmed.lastIndexOf(']');
+      if (firstBracket !== -1 && lastBracket !== -1 && lastBracket > firstBracket) {
+        const sub = trimmed.slice(firstBracket, lastBracket + 1);
+        const arr = JSON.parse(sub);
+        if (Array.isArray(arr)) {
+          return { bills: arr };
+        }
+      }
+      throw new Error('Não foi possível identificar dados JSON de backup válidos no texto.');
+    }
+  }
+
+  /**
+   * Restores data from imported client-side JSON string or email text
+   */
+  public async restoreFromLocalJson(rawJson: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ 
+    success: boolean; 
+    message: string; 
+    billsCount: number; 
+    revenuesCount: number;
+    categoriesCount?: number;
+  }> {
+    try {
+      const parsed = this.parseBackupPayload(rawJson);
+      const targetHousehold = parsed.household || parsed.clientData || parsed.data || parsed;
+      const incomingBills: Bill[] = (targetHousehold.bills || parsed.bills || []).filter((b: any) => !isMockBill(b));
+      const incomingRevs: Revenue[] = (targetHousehold.revenues || parsed.revenues || []).filter((r: any) => !isMockRevenue(r));
 
       if (incomingBills.length === 0 && incomingRevs.length === 0) {
-        return { success: false, message: 'O arquivo não contém contas ou receitas válidas.', billsCount: 0, revenuesCount: 0 };
+        return { 
+          success: false, 
+          message: 'O arquivo de backup não contém contas ou receitas válidas para atualizar.', 
+          billsCount: 0, 
+          revenuesCount: 0 
+        };
       }
 
-      // 1. Safety snapshot of current state
+      // 1. Safety snapshot of current state before replacing
       this.safeSaveBillsToStorage(this.getBills());
 
       // 2. Apply bills
@@ -2884,19 +2929,37 @@ class CloudKitSyncEngine {
       }
       this.saveRevenues(finalRevs);
 
-      // 4. Sync with server
+      // 4. Restore categories if present in backup file
+      if (Array.isArray(targetHousehold.categories) && targetHousehold.categories.length > 0) {
+        saveStoredCategories(targetHousehold.categories);
+      }
+
+      // 5. Restore profiles if present in backup file
+      if (Array.isArray(targetHousehold.profiles) && targetHousehold.profiles.length > 0) {
+        this.saveProfiles(targetHousehold.profiles);
+      }
+
+      // 6. Sync with server
       this.syncWithServer();
+
       this.broadcastUpdate('BILLS_UPDATED', { count: finalBills.length });
       this.broadcastUpdate('REVENUES_UPDATED', { count: finalRevs.length });
+      this.broadcastUpdate('PROFILES_UPDATED', {});
 
       return {
         success: true,
-        message: `Sucesso! Foram restauradas ${incomingBills.length} contas e ${incomingRevs.length} receitas.`,
+        message: `Dívidas e receitas atualizadas com sucesso! Foram carregadas ${incomingBills.length} contas/dívidas e ${incomingRevs.length} receitas a partir do arquivo do e-mail.`,
         billsCount: finalBills.length,
         revenuesCount: finalRevs.length,
+        categoriesCount: targetHousehold.categories?.length || 0,
       };
     } catch (err: any) {
-      return { success: false, message: `Arquivo inválido ou corrompido: ${err?.message || ''}`, billsCount: 0, revenuesCount: 0 };
+      return { 
+        success: false, 
+        message: `Arquivo de backup inválido ou corrompido: ${err?.message || ''}`, 
+        billsCount: 0, 
+        revenuesCount: 0 
+      };
     }
   }
 

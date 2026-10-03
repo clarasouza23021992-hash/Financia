@@ -4,7 +4,7 @@ import {
   CheckCircle2, AlertTriangle, FileText, History, Upload, 
   Database, Clock, HardDrive, Smartphone, Share2, Check, ArrowRight
 } from 'lucide-react';
-import { cloudkit } from '../services/cloudkitSync';
+import { cloudkit, isMockBill, isMockRevenue } from '../services/cloudkitSync';
 
 interface BackupModalProps {
   isOpen: boolean;
@@ -31,7 +31,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   onDataRestored,
 }) => {
   const [activeTab, setActiveTab] = useState<'export' | 'server' | 'restore'>('export');
-  const [userEmail, setUserEmail] = useState('l.carlosramos92@gmail.com');
+  const [userEmail, setUserEmail] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('financas_user_backup_email') || 'clarasouza23021992@gmail.com';
+    }
+    return 'clarasouza23021992@gmail.com';
+  });
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -42,6 +47,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [restoreMode, setRestoreMode] = useState<'replace' | 'merge'>('replace');
   const [importedFilePayload, setImportedFilePayload] = useState<any | null>(null);
   const [importedFileName, setImportedFileName] = useState<string>('');
+  const [importMethod, setImportMethod] = useState<'file' | 'paste'>('file');
+  const [pastedEmailText, setPastedEmailText] = useState<string>('');
 
   // Household stats
   const activeBills = cloudkit.getBills();
@@ -57,8 +64,16 @@ export const BackupModal: React.FC<BackupModalProps> = ({
       setErrorMsg(null);
       setImportedFilePayload(null);
       setImportedFileName('');
+      setPastedEmailText('');
     }
   }, [isOpen]);
+
+  const handleEmailChange = (newEmail: string) => {
+    setUserEmail(newEmail);
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('financas_user_backup_email', newEmail);
+    }
+  };
 
   const loadServerBackups = async () => {
     setIsLoadingHistory(true);
@@ -74,7 +89,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   if (!isOpen) return null;
 
-  // 1-Click Backup Export
+  // 1-Click Backup Export (Download file)
   const handleDownloadBackup = async () => {
     setIsProcessing(true);
     setSuccessMsg(null);
@@ -92,7 +107,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
-  // 1-Click Email Backup
+  // 1-Click Email Backup (with native share or mailto)
   const handleEmailBackup = async () => {
     setIsProcessing(true);
     setSuccessMsg(null);
@@ -100,16 +115,29 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
     try {
       const result = await cloudkit.createFullBackup(userEmail);
-      setSuccessMsg(`✅ Cópia de segurança enviada ao servidor e e-mail pronto para envio para ${userEmail}!`);
       await loadServerBackups();
 
-      // Open email client with pre-filled content
-      if (typeof window !== 'undefined' && result.emailMailtoUrl) {
-        window.location.href = result.emailMailtoUrl;
+      // Check if navigator.share with files is supported (iOS Safari / Android Chrome)
+      const blob = new Blob([result.backupJsonString], { type: 'application/json' });
+      const file = new File([blob], result.filename, { type: 'application/json' });
+      if (typeof navigator !== 'undefined' && navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          title: 'Backup Finanças da Minha Casa',
+          text: `Arquivo de backup para atualizar dívidas e receitas (${result.billsCount} contas, ${result.revenuesCount} receitas) gerado para ${userEmail}.`,
+          files: [file],
+        });
+        setSuccessMsg(`✅ Arquivo de backup compartilhado para o e-mail ${userEmail}!`);
+      } else {
+        if (typeof window !== 'undefined' && result.emailMailtoUrl) {
+          window.location.href = result.emailMailtoUrl;
+        }
+        setSuccessMsg(`✅ Arquivo "${result.filename}" baixado e e-mail pronto para envio para ${userEmail}!`);
       }
-      setTimeout(() => setSuccessMsg(null), 6000);
+      setTimeout(() => setSuccessMsg(null), 7000);
     } catch (err: any) {
-      setErrorMsg(`Erro ao preparar e-mail: ${err?.message || 'Falha inesperada'}`);
+      if (err.name !== 'AbortError') {
+        setErrorMsg(`Erro ao preparar e-mail: ${err?.message || 'Falha inesperada'}`);
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -131,7 +159,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   // Restore from Server Snapshot
   const handleRestoreServerItem = async (filename: string) => {
-    if (!window.confirm(`Deseja restaurar o backup "${filename}"? Esta ação atualizará os dados da casa.`)) {
+    if (!window.confirm(`Deseja restaurar o backup "${filename}"? Esta ação atualizará as dívidas e receitas da casa.`)) {
       return;
     }
 
@@ -155,7 +183,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
-  // File Upload for Local Restore
+  // File Upload for Local Restore from Email attachment
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -165,16 +193,35 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     reader.onload = (event) => {
       try {
         const raw = event.target?.result as string;
-        const parsed = JSON.parse(raw);
+        const parsed = cloudkit.parseBackupPayload(raw);
         setImportedFilePayload(parsed);
         setErrorMsg(null);
-      } catch {
-        setErrorMsg('Arquivo inválido. Por favor selecione um arquivo .json de backup do aplicativo.');
+        setSuccessMsg(`✅ Arquivo "${file.name}" pronto! Clique no botão abaixo para atualizar suas dívidas e receitas.`);
+      } catch (err: any) {
+        setErrorMsg(`Arquivo inválido: ${err?.message || 'Por favor selecione um arquivo .json de backup válido.'}`);
         setImportedFilePayload(null);
       }
     };
     reader.readAsText(file);
     e.target.value = '';
+  };
+
+  // Process text pasted from email body
+  const handleProcessPastedText = () => {
+    if (!pastedEmailText.trim()) {
+      setErrorMsg('Cole o conteúdo ou código do e-mail no campo de texto.');
+      return;
+    }
+    try {
+      const parsed = cloudkit.parseBackupPayload(pastedEmailText);
+      setImportedFilePayload(parsed);
+      setImportedFileName('Texto copiado do e-mail');
+      setErrorMsg(null);
+      setSuccessMsg('✅ Dados do e-mail identificados e validados! Clique no botão abaixo para atualizar.');
+    } catch (err: any) {
+      setErrorMsg(`Não foi possível processar o texto: ${err?.message || 'Verifique se copiou os dados completos do e-mail.'}`);
+      setImportedFilePayload(null);
+    }
   };
 
   const handleExecuteLocalRestore = async () => {
@@ -191,14 +238,15 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         setSuccessMsg(`✅ ${result.message}`);
         setImportedFilePayload(null);
         setImportedFileName('');
+        setPastedEmailText('');
         onDataRestored?.();
         await loadServerBackups();
-        setTimeout(() => setSuccessMsg(null), 5000);
+        setTimeout(() => setSuccessMsg(null), 6000);
       } else {
         setErrorMsg(result.message);
       }
     } catch (err: any) {
-      setErrorMsg(`Erro ao restaurar: ${err?.message || 'Falha de processamento'}`);
+      setErrorMsg(`Erro ao atualizar dados: ${err?.message || 'Falha de processamento'}`);
     } finally {
       setIsProcessing(false);
     }
@@ -275,8 +323,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                 : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
-            <Upload className="w-3.5 h-3.5" />
-            <span>Restaurar</span>
+            <Upload className="w-3.5 h-3.5 text-[#00C49F]" />
+            <span>Atualizar do E-mail</span>
           </button>
         </div>
 
@@ -356,47 +404,71 @@ export const BackupModal: React.FC<BackupModalProps> = ({
               </div>
 
               {/* Email Destination Input */}
-              <div className="space-y-1">
-                <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
-                  E-mail para Envio do Backup
-                </label>
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-slate-700 dark:text-slate-300">
+                    E-mail para Envio do Backup
+                  </label>
+                  <span className="text-[10px] text-teal-600 dark:text-teal-400 font-bold">
+                    Selecione ou digite
+                  </span>
+                </div>
+
+                {/* Quick Email Selection Pills */}
+                <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
+                  {['clarasouza23021992@gmail.com', 'l.carlosramos92@gmail.com'].map((emailOption) => (
+                    <button
+                      key={emailOption}
+                      type="button"
+                      onClick={() => handleEmailChange(emailOption)}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-semibold transition-all border ${
+                        userEmail === emailOption
+                          ? 'bg-teal-500/20 text-teal-700 dark:text-teal-300 border-teal-500 font-bold'
+                          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-400 border-slate-200 dark:border-slate-700 hover:text-slate-900 dark:hover:text-white'
+                      }`}
+                    >
+                      {emailOption.split('@')[0]}
+                    </button>
+                  ))}
+                </div>
+
                 <div className="relative">
                   <Mail className="w-4 h-4 text-slate-400 absolute left-3 top-3" />
                   <input
                     type="email"
                     value={userEmail}
-                    onChange={(e) => setUserEmail(e.target.value)}
+                    onChange={(e) => handleEmailChange(e.target.value)}
                     placeholder="seuemail@gmail.com"
                     className="w-full pl-9 pr-3.5 py-2.5 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs sm:text-sm font-semibold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
                   />
                 </div>
                 <span className="text-[10.5px] text-slate-500 dark:text-slate-400">
-                  O backup completo com todas as contas e comprovantes será associado a este e-mail.
+                  O backup completo com todas as contas, dívidas e comprovantes será enviado para este e-mail.
                 </span>
               </div>
 
               {/* Action Buttons */}
               <div className="space-y-2.5 pt-1">
+                {/* 1-Click Email Backup Button */}
+                <button
+                  type="button"
+                  onClick={handleEmailBackup}
+                  disabled={isProcessing}
+                  className="w-full py-3 px-4 bg-[#00C49F] hover:bg-[#00b290] disabled:bg-slate-300 text-[#0A1128] font-black rounded-xl text-xs sm:text-sm active-press flex items-center justify-center gap-2 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+                >
+                  <Mail className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
+                  <span>{isProcessing ? 'Preparando Arquivo...' : '1-Clique: Enviar Backup para o E-mail'}</span>
+                </button>
+
                 {/* 1-Click Download Button */}
                 <button
                   type="button"
                   onClick={handleDownloadBackup}
                   disabled={isProcessing}
-                  className="w-full py-3 px-4 bg-[#00C49F] hover:bg-[#00b290] disabled:bg-slate-300 text-[#0A1128] font-black rounded-xl text-xs sm:text-sm active-press flex items-center justify-center gap-2 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
-                >
-                  <Download className={`w-4 h-4 ${isProcessing ? 'animate-bounce' : ''}`} />
-                  <span>{isProcessing ? 'Gerando Arquivo...' : '1-Clique: Baixar Arquivo de Backup (.json)'}</span>
-                </button>
-
-                {/* Email Backup Button */}
-                <button
-                  type="button"
-                  onClick={handleEmailBackup}
-                  disabled={isProcessing}
                   className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs active-press flex items-center justify-center gap-2 transition-all border border-slate-300 dark:border-slate-700 cursor-pointer"
                 >
-                  <Mail className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                  <span>Enviar Cópia para Meu E-mail</span>
+                  <Download className="w-4 h-4 text-teal-600 dark:text-teal-400" />
+                  <span>Baixar Arquivo no Aparelho (.json)</span>
                 </button>
 
                 {/* WhatsApp Share Button */}
@@ -516,19 +588,24 @@ export const BackupModal: React.FC<BackupModalProps> = ({
           {/* TAB 3: RESTORE / IMPORT BACKUP */}
           {activeTab === 'restore' && (
             <div className="space-y-4 animate-in fade-in duration-150">
-              <div>
-                <span className="text-xs font-bold text-slate-900 dark:text-slate-100 uppercase tracking-wider block">
-                  Restaurar de um Arquivo (.json)
-                </span>
-                <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                  Importe um arquivo de backup salvo no seu celular ou computador
-                </span>
+              <div className="bg-gradient-to-r from-teal-500/10 via-emerald-500/5 to-transparent p-3.5 rounded-2xl border border-teal-500/20">
+                <div className="flex items-center gap-2 mb-1">
+                  <div className="w-7 h-7 rounded-lg bg-[#00C49F] text-[#0A1128] flex items-center justify-center font-bold flex-shrink-0">
+                    <Upload className="w-4 h-4" />
+                  </div>
+                  <h3 className="text-xs sm:text-sm font-extrabold text-slate-900 dark:text-white">
+                    Atualizar Dívidas e Receitas com Arquivo do E-mail
+                  </h3>
+                </div>
+                <p className="text-[11px] text-slate-600 dark:text-slate-300 leading-relaxed">
+                  Importe o arquivo (.json) que você recebeu por e-mail ou cole o conteúdo para atualizar instantaneamente todas as contas, dívidas, faturas e salários no app.
+                </p>
               </div>
 
               {/* Mode Selection */}
               <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800 space-y-2">
                 <span className="text-xs font-bold text-slate-800 dark:text-slate-200 block">
-                  Modo de Restauração:
+                  Como aplicar a atualização:
                 </span>
                 <div className="grid grid-cols-2 gap-2">
                   <button
@@ -536,12 +613,12 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     onClick={() => setRestoreMode('replace')}
                     className={`p-2.5 rounded-xl text-left border text-xs transition-all cursor-pointer ${
                       restoreMode === 'replace'
-                        ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 text-teal-950 dark:text-teal-200 font-bold'
+                        ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 text-teal-950 dark:text-teal-200 font-bold ring-1 ring-teal-500/40'
                         : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                     }`}
                   >
-                    <span className="block font-black">Substituir Tudo</span>
-                    <span className="text-[10px] opacity-80 block">Espelha o arquivo exatamente como foi salvo</span>
+                    <span className="block font-black">Substituir e Atualizar Tudo</span>
+                    <span className="text-[10px] opacity-80 block mt-0.5">Espelha exatamente o arquivo de backup recebido</span>
                   </button>
 
                   <button
@@ -549,74 +626,161 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                     onClick={() => setRestoreMode('merge')}
                     className={`p-2.5 rounded-xl text-left border text-xs transition-all cursor-pointer ${
                       restoreMode === 'merge'
-                        ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 text-teal-950 dark:text-teal-200 font-bold'
+                        ? 'bg-teal-50 dark:bg-teal-950/60 border-teal-500 text-teal-950 dark:text-teal-200 font-bold ring-1 ring-teal-500/40'
                         : 'border-slate-200 dark:border-slate-700 text-slate-600 dark:text-slate-400'
                     }`}
                   >
-                    <span className="block font-black">Mesclar Dados</span>
-                    <span className="text-[10px] opacity-80 block">Adiciona sem apagar as contas criadas recentemente</span>
+                    <span className="block font-black">Mesclar com Atuais</span>
+                    <span className="text-[10px] opacity-80 block mt-0.5">Adiciona contas do arquivo sem apagar existentes</span>
                   </button>
                 </div>
               </div>
 
-              {/* File Upload Selector */}
-              <label className="border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-teal-500 dark:hover:border-teal-400 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 hover:bg-teal-50/40 dark:hover:bg-teal-950/20 transition-all group">
-                <Upload className="w-7 h-7 text-slate-400 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors" />
-                <div className="text-center">
-                  <span className="text-xs font-bold text-slate-700 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors block">
-                    {importedFileName ? `Selecionado: ${importedFileName}` : 'Toque para selecionar o arquivo (.json)'}
-                  </span>
-                  <span className="text-[10px] text-slate-400 block mt-0.5">
-                    Aceita qualquer backup gerado pelas Finanças da Minha Casa
-                  </span>
-                </div>
-                <input
-                  type="file"
-                  accept="application/json,.json"
-                  onChange={handleFileSelect}
-                  className="hidden"
-                />
-              </label>
+              {/* Input Method Switcher */}
+              <div className="flex rounded-xl bg-slate-100 dark:bg-slate-800 p-1 text-xs font-bold">
+                <button
+                  type="button"
+                  onClick={() => setImportMethod('file')}
+                  className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    importMethod === 'file'
+                      ? 'bg-white dark:bg-[#0E172F] text-teal-700 dark:text-teal-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <Upload className="w-3.5 h-3.5" />
+                  <span>Selecionar Arquivo do E-mail</span>
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setImportMethod('paste')}
+                  className={`flex-1 py-1.5 rounded-lg transition-all flex items-center justify-center gap-1.5 cursor-pointer ${
+                    importMethod === 'paste'
+                      ? 'bg-white dark:bg-[#0E172F] text-teal-700 dark:text-teal-300 shadow-xs'
+                      : 'text-slate-600 dark:text-slate-400'
+                  }`}
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  <span>Colar Texto do E-mail</span>
+                </button>
+              </div>
 
-              {/* Preview of Imported File */}
-              {importedFilePayload && (
-                <div className="p-3.5 bg-emerald-50/70 dark:bg-emerald-950/40 rounded-2xl border border-emerald-300 dark:border-emerald-800 space-y-2.5 animate-in fade-in">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-black text-emerald-900 dark:text-emerald-200 flex items-center gap-1.5">
-                      <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
-                      <span>Arquivo Validado e Pronto</span>
+              {/* Method 1: File Upload Selector */}
+              {importMethod === 'file' && (
+                <label className="border-2 border-dashed border-teal-500/40 hover:border-teal-500 dark:border-teal-500/30 dark:hover:border-teal-400 rounded-2xl p-5 flex flex-col items-center justify-center gap-2 cursor-pointer bg-teal-50/20 dark:bg-teal-950/10 hover:bg-teal-50/40 transition-all group">
+                  <div className="w-10 h-10 rounded-xl bg-teal-500/10 group-hover:bg-teal-500/20 text-[#00C49F] flex items-center justify-center transition-colors">
+                    <Upload className="w-5 h-5" />
+                  </div>
+                  <div className="text-center">
+                    <span className="text-xs font-bold text-slate-800 dark:text-slate-200 group-hover:text-teal-600 dark:group-hover:text-teal-400 transition-colors block">
+                      {importedFileName ? `Arquivo Selecionado: ${importedFileName}` : 'Toque aqui para escolher o arquivo (.json) recebido'}
                     </span>
-                    <span className="text-[10px] font-bold text-emerald-700 dark:text-emerald-300">
-                      {importedFilePayload.createdAt ? new Date(importedFilePayload.createdAt).toLocaleDateString('pt-BR') : 'Backup Recente'}
+                    <span className="text-[10.5px] text-slate-500 dark:text-slate-400 block mt-0.5">
+                      Baixe o anexo do seu Gmail / e-mail e selecione aqui
                     </span>
                   </div>
+                  <input
+                    type="file"
+                    accept="application/json,.json,text/plain"
+                    onChange={handleFileSelect}
+                    className="hidden"
+                  />
+                </label>
+              )}
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-700 dark:text-slate-200">
-                    <div className="p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-emerald-200 dark:border-emerald-800">
-                      <span className="block font-bold">
-                        {(importedFilePayload.household?.bills || importedFilePayload.bills || []).length} Contas
-                      </span>
-                      <span className="text-[10.5px] text-slate-500">Prontas para importar</span>
-                    </div>
-                    <div className="p-2 rounded-xl bg-white/70 dark:bg-slate-900/60 border border-emerald-200 dark:border-emerald-800">
-                      <span className="block font-bold">
-                        {(importedFilePayload.household?.revenues || importedFilePayload.revenues || []).length} Receitas
-                      </span>
-                      <span className="text-[10.5px] text-slate-500">Prontas para importar</span>
-                    </div>
-                  </div>
-
+              {/* Method 2: Paste text directly from email */}
+              {importMethod === 'paste' && (
+                <div className="space-y-2">
+                  <textarea
+                    rows={4}
+                    value={pastedEmailText}
+                    onChange={(e) => setPastedEmailText(e.target.value)}
+                    placeholder="Abriu o e-mail no celular? Copie os dados do backup e cole aqui..."
+                    className="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-900 text-xs text-slate-900 dark:text-white font-mono focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
                   <button
                     type="button"
-                    onClick={handleExecuteLocalRestore}
-                    disabled={isProcessing}
-                    className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-500 text-white font-black text-xs rounded-xl active-press shadow-xs flex items-center justify-center gap-1.5 transition-all cursor-pointer"
+                    onClick={handleProcessPastedText}
+                    className="w-full py-2 bg-slate-200 dark:bg-slate-800 hover:bg-slate-300 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs rounded-xl active-press transition-colors"
                   >
-                    <Check className="w-4 h-4" />
-                    <span>Confirmar e Restaurar Agora</span>
+                    Validar Dados Colados do E-mail
                   </button>
                 </div>
               )}
+
+              {/* Preview of Imported File & Big Action Button */}
+              {importedFilePayload && (() => {
+                const targetH = importedFilePayload.household || importedFilePayload.clientData || importedFilePayload.data || importedFilePayload;
+                const billsList = (targetH.bills || importedFilePayload.bills || []).filter((b: any) => !isMockBill(b));
+                const revsList = (targetH.revenues || importedFilePayload.revenues || []).filter((r: any) => !isMockRevenue(r));
+                const totalBills = billsList.reduce((acc: number, b: any) => acc + (b.amount || 0), 0);
+                const totalRevs = revsList.reduce((acc: number, r: any) => acc + (r.amount || 0), 0);
+                const backupDate = importedFilePayload.createdAt ? new Date(importedFilePayload.createdAt).toLocaleDateString('pt-BR') : 'Data recente';
+
+                return (
+                  <div className="p-4 bg-emerald-50/80 dark:bg-emerald-950/40 rounded-2xl border-2 border-emerald-400 dark:border-emerald-700 space-y-3 animate-in fade-in shadow-sm">
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-black text-emerald-950 dark:text-emerald-200 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0" />
+                        <span>Arquivo do E-mail Validado!</span>
+                      </span>
+                      <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-200/60 dark:bg-emerald-900/60 text-emerald-900 dark:text-emerald-200">
+                        {backupDate}
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-2 gap-2 text-xs text-slate-800 dark:text-slate-100">
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold block uppercase">
+                          Dívidas &amp; Contas
+                        </span>
+                        <span className="text-sm font-extrabold text-slate-900 dark:text-white block mt-0.5">
+                          {billsList.length} contas
+                        </span>
+                        <span className="text-[10.5px] text-teal-600 dark:text-teal-400 font-bold block">
+                          R$ {totalBills.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+
+                      <div className="p-2.5 rounded-xl bg-white dark:bg-slate-900 border border-emerald-200 dark:border-emerald-800">
+                        <span className="text-[10px] text-slate-500 dark:text-slate-400 font-semibold block uppercase">
+                          Salários &amp; Receitas
+                        </span>
+                        <span className="text-sm font-extrabold text-slate-900 dark:text-white block mt-0.5">
+                          {revsList.length} receitas
+                        </span>
+                        <span className="text-[10.5px] text-emerald-600 dark:text-emerald-400 font-bold block">
+                          R$ {totalRevs.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                        </span>
+                      </div>
+                    </div>
+
+                    {importedFilePayload.userEmail && (
+                      <p className="text-[10.5px] text-slate-600 dark:text-slate-400">
+                        Origem: <strong>{importedFilePayload.userEmail}</strong>
+                      </p>
+                    )}
+
+                    <button
+                      type="button"
+                      onClick={handleExecuteLocalRestore}
+                      disabled={isProcessing}
+                      className="w-full py-3 bg-[#00C49F] hover:bg-[#00B290] disabled:bg-slate-400 text-[#0A1128] font-black text-xs sm:text-sm rounded-xl active-press shadow-md shadow-emerald-500/20 flex items-center justify-center gap-2 transition-all cursor-pointer"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <RefreshCw className="w-4 h-4 animate-spin" />
+                          <span>Atualizando Suas Finanças...</span>
+                        </>
+                      ) : (
+                        <>
+                          <Check className="w-4 h-4 stroke-[3]" />
+                          <span>Atualizar Minhas Dívidas e Receitas Agora</span>
+                        </>
+                      )}
+                    </button>
+                  </div>
+                );
+              })()}
             </div>
           )}
         </div>

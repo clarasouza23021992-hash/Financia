@@ -3,7 +3,8 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag
+  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
+  Images
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -108,6 +109,7 @@ export default function App() {
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
   const [viewingReceiptBill, setViewingReceiptBill] = useState<Bill | null>(null);
+  const [receiptModalInitialView, setReceiptModalInitialView] = useState<'single' | 'gallery'>('single');
   const [isCalculatorOpen, setIsCalculatorOpen] = useState(false);
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
@@ -659,6 +661,13 @@ export default function App() {
   // Handlers for Receipt viewing & attaching
   const handleViewReceipt = (bill: Bill) => {
     setViewingReceiptBill(bill);
+    setReceiptModalInitialView('single');
+    setIsReceiptModalOpen(true);
+  };
+
+  const handleOpenReceiptsGallery = () => {
+    setViewingReceiptBill(null);
+    setReceiptModalInitialView('gallery');
     setIsReceiptModalOpen(true);
   };
 
@@ -1011,6 +1020,21 @@ export default function App() {
                 <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
                 <span>Escanear Boleto / Pix</span>
               </button>
+
+              <button
+                type="button"
+                onClick={handleOpenReceiptsGallery}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-teal-500/20 hover:from-teal-500/20 hover:to-emerald-500/30 text-teal-900 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
+                title="Galeria de Comprovantes do Mês (Fotos & Prints)"
+              >
+                <Images className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                <span>Galeria Comprovantes</span>
+                {filterCounts.withReceipt > 0 && (
+                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500 text-[#0A1128] font-black">
+                    {filterCounts.withReceipt}
+                  </span>
+                )}
+              </button>
             </div>
 
             {/* Search & Category Filter Bar */}
@@ -1057,6 +1081,33 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Banner when filtered by with_receipt */}
+            {statusFilter === 'with_receipt' && filterCounts.withReceipt > 0 && (
+              <div className="mx-4 mb-2 p-3 bg-gradient-to-r from-teal-500/10 via-emerald-500/10 to-teal-500/15 rounded-2xl border border-teal-500/30 flex items-center justify-between gap-3 shadow-xs">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-8 h-8 rounded-xl bg-teal-500/20 text-[#00C49F] flex items-center justify-center flex-shrink-0">
+                    <Images className="w-4 h-4" />
+                  </div>
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-slate-900 dark:text-white truncate">
+                      {filterCounts.withReceipt} comprovante(s) anexado(s) neste mês
+                    </p>
+                    <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate">
+                      Abra a galeria visual para deslizar rapidamente pelas fotos dos comprovantes
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleOpenReceiptsGallery}
+                  className="px-3 py-1.5 rounded-xl bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] font-black text-xs flex items-center gap-1.5 flex-shrink-0 active-press shadow-xs cursor-pointer transition-all"
+                >
+                  <Images className="w-3.5 h-3.5" />
+                  <span>Abrir Galeria</span>
+                </button>
+              </div>
+            )}
 
             {/* List of Bill Cards */}
             <div className="px-4 py-2 space-y-3">
@@ -1314,6 +1365,12 @@ export default function App() {
           setViewingReceiptBill(null);
         }}
         bill={viewingReceiptBill}
+        monthBills={currentMonthBills}
+        selectedMonthLabel={selectedMonth.label}
+        initialView={receiptModalInitialView}
+        onSelectBill={(b) => {
+          setViewingReceiptBill(b);
+        }}
       />
 
       <CalculatorModal

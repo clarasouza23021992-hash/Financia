@@ -41,6 +41,7 @@ import { NotificationCenterModal } from './components/NotificationCenterModal';
 import { BudgetGoalsModal } from './components/BudgetGoalsModal';
 import { CategoriesManagerModal } from './components/CategoriesManagerModal';
 import { BackupModal } from './components/BackupModal';
+import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -115,6 +116,8 @@ export default function App() {
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
+  const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
 
   // In-App Notifications History & Due Date Alerts
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
@@ -981,68 +984,107 @@ export default function App() {
 
             {/* Quick Actions Row */}
             <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
-              <button
-                type="button"
-                onClick={() => setIsBudgetModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
-              >
-                <Target className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                <span>Metas & Teto</span>
-              </button>
+              {quickActionsOrder.map((actionId) => {
+                if (actionId === 'scanner') {
+                  return (
+                    <button
+                      key="scanner"
+                      type="button"
+                      onClick={() => setIsBoletoScannerOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
+                    >
+                      <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
+                      <span>Escanear Boleto / Pix</span>
+                    </button>
+                  );
+                }
+                if (actionId === 'gallery') {
+                  return (
+                    <button
+                      key="gallery"
+                      type="button"
+                      onClick={handleOpenReceiptsGallery}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-teal-500/20 hover:from-teal-500/20 hover:to-emerald-500/30 text-teal-900 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
+                      title="Galeria de Comprovantes do Mês (Fotos & Prints)"
+                    >
+                      <Images className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                      <span>Galeria Comprovantes</span>
+                      {filterCounts.withReceipt > 0 && (
+                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500 text-[#0A1128] font-black">
+                          {filterCounts.withReceipt}
+                        </span>
+                      )}
+                    </button>
+                  );
+                }
+                if (actionId === 'budget') {
+                  return (
+                    <button
+                      key="budget"
+                      type="button"
+                      onClick={() => setIsBudgetModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
+                    >
+                      <Target className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                      <span>Metas & Teto</span>
+                    </button>
+                  );
+                }
+                if (actionId === 'reminders') {
+                  return (
+                    <button
+                      key="reminders"
+                      type="button"
+                      onClick={() => setIsNotificationCenterOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+                    >
+                      <Bell className="w-3.5 h-3.5 text-[#FFD166]" />
+                      <span>Lembretes</span>
+                      {unreadNotificationsCount > 0 && (
+                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
+                      )}
+                    </button>
+                  );
+                }
+                if (actionId === 'calculator') {
+                  return (
+                    <button
+                      key="calculator"
+                      type="button"
+                      onClick={() => setIsCalculatorOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+                    >
+                      <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                      <span>Calculadora</span>
+                    </button>
+                  );
+                }
+                if (actionId === 'categories') {
+                  return (
+                    <button
+                      key="categories"
+                      type="button"
+                      onClick={() => setIsCategoriesModalOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+                      title="Gerenciar categorias de despesas"
+                    >
+                      <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                      <span>Categorias</span>
+                    </button>
+                  );
+                }
+                return null;
+              })}
 
+              {/* Botão de Organizar / Mover Botões */}
               <button
                 type="button"
-                onClick={() => setIsNotificationCenterOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
+                onClick={() => setIsReorderModalOpen(true)}
+                className="inline-flex items-center gap-1 px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800/80 dark:hover:bg-slate-800 text-slate-700 dark:text-slate-300 font-bold text-xs border border-dashed border-slate-300 dark:border-slate-700 active-press whitespace-nowrap transition-all cursor-pointer shadow-2xs"
+                title="Personalizar e mudar a ordem dos botões de atalho"
               >
-                <Bell className="w-3.5 h-3.5 text-[#FFD166]" />
-                <span>Lembretes</span>
-                {unreadNotificationsCount > 0 && (
-                  <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                )}
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsCalculatorOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
-              >
-                <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                <span>Calculadora</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsCategoriesModalOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
-                title="Gerenciar categorias de despesas"
-              >
-                <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                <span>Categorias</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={() => setIsBoletoScannerOpen(true)}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
-              >
-                <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                <span>Escanear Boleto / Pix</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleOpenReceiptsGallery}
-                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-teal-500/20 hover:from-teal-500/20 hover:to-emerald-500/30 text-teal-900 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
-                title="Galeria de Comprovantes do Mês (Fotos & Prints)"
-              >
-                <Images className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                <span>Galeria Comprovantes</span>
-                {filterCounts.withReceipt > 0 && (
-                  <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500 text-[#0A1128] font-black">
-                    {filterCounts.withReceipt}
-                  </span>
-                )}
+                <SlidersHorizontal className="w-3.5 h-3.5 text-teal-500" />
+                <span>Mover Botões</span>
               </button>
             </div>
 
@@ -1477,6 +1519,16 @@ export default function App() {
           setRevenues(cloudkit.getRevenues());
           setDevices(cloudkit.getDevices());
           showTemporaryToast('✅ Dados restaurados e sincronizados com sucesso!');
+        }}
+      />
+
+      <ReorderQuickActionsModal
+        isOpen={isReorderModalOpen}
+        onClose={() => setIsReorderModalOpen(false)}
+        currentOrder={quickActionsOrder}
+        onSaveOrder={(newOrder) => {
+          setQuickActionsOrder(newOrder);
+          showTemporaryToast('✨ Nova ordem dos botões salva!');
         }}
       />
     </div>

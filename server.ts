@@ -646,6 +646,7 @@ async function startServer() {
         d.owner === 'Esposa' ||
         d.owner === 'Cônjuge' ||
         d.name?.toLowerCase().includes('esposa') ||
+        d.name?.toLowerCase().includes('clara') ||
         d.name?.toLowerCase().includes('paula')
     );
     if (!wifeDev) {

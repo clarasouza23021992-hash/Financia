@@ -27,8 +27,8 @@ const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
 const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
-  { id: 'p1', name: 'Você (Titular)', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
-  { id: 'p2', name: 'Cônjuge', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
+  { id: 'p1', name: 'Carlos', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
+  { id: 'p2', name: 'Clara', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
 ];
 
 export const DEFAULT_DEVICES: CloudDevice[] = [
@@ -131,8 +131,10 @@ class CloudKitSyncEngine {
         }
         const roleFromUrl = urlParams.get('role');
         if (roleFromUrl === 'esposa' || urlParams.has('esposa')) {
-          localStorage.setItem('financas_my_device_custom_name', 'iPhone da Esposa');
+          const wifeName = this.getWifeName();
+          localStorage.setItem('financas_my_device_custom_name', `iPhone de ${wifeName}`);
           localStorage.setItem('financas_my_role', 'Esposa');
+          localStorage.setItem('financas_active_user_name', wifeName);
         }
       } catch {}
 
@@ -176,37 +178,115 @@ class CloudKitSyncEngine {
     }
   }
 
+  public getWifeName(): string {
+    if (typeof window === 'undefined') return 'Clara';
+    const stored = localStorage.getItem('financas_wife_name') || localStorage.getItem('financas_spouse_name');
+    if (stored && stored.trim() && !/iphone|android|celular|smartphone|computador/i.test(stored)) {
+      return stored.trim();
+    }
+    const profiles = this.getProfiles();
+    const wifeProfile = profiles.find(p => 
+      p.id === 'p2' || 
+      p.avatar === '👩🏻' ||
+      p.role?.toLowerCase().includes('esposa') || 
+      p.role?.toLowerCase().includes('cônjuge')
+    );
+    if (wifeProfile?.name && wifeProfile.name !== 'Cônjuge' && wifeProfile.name !== 'Esposa' && !/iphone|android|celular/i.test(wifeProfile.name)) {
+      return wifeProfile.name;
+    }
+    const backupEmail = localStorage.getItem('financas_user_backup_email');
+    if (backupEmail && backupEmail.toLowerCase().includes('clara')) {
+      return 'Clara';
+    }
+    return 'Clara';
+  }
+
+  public setWifeName(name: string): void {
+    if (typeof window === 'undefined') return;
+    const clean = name.trim() || 'Clara';
+    localStorage.setItem('financas_wife_name', clean);
+    localStorage.setItem('financas_spouse_name', clean);
+    const profiles = this.getProfiles();
+    const updated = profiles.map(p => {
+      if (p.id === 'p2' || p.avatar === '👩🏻' || p.role?.toLowerCase().includes('esposa') || p.role?.toLowerCase().includes('cônjuge')) {
+        return { ...p, name: clean };
+      }
+      return p;
+    });
+    this.saveProfiles(updated);
+    this.broadcastUpdate('WIFE_NAME_CHANGED', clean);
+  }
+
+  public getTitularName(): string {
+    if (typeof window === 'undefined') return 'Carlos';
+    const stored = localStorage.getItem('financas_titular_name');
+    if (stored && stored.trim() && !/iphone|android|celular|smartphone|computador/i.test(stored)) {
+      return stored.trim();
+    }
+    const profiles = this.getProfiles();
+    const titularProfile = profiles.find(p => p.id === 'p1' || p.avatar === '👤');
+    if (titularProfile?.name && titularProfile.name !== 'Você (Titular)' && titularProfile.name !== 'Você') {
+      return titularProfile.name;
+    }
+    return 'Carlos';
+  }
+
+  public setTitularName(name: string): void {
+    if (typeof window === 'undefined') return;
+    const clean = name.trim() || 'Carlos';
+    localStorage.setItem('financas_titular_name', clean);
+    const profiles = this.getProfiles();
+    const updated = profiles.map(p => {
+      if (p.id === 'p1' || p.avatar === '👤' || p.role?.toLowerCase().includes('titular')) {
+        return { ...p, name: clean };
+      }
+      return p;
+    });
+    this.saveProfiles(updated);
+    this.broadcastUpdate('TITULAR_NAME_CHANGED', clean);
+  }
+
   public getCurrentUserName(): string {
     if (typeof window === 'undefined') return 'Carlos';
-    const activeUser = localStorage.getItem('financas_active_user_name');
-    if (activeUser && activeUser.trim() && !/iphone|android|celular|smartphone|computador|dispositivo/i.test(activeUser)) {
-      return activeUser.trim();
-    }
+    
+    // Check role of the device first: if this is wife's device, strictly use wife's name!
     const storedRole = localStorage.getItem('financas_my_role');
-    if (storedRole === 'Esposa') return 'Paula';
+    const isWifeDevice = storedRole === 'Esposa' || storedRole === 'Cônjuge';
+    if (isWifeDevice) {
+      return this.getWifeName();
+    }
 
     const customName = localStorage.getItem('financas_my_device_custom_name');
     if (customName) {
-      if (customName.toLowerCase().includes('paula') || customName.toLowerCase().includes('esposa')) return 'Paula';
-      if (customName.toLowerCase().includes('carlos')) return 'Carlos';
-      // If customName is a hardware device like "Meu iPhone", ignore it
+      const low = customName.toLowerCase();
+      if (low.includes('esposa') || low.includes('clara') || low.includes('paula')) {
+        return this.getWifeName();
+      }
+      if (low.includes('carlos')) return 'Carlos';
       if (!/iphone|android|celular|smartphone|computador|dispositivo/i.test(customName) && customName.trim()) {
         return customName.trim();
       }
     }
 
-    const profiles = this.getProfiles();
-    if (profiles[0]?.name && profiles[0].name !== 'Você (Titular)' && profiles[0].name !== 'Você' && !/iphone|android|celular|computador/i.test(profiles[0].name)) {
-      return profiles[0].name;
+    const activeUser = localStorage.getItem('financas_active_user_name');
+    if (activeUser && activeUser.trim() && !/iphone|android|celular|smartphone|computador|dispositivo/i.test(activeUser)) {
+      const low = activeUser.toLowerCase();
+      if (low.includes('esposa') || low.includes('clara') || low.includes('paula')) {
+        return this.getWifeName();
+      }
+      return activeUser.trim();
     }
-    return 'Carlos';
+
+    return this.getTitularName();
   }
 
   public setActiveUserName(name: string): void {
     if (typeof window === 'undefined') return;
     const clean = name.trim();
     localStorage.setItem('financas_active_user_name', clean);
-    if (clean.toLowerCase().includes('paula') || clean.toLowerCase().includes('esposa')) {
+    const low = clean.toLowerCase();
+    const wifeName = this.getWifeName().toLowerCase();
+    if (low.includes(wifeName) || low.includes('esposa') || low.includes('clara') || low.includes('paula')) {
       localStorage.setItem('financas_my_role', 'Esposa');
     } else {
       localStorage.setItem('financas_my_role', 'Titular');

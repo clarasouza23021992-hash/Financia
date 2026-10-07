@@ -781,12 +781,15 @@ export const BillModal: React.FC<BillModalProps> = ({
                 {initialBill 
                   ? (() => {
                       const raw = initialBill.lastEditedBy || '';
-                      let actor = 'Carlos';
+                      const wifeName = cloudkit.getWifeName();
+                      const wifeLower = wifeName.toLowerCase();
+                      const titularName = cloudkit.getTitularName();
+                      let actor = titularName;
                       const lower = raw.toLowerCase();
-                      if (lower.includes('paula') || lower.includes('esposa')) {
-                        actor = 'Paula';
+                      if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula')) {
+                        actor = wifeName;
                       } else if (lower.includes('carlos') || lower.includes('titular') || lower.includes('você') || lower.includes('meu')) {
-                        actor = 'Carlos';
+                        actor = titularName;
                       } else if (raw && !/iphone|android|celular|computador|dispositivo|dev_/i.test(raw)) {
                         actor = raw;
                       }

@@ -2,7 +2,8 @@ import React, { useState } from 'react';
 import { 
   X, Bell, Shield, Check, Moon, Sun, 
   Smartphone, Volume2, Clock, Sparkles, RefreshCw,
-  ShieldCheck, Download, Mail, ArrowRight, Database, Upload
+  ShieldCheck, Download, Mail, ArrowRight, Database, Upload,
+  Users, Heart
 } from 'lucide-react';
 import { UserProfile, NotificationSetting, CloudDevice } from '../types/finance';
 import { 
@@ -39,7 +40,15 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
   onOpenBackup,
   onDataRestored,
 }) => {
-  const [activeTab, setActiveTab] = useState<'notifications' | 'security' | 'backup'>('notifications');
+  const [activeTab, setActiveTab] = useState<'members' | 'notifications' | 'security' | 'backup'>('members');
+  const [titularInput, setTitularInput] = useState(() => cloudkit.getTitularName());
+  const [wifeInput, setWifeInput] = useState(() => cloudkit.getWifeName());
+  const [currentMyRole, setCurrentMyRole] = useState(() => {
+    if (typeof window !== 'undefined') {
+      return localStorage.getItem('financas_my_role') || 'Titular';
+    }
+    return 'Titular';
+  });
   const [twoFactorEnabled, setTwoFactorEnabled] = useState(true);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
   const [isBackingUp, setIsBackingUp] = useState(false);
@@ -172,10 +181,21 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
         </div>
 
         {/* Tab switcher */}
-        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-4 pt-2 flex-shrink-0">
+        <div className="flex border-b border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/60 px-4 pt-2 flex-shrink-0 overflow-x-auto">
+          <button
+            onClick={() => setActiveTab('members')}
+            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
+              activeTab === 'members'
+                ? 'border-teal-500 text-teal-600 dark:text-teal-400'
+                : 'border-transparent text-slate-500'
+            }`}
+          >
+            <Users className="w-3.5 h-3.5" />
+            <span>Moradores</span>
+          </button>
           <button
             onClick={() => setActiveTab('notifications')}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 shrink-0 ${
               activeTab === 'notifications'
                 ? 'border-teal-500 text-teal-600 dark:text-teal-400'
                 : 'border-transparent text-slate-500'
@@ -185,27 +205,24 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
           </button>
           <button
             onClick={() => setActiveTab('security')}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 ${
+            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 shrink-0 ${
               activeTab === 'security'
                 ? 'border-teal-500 text-teal-600 dark:text-teal-400'
                 : 'border-transparent text-slate-500'
             }`}
           >
-            2FA &amp; Aparência
+            2FA &amp; Tema
           </button>
           <button
             onClick={() => setActiveTab('backup')}
-            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 ${
+            className={`pb-2.5 px-3 text-xs font-bold transition-all border-b-2 flex items-center gap-1.5 shrink-0 ${
               activeTab === 'backup'
                 ? 'border-teal-500 text-teal-600 dark:text-teal-400'
                 : 'border-transparent text-slate-500'
             }`}
           >
             <ShieldCheck className="w-3.5 h-3.5 text-[#00C49F]" />
-            <span>Backup Seguro</span>
-            <span className="px-1.5 py-0.5 rounded-full text-[9px] font-black bg-teal-500/20 text-teal-600 dark:text-teal-300">
-              1-Clique
-            </span>
+            <span>Backup</span>
           </button>
         </div>
 
@@ -216,6 +233,119 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
             <div className="p-3 bg-emerald-50 dark:bg-emerald-950/60 border border-emerald-300 dark:border-emerald-800 rounded-2xl text-xs font-bold text-emerald-800 dark:text-emerald-300 flex items-center gap-2 animate-fade-in">
               <Check className="w-4 h-4 text-emerald-600 flex-shrink-0" />
               <span>{feedbackMsg}</span>
+            </div>
+          )}
+
+          {activeTab === 'members' && (
+            <div className="space-y-4">
+              <div>
+                <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider mb-1">
+                  Moradores &amp; Contas da Casa
+                </h3>
+                <p className="text-xs text-slate-500 dark:text-slate-400">
+                  Cada morador acessa em seu próprio celular. Quando alguém altera ou paga uma conta, o nome dele aparece na dívida e você recebe uma notificação.
+                </p>
+              </div>
+
+              {/* Status deste Aparelho */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
+                  Conta deste Celular:
+                </span>
+                <div className="flex items-center justify-between gap-2">
+                  <div className="flex items-center gap-2.5">
+                    <span className="text-2xl">
+                      {currentMyRole === 'Esposa' ? '👩🏻' : '👤'}
+                    </span>
+                    <div>
+                      <p className="text-sm font-extrabold text-slate-900 dark:text-white">
+                        {currentMyRole === 'Esposa' ? wifeInput : titularInput}
+                      </p>
+                      <p className="text-[10.5px] text-teal-600 dark:text-teal-400 font-semibold">
+                        {currentMyRole === 'Esposa' ? 'Conectado como Esposa' : 'Conectado como Titular'}
+                      </p>
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const nextRole = currentMyRole === 'Esposa' ? 'Titular' : 'Esposa';
+                      localStorage.setItem('financas_my_role', nextRole);
+                      const targetName = nextRole === 'Esposa' ? wifeInput : titularInput;
+                      cloudkit.setActiveUserName(targetName);
+                      setCurrentMyRole(nextRole);
+                      showFeedback(`Aparelho configurado para: ${nextRole === 'Esposa' ? '👩🏻 ' + wifeInput : '👤 ' + titularInput}`);
+                    }}
+                    className="px-2.5 py-1.5 text-[10px] font-bold rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 active-press hover:bg-slate-100 cursor-pointer"
+                  >
+                    Trocar Conta deste Aparelho
+                  </button>
+                </div>
+              </div>
+
+              {/* Editar Nome do Titular */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>👤</span>
+                    <span>Nome do Titular</span>
+                  </label>
+                  <span className="text-[10px] text-slate-400 font-medium">Administrador</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={titularInput}
+                    onChange={(e) => setTitularInput(e.target.value)}
+                    placeholder="Ex: Carlos"
+                    className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-teal-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cloudkit.setTitularName(titularInput);
+                      showFeedback(`Nome do Titular atualizado para "${titularInput}"!`);
+                    }}
+                    className="px-3.5 py-2 bg-slate-900 dark:bg-teal-500 hover:bg-black text-white dark:text-[#0A1128] font-bold text-xs rounded-xl active-press cursor-pointer"
+                  >
+                    Salvar
+                  </button>
+                </div>
+              </div>
+
+              {/* Editar Nome da Esposa */}
+              <div className="p-3.5 rounded-2xl bg-pink-50/60 dark:bg-pink-950/30 border border-pink-200/80 dark:border-pink-900/60 space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>👩🏻</span>
+                    <span>Nome da Esposa</span>
+                  </label>
+                  <span className="text-[10px] text-pink-600 dark:text-pink-400 font-bold">Cônjuge</span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={wifeInput}
+                    onChange={(e) => setWifeInput(e.target.value)}
+                    placeholder="Ex: Clara"
+                    className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      cloudkit.setWifeName(wifeInput);
+                      showFeedback(`Nome da Esposa salvo como "${wifeInput}"! Quando ela fizer alterações no celular dela, o nome dela aparecerá nas dívidas.`);
+                    }}
+                    className="px-3.5 py-2 bg-pink-600 hover:bg-pink-700 text-white font-bold text-xs rounded-xl active-press cursor-pointer"
+                  >
+                    Salvar
+                  </button>
+                </div>
+                <p className="text-[10.5px] text-slate-600 dark:text-slate-400">
+                  Quando ela cadastrar, alterar ou pagar dívidas no celular dela, aparecerá <strong>"👩🏻 {wifeInput}"</strong> com a data e hora na tela.
+                </p>
+              </div>
             </div>
           )}
 

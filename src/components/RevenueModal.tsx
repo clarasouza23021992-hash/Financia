@@ -246,7 +246,7 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
                 <option key={p.id} value={p.name} />
               ))}
               <option value="Carlos" />
-              <option value="Paula" />
+              <option value="Clara" />
               <option value="Esposa" />
               <option value="Você" />
               <option value="Casal / Conjunta" />
@@ -284,14 +284,14 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
                   </button>
                   <button
                     type="button"
-                    onClick={() => setProfileName('Paula')}
+                    onClick={() => setProfileName('Clara')}
                     className={`text-xs px-3 py-1.5 rounded-xl font-bold border transition-all active-press ${
-                      profileName.toLowerCase() === 'paula'
+                      profileName.toLowerCase() === 'clara'
                         ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
                         : 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border-slate-200 dark:border-slate-700 hover:bg-slate-200'
                     }`}
                   >
-                    👩🏻‍💼 Paula (Esposa)
+                    👩🏻‍💼 Clara (Esposa)
                   </button>
                 </>
               )}

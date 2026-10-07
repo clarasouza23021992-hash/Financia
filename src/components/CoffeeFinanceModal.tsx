@@ -47,7 +47,7 @@ export const CoffeeFinanceModal: React.FC<CoffeeFinanceModalProps> = ({
   revenues,
   selectedMonthLabel = 'Mês Atual',
   userProfileName = 'Carlos',
-  spouseProfileName = 'Paula',
+  spouseProfileName = 'Clara',
   onPayBill,
   onOpenBillDetail,
 }) => {

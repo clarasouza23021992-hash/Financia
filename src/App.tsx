@@ -122,7 +122,7 @@ export default function App() {
   const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
 
-  // Active household member editing debts (Carlos / Paula)
+  // Active household member editing debts (Carlos on Carlos's device / Clara on wife's device)
   const [activeUserName, setActiveUserName] = useState<string>(() => cloudkit.getCurrentUserName());
   const [liveAlterationNotif, setLiveAlterationNotif] = useState<ChangeNotification | null>(null);
 
@@ -133,22 +133,16 @@ export default function App() {
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
-  const handleToggleActiveUser = () => {
-    const nextUser = activeUserName === 'Carlos' ? 'Paula' : 'Carlos';
-    cloudkit.setActiveUserName(nextUser);
-    setActiveUserName(nextUser);
-    showTemporaryToast(`Morador ativo alterado: ${nextUser === 'Paula' ? '👩🏻 Paula' : '👤 Carlos'}. Suas próximas ações serão registradas em nome de ${nextUser}.`);
-  };
-
   const handleSimulateSpouseAlteration = () => {
-    const otherUser = activeUserName === 'Carlos' ? 'Paula' : 'Carlos';
+    const wifeName = cloudkit.getWifeName();
+    const otherUser = activeUserName === wifeName ? cloudkit.getTitularName() : wifeName;
     const sampleBill = bills[0] || { name: 'Energia Elétrica (Enel)', amount: 245.60 };
     playNotificationChime();
     const simulatedNotif: ChangeNotification = {
       id: `sim_${Date.now()}`,
       householdId: cloudkit.getHouseholdId(),
       sourceDeviceId: 'dev_spouse_sim',
-      sourceDeviceName: otherUser === 'Paula' ? 'iPhone Paula' : 'iPhone Carlos',
+      sourceDeviceName: otherUser === wifeName ? `iPhone de ${wifeName}` : 'Meu iPhone',
       sourceUserName: otherUser,
       actionType: 'bill_paid',
       title: 'Dívida Paga! ✅',
@@ -964,8 +958,6 @@ export default function App() {
         isRefreshing={isRefreshing}
         isOffline={isOffline}
         isWifeConnected={isWifeConnected}
-        activeUserName={activeUserName}
-        onToggleActiveUser={handleToggleActiveUser}
       />
 
       {/* Intelligent Due Date Notification Toast Banner */}

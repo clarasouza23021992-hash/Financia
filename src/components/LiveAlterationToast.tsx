@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, Edit3, Paperclip, AlertCircle, ArrowRight, Bell, Trash2, Calendar } from 'lucide-react';
 import { ChangeNotification } from '../types/finance';
+import { cloudkit } from '../services/cloudkitSync';
 
 interface LiveAlterationToastProps {
   notification: ChangeNotification | null;
@@ -48,16 +49,23 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
 
   const rawActor = notification.sourceUserName || 'Morador';
   const lower = rawActor.toLowerCase();
-  let actorName = 'Carlos';
-  if (lower.includes('paula') || lower.includes('esposa') || lower.includes('cônjuge')) {
-    actorName = 'Paula';
+  const wifeName = cloudkit.getWifeName();
+  const wifeLower = wifeName.toLowerCase();
+  const titularName = cloudkit.getTitularName();
+
+  let actorName = titularName;
+  let isWife = false;
+  if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula')) {
+    actorName = wifeName;
+    isWife = true;
   } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
-    actorName = 'Carlos';
+    actorName = titularName;
+    isWife = false;
   } else if (rawActor && !/iphone|android|celular|computador|dispositivo|dev_/i.test(rawActor)) {
     actorName = rawActor.trim();
+    isWife = false;
   }
-  const isPaula = actorName === 'Paula';
-  const avatar = isPaula ? '👩🏻' : '👤';
+  const avatar = isWife ? '👩🏻' : '👤';
 
   let iconElement = <Edit3 className="w-4 h-4 text-amber-500" />;
   let accentBorder = 'border-amber-400 dark:border-amber-500/60';

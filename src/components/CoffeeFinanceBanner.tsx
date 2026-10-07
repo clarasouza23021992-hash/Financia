@@ -25,7 +25,7 @@ export const CoffeeFinanceBanner: React.FC<CoffeeFinanceBannerProps> = ({
   revenues,
   onOpenCoffeeModal,
   userProfileName = 'Carlos',
-  spouseProfileName = 'Paula',
+  spouseProfileName = 'Clara',
 }) => {
   // Check if completed this week
   const pastRoutines = useMemo(() => {

@@ -6,6 +6,7 @@ import {
 import { motion, AnimatePresence } from 'motion/react';
 import { Bill, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { getCategoryInfo } from '../utils/categories';
+import { cloudkit } from '../services/cloudkitSync';
 
 interface BillCardProps {
   bill: Bill;
@@ -342,14 +343,23 @@ export const BillCard: React.FC<BillCardProps> = ({
           const rawActor = (bill.lastEditedBy || (bill.status === 'paid' ? bill.paidBy : '') || bill.updatedByDevice || '').trim();
           const lower = rawActor.toLowerCase();
 
-          // Identifica QUEM FOI DE FATO (nunca exibir o aparelho como "Meu iPhone")
-          let displayName = 'Carlos';
-          if (lower.includes('paula') || lower.includes('esposa') || lower.includes('cônjuge')) {
-            displayName = 'Paula';
+          const wifeName = cloudkit.getWifeName();
+          const wifeLower = wifeName.toLowerCase();
+          const titularName = cloudkit.getTitularName();
+
+          // Identifica QUEM FOI DE FATO (reconhece a esposa e Carlos com precisão)
+          let displayName = titularName;
+          let isWife = false;
+
+          if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula')) {
+            displayName = wifeName;
+            isWife = true;
           } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
-            displayName = 'Carlos';
+            displayName = titularName;
+            isWife = false;
           } else if (rawActor && !/iphone|android|celular|computador|smartphone|dispositivo|dev_/i.test(rawActor)) {
             displayName = rawActor.trim();
+            isWife = false;
           }
 
           // Data e hora exatas da alteração/pagamento/criação (DD/MM HH:mm)
@@ -380,18 +390,22 @@ export const BillCard: React.FC<BillCardProps> = ({
           const isPaid = bill.status === 'paid';
           const isEdited = Boolean(bill.isEdited && bill.lastEditedAt);
           
-          let icon = '👤';
+          let icon = isWife ? '👩🏻' : '👤';
           let actionLabel = 'Cadastrado por';
-          let badgeStyle = 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60';
+          let badgeStyle = isWife
+            ? 'bg-pink-50/90 dark:bg-pink-950/40 text-pink-900 dark:text-pink-300 border-pink-200/80 dark:border-pink-800/60'
+            : 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60';
 
           if (isPaid) {
             icon = '✅';
             actionLabel = 'Pago por';
             badgeStyle = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60';
           } else if (isEdited) {
-            icon = '✏️';
+            icon = isWife ? '👩🏻' : '✏️';
             actionLabel = bill.lastActionDescription || 'Alterado por';
-            badgeStyle = 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60';
+            badgeStyle = isWife
+              ? 'bg-pink-50/90 dark:bg-pink-950/40 text-pink-900 dark:text-pink-300 border-pink-200/80 dark:border-pink-800/60'
+              : 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60';
           }
 
           const tooltip = `${actionLabel} ${displayName} em ${dateStr} às ${timeStr}`;

@@ -11,6 +11,7 @@ import {
   sendNativeNotification, 
   playNotificationChime 
 } from '../services/notificationService';
+import { cloudkit } from '../services/cloudkitSync';
 
 interface NotificationCenterModalProps {
   isOpen: boolean;
@@ -282,10 +283,16 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                               {(() => {
                                 const raw = item.actorName || '';
                                 const low = raw.toLowerCase();
-                                if (low.includes('paula') || low.includes('esposa')) return 'Paula';
-                                if (low.includes('carlos') || low.includes('titular') || low.includes('você') || low.includes('meu')) return 'Carlos';
+                                const wifeName = cloudkit.getWifeName();
+                                const titularName = cloudkit.getTitularName();
+                                if (low.includes(wifeName.toLowerCase()) || low.includes('esposa') || low.includes('cônjuge') || low.includes('clara') || low.includes('paula')) {
+                                  return `👩🏻 ${wifeName}`;
+                                }
+                                if (low.includes('carlos') || low.includes('titular') || low.includes('você') || low.includes('meu')) {
+                                  return `👤 ${titularName}`;
+                                }
                                 if (!/iphone|android|celular|computador|dispositivo|dev_/i.test(raw)) return raw;
-                                return 'Carlos';
+                                return `👤 ${titularName}`;
                               })()}
                             </span>
                           )}

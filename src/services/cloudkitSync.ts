@@ -177,12 +177,34 @@ class CloudKitSyncEngine {
   }
 
   public getCurrentUserName(): string {
-    if (typeof window === 'undefined') return 'Você';
+    if (typeof window === 'undefined') return 'Carlos';
+    const activeUser = localStorage.getItem('financas_active_user_name');
+    if (activeUser && activeUser.trim()) return activeUser.trim();
     const storedRole = localStorage.getItem('financas_my_role');
-    if (storedRole === 'Esposa') return 'Esposa';
+    if (storedRole === 'Esposa') return 'Paula';
     const customName = localStorage.getItem('financas_my_device_custom_name');
-    if (customName && customName.toLowerCase().includes('esposa')) return 'Esposa';
-    return 'Você';
+    if (customName) {
+      if (customName.toLowerCase().includes('paula') || customName.toLowerCase().includes('esposa')) return 'Paula';
+      if (customName.toLowerCase().includes('carlos')) return 'Carlos';
+      return customName;
+    }
+    const profiles = this.getProfiles();
+    if (profiles[0]?.name && profiles[0].name !== 'Você (Titular)' && profiles[0].name !== 'Você') {
+      return profiles[0].name;
+    }
+    return 'Carlos';
+  }
+
+  public setActiveUserName(name: string): void {
+    if (typeof window === 'undefined') return;
+    const clean = name.trim();
+    localStorage.setItem('financas_active_user_name', clean);
+    if (clean.toLowerCase().includes('paula') || clean.toLowerCase().includes('esposa')) {
+      localStorage.setItem('financas_my_role', 'Esposa');
+    } else {
+      localStorage.setItem('financas_my_role', 'Titular');
+    }
+    this.broadcastUpdate('ACTIVE_USER_CHANGED', clean);
   }
 
   public formatCurrency(val?: number): string {
@@ -266,25 +288,30 @@ class CloudKitSyncEngine {
     const houseId = this.getHouseholdId();
     const userName = this.getCurrentUserName();
 
-    const payload = {
+    const notif: ChangeNotification = {
+      id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       householdId: houseId,
-      deviceId: myDev.id,
-      deviceName: myDev.name,
-      userName,
+      sourceDeviceId: myDev.id,
+      sourceDeviceName: myDev.name,
+      sourceUserName: userName,
       actionType,
       title,
       message,
       targetItemName,
       amount,
+      timestamp: new Date().toISOString(),
     };
 
-    // 1. Ultra-fast real-time WebSocket delivery (<30ms)
+    // 1. Broadcast locally so that in-app notification & toast triggers for current device too
+    this.broadcastUpdate('CHANGE_NOTIFICATION_TRIGGERED', notif);
+
+    // 2. Ultra-fast real-time WebSocket delivery (<30ms)
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       try {
         this.ws.send(
           JSON.stringify({
             type: 'NOTIFY_CHANGE',
-            ...payload,
+            ...notif,
           })
         );
       } catch (err) {
@@ -292,12 +319,12 @@ class CloudKitSyncEngine {
       }
     }
 
-    // 2. Guaranteed REST delivery fallback
+    // 3. Guaranteed REST delivery fallback
     try {
       fetch(`/api/household/${encodeURIComponent(houseId)}/notify-change`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload),
+        body: JSON.stringify(notif),
       }).catch(() => {});
     } catch {}
   }
@@ -1580,6 +1607,7 @@ class CloudKitSyncEngine {
       const newVersion = (existing.version || 1) + 1;
 
       // CRITICAL: Ensure existing bill's unique ID is referenced for update instead of triggering an insert
+      const actor = this.getCurrentUserName();
       savedBill = {
         ...existing,
         ...bill,
@@ -1587,6 +1615,8 @@ class CloudKitSyncEngine {
         version: newVersion,
         isEdited: true,
         lastEditedAt: nowIso,
+        lastEditedBy: bill.lastEditedBy || actor,
+        lastActionDescription: bill.lastActionDescription || 'Editou a conta',
         updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
@@ -1698,12 +1728,15 @@ class CloudKitSyncEngine {
       }
     } else {
       // Pure new bill creation (no existing record matched by ID, barcode, or name)
+      const actor = this.getCurrentUserName();
       savedBill = {
         ...bill,
         id: bill.id || `bill-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         version: 1,
         isEdited: false,
-        lastEditedAt: undefined,
+        lastEditedAt: nowIso,
+        lastEditedBy: bill.lastEditedBy || actor,
+        lastActionDescription: bill.lastActionDescription || 'Cadastrou nova conta',
         updatedAt: nowIso,
         updatedByDevice: activeDev,
         isSynced: true,
@@ -1775,24 +1808,29 @@ class CloudKitSyncEngine {
     return this.upsertBill(bill as any);
   }
 
-  // Toggling paid status does NOT mark the bill as edited or change debt parameters
+  // Toggling paid status does NOT change debt parameters, but records audit trail of who paid/reopened
   public toggleBillStatus(billId: string, status: 'pending' | 'paid' | 'overdue'): Bill | null {
     const bills = this.getBills();
     const existingIndex = bills.findIndex(b => b.id === billId);
     if (existingIndex === -1) return null;
     const existing = bills[existingIndex];
+    const actor = this.getCurrentUserName();
+    const isPaid = status === 'paid';
     const updated: Bill = {
       ...existing,
       status,
-      paidAt: status === 'paid' ? new Date().toISOString() : undefined,
+      paidAt: isPaid ? new Date().toISOString() : undefined,
+      paidBy: isPaid ? actor : undefined,
+      lastEditedAt: new Date().toISOString(),
+      lastEditedBy: actor,
+      lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+      isEdited: true,
       isSynced: true,
     };
     bills[existingIndex] = updated;
     this.safeSaveBillsToStorage(bills);
     this.broadcastUpdate('BILL_UPSERTED', updated);
 
-    const actor = this.getCurrentUserName();
-    const isPaid = status === 'paid';
     const title = isPaid ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄';
     const msg = isPaid
       ? `${actor} marcou a conta "${existing.name}" (${this.formatCurrency(existing.amount)}) como PAGA! ✅`

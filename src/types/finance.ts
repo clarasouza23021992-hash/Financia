@@ -45,6 +45,8 @@ export interface Bill {
   fixedValueType?: 'fixed_value' | 'variable_value';
   isEdited?: boolean;
   lastEditedAt?: string;
+  lastEditedBy?: string;
+  lastActionDescription?: string;
 }
 
 // Retorna o mês efetivo onde a conta deve aparecer (paymentMonth se definido e legítimo, senão mês do dueDate)
@@ -292,6 +294,8 @@ export interface InAppNotification {
   type: 'urgent' | 'warning' | 'info' | 'success';
   read: boolean;
   billId?: string;
+  actorName?: string;
+  actionType?: string;
 }
 
 export interface SyncLogEntry {

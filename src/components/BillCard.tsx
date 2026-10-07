@@ -337,42 +337,70 @@ export const BillCard: React.FC<BillCardProps> = ({
           )}
         </div>
         
-        {/* Mostra data e hora de alteração de forma ultra-compacta e discreta, sem esticar a largura da tela */}
-        {Boolean(bill.isEdited && bill.lastEditedAt) ? (
-          <div 
-            className="flex items-center gap-1 text-[10px] text-amber-800 dark:text-amber-300 font-mono bg-amber-50/90 dark:bg-amber-950/40 px-1.5 py-0.5 rounded border border-amber-200/70 dark:border-amber-900/50 shrink-0 whitespace-nowrap"
-            title={`Alterado por ${bill.updatedByDevice || 'Morador'} em ${(() => {
-              try {
-                const d = new Date(bill.lastEditedAt!);
-                return isNaN(d.getTime()) ? '' : d.toLocaleString('pt-BR');
-              } catch {
-                return '';
+        {/* Identificação de quem fez a alteração / registrou a dívida (Ultra compacto, sem aumentar o tamanho da tela) */}
+        {(() => {
+          let rawName = bill.lastEditedBy || (bill.status === 'paid' ? bill.paidBy : '') || bill.updatedByDevice || '';
+          let displayName = 'Carlos';
+          const lower = rawName.toLowerCase();
+          if (lower.includes('paula') || lower.includes('esposa') || lower.includes('cônjuge')) {
+            displayName = 'Paula';
+          } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular')) {
+            displayName = 'Carlos';
+          } else if (rawName.trim()) {
+            displayName = rawName.replace(/^iphone\s+/i, '').replace(/\s*\(.*\)$/, '').trim();
+          }
+
+          let timeStr = '';
+          const dateSource = bill.lastEditedAt || bill.paidAt || bill.updatedAt;
+          if (dateSource) {
+            try {
+              const d = new Date(dateSource);
+              if (!isNaN(d.getTime())) {
+                const hours = String(d.getHours()).padStart(2, '0');
+                const minutes = String(d.getMinutes()).padStart(2, '0');
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                timeStr = `${day}/${month} ${hours}:${minutes}`;
               }
-            })()}`}
-          >
-            <span className="text-[9px]">✏️</span>
-            <span className="font-semibold">Editado</span>
-            <span className="text-slate-500 dark:text-slate-400 font-normal">
-              {(() => {
-                try {
-                  const d = new Date(bill.lastEditedAt!);
-                  if (!isNaN(d.getTime())) {
-                    const day = String(d.getDate()).padStart(2, '0');
-                    const month = String(d.getMonth() + 1).padStart(2, '0');
-                    const hours = String(d.getHours()).padStart(2, '0');
-                    const minutes = String(d.getMinutes()).padStart(2, '0');
-                    return `${day}/${month} ${hours}:${minutes}`;
-                  }
-                } catch {
-                  // ignore
-                }
-                return '';
-              })()}
-            </span>
-          </div>
-        ) : (
-          <div className="shrink-0" />
-        )}
+            } catch {}
+          }
+
+          const isPaid = bill.status === 'paid';
+          const isEdited = Boolean(bill.isEdited && bill.lastEditedAt);
+          
+          let icon = '👤';
+          let actionLabel = 'Cadastrado por';
+          let badgeStyle = 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60';
+
+          if (isPaid) {
+            icon = '✅';
+            actionLabel = 'Pago por';
+            badgeStyle = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60';
+          } else if (isEdited) {
+            icon = '✏️';
+            actionLabel = bill.lastActionDescription || 'Alterado por';
+            badgeStyle = 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60';
+          }
+
+          const tooltip = `${actionLabel} ${displayName}${timeStr ? ` em ${timeStr}` : ''}`;
+
+          return (
+            <div
+              className={`flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs ${badgeStyle}`}
+              title={tooltip}
+            >
+              <span className="text-[10px] shrink-0 leading-none">{icon}</span>
+              <span className="font-extrabold text-slate-900 dark:text-white tracking-tight leading-none">
+                {displayName}
+              </span>
+              {timeStr && (
+                <span className="text-[9.5px] opacity-75 font-mono leading-none hidden xs:inline">
+                  • {timeStr.split(' ')[1] || timeStr}
+                </span>
+              )}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Bottom Action Bar */}

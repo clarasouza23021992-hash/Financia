@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
-  SyncConflictLog, InAppNotification, getBillEffectiveMonth, 
+  SyncConflictLog, InAppNotification, ChangeNotification, getBillEffectiveMonth, 
   isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr 
 } from './types/finance';
 import { cloudkit, isMockBill, isMockRevenue } from './services/cloudkitSync';
@@ -17,8 +17,11 @@ import {
   getStoredInAppNotifications, 
   saveStoredInAppNotifications, 
   checkAndNotifyBills, 
-  getDefaultNotificationRule 
+  getDefaultNotificationRule,
+  playNotificationChime,
+  sendNativeNotification
 } from './services/notificationService';
+import { LiveAlterationToast } from './components/LiveAlterationToast';
 import { getStoredCategories } from './utils/categories';
 import { Header } from './components/Header';
 import { KpiCards } from './components/KpiCards';
@@ -119,12 +122,59 @@ export default function App() {
   const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
 
+  // Active household member editing debts (Carlos / Paula)
+  const [activeUserName, setActiveUserName] = useState<string>(() => cloudkit.getCurrentUserName());
+  const [liveAlterationNotif, setLiveAlterationNotif] = useState<ChangeNotification | null>(null);
+
   // In-App Notifications History & Due Date Alerts
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
   const unreadNotificationsCount = useMemo(() => inAppNotifications.filter(n => !n.read).length, [inAppNotifications]);
 
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+
+  const handleToggleActiveUser = () => {
+    const nextUser = activeUserName === 'Carlos' ? 'Paula' : 'Carlos';
+    cloudkit.setActiveUserName(nextUser);
+    setActiveUserName(nextUser);
+    showTemporaryToast(`Morador ativo alterado: ${nextUser === 'Paula' ? '👩🏻 Paula' : '👤 Carlos'}. Suas próximas ações serão registradas em nome de ${nextUser}.`);
+  };
+
+  const handleSimulateSpouseAlteration = () => {
+    const otherUser = activeUserName === 'Carlos' ? 'Paula' : 'Carlos';
+    const sampleBill = bills[0] || { name: 'Energia Elétrica (Enel)', amount: 245.60 };
+    playNotificationChime();
+    const simulatedNotif: ChangeNotification = {
+      id: `sim_${Date.now()}`,
+      householdId: cloudkit.getHouseholdId(),
+      sourceDeviceId: 'dev_spouse_sim',
+      sourceDeviceName: otherUser === 'Paula' ? 'iPhone Paula' : 'iPhone Carlos',
+      sourceUserName: otherUser,
+      actionType: 'bill_paid',
+      title: 'Dívida Paga! ✅',
+      message: `${otherUser} marcou a conta "${sampleBill.name}" (R$ ${Number(sampleBill.amount).toFixed(2).replace('.', ',')}) como PAGA! ✅`,
+      targetItemName: sampleBill.name,
+      amount: sampleBill.amount,
+      timestamp: new Date().toISOString(),
+    };
+    setLiveAlterationNotif(simulatedNotif);
+    const newInApp: InAppNotification = {
+      id: simulatedNotif.id,
+      title: simulatedNotif.title,
+      message: simulatedNotif.message,
+      date: simulatedNotif.timestamp,
+      type: 'success',
+      read: false,
+      actorName: otherUser,
+      actionType: 'bill_paid',
+    };
+    setInAppNotifications(prev => {
+      const merged = [newInApp, ...prev.filter(n => n.id !== newInApp.id)];
+      saveStoredInAppNotifications(merged);
+      return merged;
+    });
+    sendNativeNotification(simulatedNotif.title, { body: simulatedNotif.message, sound: true });
+  };
 
   // Map other months that contain bills (in case bills are scheduled in a different month)
   const otherMonthsWithBills = useMemo(() => {
@@ -174,7 +224,7 @@ export default function App() {
     setRevenues(cloudkit.getRevenues());
   }, [selectedMonth.id]);
 
-  // Sync with CloudKit Real-Time BroadcastChannel
+  // Sync with CloudKit Real-Time BroadcastChannel & WebSockets
   useEffect(() => {
     const unsubscribe = cloudkit.onSync((event) => {
       if (event.type === 'BILLS_UPDATED' || event.type === 'BILL_UPSERTED' || event.type === 'BILL_DELETED') {
@@ -191,10 +241,92 @@ export default function App() {
         setRevenues(cloudkit.getRevenues());
         setProfiles(cloudkit.getProfiles());
         setDevices(cloudkit.getDevices());
+      } else if (event.type === 'REMOTE_CHANGE_NOTIFICATION' || event.type === 'CHANGE_NOTIFICATION_TRIGGERED') {
+        const notifPayload = event.payload as ChangeNotification;
+        if (notifPayload) {
+          playNotificationChime();
+          setLiveAlterationNotif(notifPayload);
+
+          const actor = notifPayload.sourceUserName || 'Morador';
+          const newInApp: InAppNotification = {
+            id: notifPayload.id || `notif_${Date.now()}`,
+            title: notifPayload.title || 'Alteração na Dívida',
+            message: notifPayload.message || `${actor} alterou uma dívida`,
+            date: notifPayload.timestamp || new Date().toISOString(),
+            type: notifPayload.actionType === 'bill_paid' ? 'success' : 'info',
+            read: false,
+            actorName: actor,
+            actionType: notifPayload.actionType,
+          };
+
+          setInAppNotifications((prev) => {
+            const merged = [newInApp, ...prev.filter(n => n.id !== newInApp.id)];
+            saveStoredInAppNotifications(merged);
+            return merged;
+          });
+
+          if (event.type === 'REMOTE_CHANGE_NOTIFICATION') {
+            sendNativeNotification(notifPayload.title, {
+              body: notifPayload.message,
+              sound: true,
+            });
+          }
+
+          // Immediately update bills state
+          setBills(cloudkit.getBills());
+          setRevenues(cloudkit.getRevenues());
+        }
+      } else if (event.type === 'ACTIVE_USER_CHANGED') {
+        setActiveUserName(event.payload || cloudkit.getCurrentUserName());
       }
     });
 
     return () => unsubscribe();
+  }, []);
+
+  // Periodic polling for remote alterations made by spouse on other devices
+  useEffect(() => {
+    const pollInterval = setInterval(() => {
+      const houseId = cloudkit.getHouseholdId();
+      const myDev = cloudkit.getCurrentDeviceInfo();
+      const lastSeen = localStorage.getItem('financas_last_seen_notif_time') || new Date(Date.now() - 300000).toISOString();
+      
+      fetch(`/api/household/${encodeURIComponent(houseId)}/notifications?since=${encodeURIComponent(lastSeen)}&excludeDeviceId=${encodeURIComponent(myDev.id)}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.success && Array.isArray(data.notifications) && data.notifications.length > 0) {
+            data.notifications.forEach((notif: ChangeNotification) => {
+              playNotificationChime();
+              setLiveAlterationNotif(notif);
+              const actor = notif.sourceUserName || 'Cônjuge';
+              const newInApp: InAppNotification = {
+                id: notif.id || `notif_${Date.now()}`,
+                title: notif.title || 'Alteração na Dívida',
+                message: notif.message || `${actor} alterou uma dívida`,
+                date: notif.timestamp || new Date().toISOString(),
+                type: notif.actionType === 'bill_paid' ? 'success' : 'info',
+                read: false,
+                actorName: actor,
+                actionType: notif.actionType,
+              };
+              setInAppNotifications(prev => {
+                const merged = [newInApp, ...prev.filter(n => n.id !== newInApp.id)];
+                saveStoredInAppNotifications(merged);
+                return merged;
+              });
+              sendNativeNotification(notif.title, { body: notif.message, sound: true });
+            });
+            const latest = data.notifications[data.notifications.length - 1];
+            if (latest?.timestamp) {
+              localStorage.setItem('financas_last_seen_notif_time', latest.timestamp);
+            }
+            setBills(cloudkit.getBills());
+          }
+        })
+        .catch(() => {});
+    }, 6000);
+
+    return () => clearInterval(pollInterval);
   }, []);
 
   // Check for upcoming bills and trigger local browser/PWA notifications and toast
@@ -538,6 +670,10 @@ export default function App() {
       ...(editingBill || {}),
       ...billData,
       id: targetId,
+      lastEditedBy: activeUserName,
+      lastEditedAt: new Date().toISOString(),
+      isEdited: Boolean(editingBill),
+      lastActionDescription: editingBill ? 'Editou a conta' : 'Cadastrou nova conta',
       applyToFutureMonths: billData.applyToFutureMonths,
       previousName: billData.previousName || editingBill?.name,
     };
@@ -575,7 +711,7 @@ export default function App() {
       setSelectedMonth(targetMonthOption);
       showTemporaryToast(`✅ Conta salva com vencimento em ${targetLabel}!`);
     } else {
-      showTemporaryToast(targetId ? 'Conta atualizada com sucesso!' : 'Nova conta cadastrada e sincronizada!');
+      showTemporaryToast(targetId ? `Conta atualizada por ${activeUserName}!` : `Nova conta cadastrada por ${activeUserName}!`);
     }
   };
 
@@ -583,16 +719,29 @@ export default function App() {
     const dueMonth = (bill.dueDate || '').substring(0, 7);
     const isReturningToDueMonth = targetMonthId === dueMonth;
     const newPaymentMonth = isReturningToDueMonth ? undefined : targetMonthId;
+    const targetLabel = getMonthNamePtBr(targetMonthId) || targetMonthId;
+    const actionDesc = isReturningToDueMonth ? 'Restaurou mês original' : `Moveu para ${targetLabel}`;
 
     cloudkit.saveBill({
       ...bill,
       paymentMonth: newPaymentMonth,
       originalDueDate: bill.originalDueDate || bill.dueDate,
+      lastEditedBy: activeUserName,
+      lastEditedAt: new Date().toISOString(),
+      isEdited: true,
+      lastActionDescription: actionDesc,
     });
     setBills(cloudkit.getBills());
     setConflictLogs(cloudkit.getConflictLogs());
 
-    const targetLabel = getMonthNamePtBr(targetMonthId) || targetMonthId;
+    cloudkit.notifyRemoteChange(
+      'bill_rescheduled',
+      'Conta Reagendada 🗓️',
+      `${activeUserName} reprogramou a conta "${bill.name}" para ${targetLabel}`,
+      bill.name,
+      bill.amount
+    );
+
     const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === targetMonthId) || {
       id: targetMonthId,
       label: targetLabel,
@@ -779,6 +928,16 @@ export default function App() {
     <div className={`h-full min-h-0 flex flex-col font-sans transition-colors duration-300 w-full overflow-hidden ${
       isDarkMode ? 'dark bg-[#080D1E] text-white' : 'bg-[#F4F6F9] text-slate-900'
     }`}>
+      {/* Real-time Alteration Toast Notification Banner */}
+      <LiveAlterationToast
+        notification={liveAlterationNotif}
+        onDismiss={() => setLiveAlterationNotif(null)}
+        onSelectBillName={(name) => {
+          setSearchQuery(name);
+          setCurrentTab('bills');
+        }}
+      />
+
       {/* Native App Header */}
       <Header
         activeDevice={activeDevice}
@@ -805,6 +964,8 @@ export default function App() {
         isRefreshing={isRefreshing}
         isOffline={isOffline}
         isWifeConnected={isWifeConnected}
+        activeUserName={activeUserName}
+        onToggleActiveUser={handleToggleActiveUser}
       />
 
       {/* Intelligent Due Date Notification Toast Banner */}
@@ -1495,6 +1656,7 @@ export default function App() {
         onOpenSettings={() => {
           setIsProfilesModalOpen(true);
         }}
+        onSimulateAlteration={handleSimulateSpouseAlteration}
       />
 
       <BudgetGoalsModal

@@ -778,7 +778,11 @@ export const BillModal: React.FC<BillModalProps> = ({
                 {initialBill ? 'Editar Conta da Casa' : 'Cadastrar Nova Conta / Dívida'}
               </h2>
               <p className="text-[11px] text-slate-400">
-                {initialBill ? 'Altere valores, vencimento ou divisão' : 'Cadastre boletos, faturas ou despesas fixas'}
+                {initialBill 
+                  ? (initialBill.lastEditedBy 
+                      ? `Última alteração por ✏️ ${initialBill.lastEditedBy}` 
+                      : 'Altere valores, vencimento ou divisão')
+                  : 'Cadastre boletos, faturas ou despesas fixas'}
               </p>
             </div>
           </div>

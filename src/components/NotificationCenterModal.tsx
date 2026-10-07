@@ -22,6 +22,7 @@ interface NotificationCenterModalProps {
   bills: Bill[];
   onSelectBill: (bill: Bill) => void;
   onOpenSettings: () => void;
+  onSimulateAlteration?: () => void;
 }
 
 export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = ({
@@ -34,8 +35,9 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   bills,
   onSelectBill,
   onOpenSettings,
+  onSimulateAlteration,
 }) => {
-  const [filter, setFilter] = useState<'all' | 'urgent' | 'unread'>('all');
+  const [filter, setFilter] = useState<'all' | 'changes' | 'urgent' | 'unread'>('all');
   const [permission, setPermission] = useState<NotificationPermission>(() => getNotificationPermission());
   const [testSent, setTestSent] = useState(false);
 
@@ -46,7 +48,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
     setPermission(res);
     if (res === 'granted') {
       sendNativeNotification('✅ Notificações Ativadas!', {
-        body: 'Você agora receberá lembretes automáticos dos seus boletos que vencem no dia.',
+        body: 'Você agora receberá avisos toda vez que alguém alterar uma dívida ou nos vencimentos.',
         sound: true,
       });
     }
@@ -55,16 +57,18 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   const handleTestNotification = async () => {
     playNotificationChime();
     setTestSent(true);
-    await sendNativeNotification('🔔 Teste de Lembrete de Boleto', {
-      body: 'Seu sistema de avisos de vencimento está funcionando 100% no seu aparelho!',
+    await sendNativeNotification('🔔 Teste de Notificação', {
+      body: 'Seu sistema de avisos de alterações e vencimentos está 100% ativo!',
       sound: true,
     });
     setTimeout(() => setTestSent(false), 3000);
   };
 
   const unreadCount = notifications.filter(n => !n.read).length;
+  const changesCount = notifications.filter(n => Boolean(n.actorName || n.actionType || n.type === 'success')).length;
 
   const filtered = notifications.filter(n => {
+    if (filter === 'changes') return Boolean(n.actorName || n.actionType || n.type === 'success');
     if (filter === 'urgent') return n.type === 'urgent' || n.type === 'warning';
     if (filter === 'unread') return !n.read;
     return true;
@@ -150,6 +154,18 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                 <Volume2 className="w-3.5 h-3.5 text-teal-500" />
                 <span>{testSent ? 'Enviado!' : 'Testar Som'}</span>
               </button>
+
+              {onSimulateAlteration && (
+                <button
+                  type="button"
+                  onClick={onSimulateAlteration}
+                  className="px-2.5 py-1.5 bg-teal-500/10 hover:bg-teal-500/20 text-teal-700 dark:text-teal-300 border border-teal-500/30 font-bold text-xs rounded-xl active-press flex items-center gap-1"
+                  title="Simular um aviso de alteração feita pelo cônjuge em tempo real"
+                >
+                  <Sparkles className="w-3.5 h-3.5 text-teal-500" />
+                  <span>Simular Alteração</span>
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -159,6 +175,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
           <div className="flex items-center gap-1.5">
             {[
               { id: 'all', label: `Todas (${notifications.length})` },
+              { id: 'changes', label: `Alterações (${changesCount})` },
               { id: 'unread', label: `Não lidas (${unreadCount})` },
               { id: 'urgent', label: `Urgentes` },
             ].map(tab => (
@@ -166,7 +183,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                 key={tab.id}
                 type="button"
                 onClick={() => setFilter(tab.id as any)}
-                className={`px-3 py-1 rounded-full text-xs font-bold transition-all active-press ${
+                className={`px-3 py-1 rounded-full text-xs font-bold transition-all active-press shrink-0 ${
                   filter === tab.id
                     ? 'bg-slate-900 dark:bg-teal-500 text-white dark:text-[#0A1128]'
                     : 'bg-slate-100 dark:bg-slate-800/60 text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
@@ -256,10 +273,15 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                       </div>
 
                       <div className="min-w-0">
-                        <div className="flex items-center gap-1.5">
+                        <div className="flex items-center gap-1.5 flex-wrap">
                           <h4 className="text-xs font-bold text-slate-900 dark:text-white truncate">
                             {item.title}
                           </h4>
+                          {item.actorName && (
+                            <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/20">
+                              {item.actorName}
+                            </span>
+                          )}
                           {!item.read && (
                             <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />
                           )}

@@ -29,13 +29,12 @@
     ],
     "devices": [
       {
-        "id": "dev_1790686586282_fecb4",
+        "id": "dev_1791329128947_htz2c",
         "name": "Meu iPhone (Início)",
         "model": "iPhone (Tela de Início)",
         "owner": "Você",
         "lastActive": "Agora mesmo",
-        "connectedAt": "2026-09-29T12:56:26.480Z",
-        "userAgent": "Mozilla/5.0 (iPhone; CPU iPhone OS 18_7 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/27.0 Mobile/15E1"
+        "connectedAt": "2026-10-06T23:36:58.922Z"
       },
       {
         "id": "dev_esposa_permanente",
@@ -48,7 +47,7 @@
       }
     ],
     "isWifeConnected": true,
-    "lastUpdated": "2026-09-29T13:09:39.047Z",
+    "lastUpdated": "2026-10-06T23:36:58.922Z",
     "deletedBillIds": [],
     "deletedRevenueIds": []
   },

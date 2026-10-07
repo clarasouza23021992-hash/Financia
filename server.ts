@@ -46,7 +46,9 @@ interface HouseholdData {
   notifications?: ChangeNotification[];
 }
 
-const PORT = 3000;
+const portArgIndex = process.argv.indexOf('--port');
+const cliPort = portArgIndex !== -1 && process.argv[portArgIndex + 1] ? parseInt(process.argv[portArgIndex + 1], 10) : undefined;
+const PORT = cliPort || 3000;
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'households.json');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
@@ -1509,9 +1511,23 @@ async function startServer() {
     });
   }
 
+  server.on('error', (err: any) => {
+    if (err.code === 'EADDRINUSE') {
+      console.warn(`Port ${PORT} is in use, retrying in 500ms...`);
+      setTimeout(() => {
+        try { server.close(); } catch {}
+        server.listen(PORT, '0.0.0.0');
+      }, 500);
+    } else {
+      console.error('Server error:', err);
+    }
+  });
+
   server.listen(PORT, '0.0.0.0', () => {
     console.log(`Server with WebSockets running on http://0.0.0.0:${PORT}`);
   });
 }
 
-startServer();
+startServer().catch(err => {
+  console.error('Fatal error starting server:', err);
+});

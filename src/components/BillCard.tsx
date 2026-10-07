@@ -339,30 +339,42 @@ export const BillCard: React.FC<BillCardProps> = ({
         
         {/* Identificação de quem fez a alteração / registrou a dívida (Ultra compacto, sem aumentar o tamanho da tela) */}
         {(() => {
-          let rawName = bill.lastEditedBy || (bill.status === 'paid' ? bill.paidBy : '') || bill.updatedByDevice || '';
+          const rawActor = (bill.lastEditedBy || (bill.status === 'paid' ? bill.paidBy : '') || bill.updatedByDevice || '').trim();
+          const lower = rawActor.toLowerCase();
+
+          // Identifica QUEM FOI DE FATO (nunca exibir o aparelho como "Meu iPhone")
           let displayName = 'Carlos';
-          const lower = rawName.toLowerCase();
           if (lower.includes('paula') || lower.includes('esposa') || lower.includes('cônjuge')) {
             displayName = 'Paula';
-          } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular')) {
+          } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
             displayName = 'Carlos';
-          } else if (rawName.trim()) {
-            displayName = rawName.replace(/^iphone\s+/i, '').replace(/\s*\(.*\)$/, '').trim();
+          } else if (rawActor && !/iphone|android|celular|computador|smartphone|dispositivo|dev_/i.test(rawActor)) {
+            displayName = rawActor.trim();
           }
 
+          // Data e hora exatas da alteração/pagamento/criação (DD/MM HH:mm)
+          let dateStr = '';
           let timeStr = '';
           const dateSource = bill.lastEditedAt || bill.paidAt || bill.updatedAt;
           if (dateSource) {
             try {
               const d = new Date(dateSource);
               if (!isNaN(d.getTime())) {
-                const hours = String(d.getHours()).padStart(2, '0');
-                const minutes = String(d.getMinutes()).padStart(2, '0');
                 const day = String(d.getDate()).padStart(2, '0');
                 const month = String(d.getMonth() + 1).padStart(2, '0');
-                timeStr = `${day}/${month} ${hours}:${minutes}`;
+                const hours = String(d.getHours()).padStart(2, '0');
+                const minutes = String(d.getMinutes()).padStart(2, '0');
+                dateStr = `${day}/${month}`;
+                timeStr = `${hours}:${minutes}`;
               }
             } catch {}
+          }
+
+          // Fallback caso seja dívida legada sem timestamp
+          if (!dateStr || !timeStr) {
+            const d = new Date();
+            dateStr = `${String(d.getDate()).padStart(2, '0')}/${String(d.getMonth() + 1).padStart(2, '0')}`;
+            timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           }
 
           const isPaid = bill.status === 'paid';
@@ -382,22 +394,20 @@ export const BillCard: React.FC<BillCardProps> = ({
             badgeStyle = 'bg-amber-50 dark:bg-amber-950/40 text-amber-900 dark:text-amber-300 border-amber-200/80 dark:border-amber-900/60';
           }
 
-          const tooltip = `${actionLabel} ${displayName}${timeStr ? ` em ${timeStr}` : ''}`;
+          const tooltip = `${actionLabel} ${displayName} em ${dateStr} às ${timeStr}`;
 
           return (
             <div
-              className={`flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs ${badgeStyle}`}
+              className={`inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs ${badgeStyle}`}
               title={tooltip}
             >
               <span className="text-[10px] shrink-0 leading-none">{icon}</span>
               <span className="font-extrabold text-slate-900 dark:text-white tracking-tight leading-none">
                 {displayName}
               </span>
-              {timeStr && (
-                <span className="text-[9.5px] opacity-75 font-mono leading-none hidden xs:inline">
-                  • {timeStr.split(' ')[1] || timeStr}
-                </span>
-              )}
+              <span className="text-[9.5px] opacity-80 font-mono leading-none tracking-tight">
+                • {dateStr} {timeStr}
+              </span>
             </div>
           );
         })()}

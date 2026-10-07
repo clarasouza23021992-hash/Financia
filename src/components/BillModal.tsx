@@ -779,9 +779,34 @@ export const BillModal: React.FC<BillModalProps> = ({
               </h2>
               <p className="text-[11px] text-slate-400">
                 {initialBill 
-                  ? (initialBill.lastEditedBy 
-                      ? `Última alteração por ✏️ ${initialBill.lastEditedBy}` 
-                      : 'Altere valores, vencimento ou divisão')
+                  ? (() => {
+                      const raw = initialBill.lastEditedBy || '';
+                      let actor = 'Carlos';
+                      const lower = raw.toLowerCase();
+                      if (lower.includes('paula') || lower.includes('esposa')) {
+                        actor = 'Paula';
+                      } else if (lower.includes('carlos') || lower.includes('titular') || lower.includes('você') || lower.includes('meu')) {
+                        actor = 'Carlos';
+                      } else if (raw && !/iphone|android|celular|computador|dispositivo|dev_/i.test(raw)) {
+                        actor = raw;
+                      }
+
+                      let timeText = '';
+                      const dateSrc = initialBill.lastEditedAt || initialBill.paidAt || initialBill.updatedAt;
+                      if (dateSrc) {
+                        try {
+                          const d = new Date(dateSrc);
+                          if (!isNaN(d.getTime())) {
+                            const day = String(d.getDate()).padStart(2, '0');
+                            const month = String(d.getMonth() + 1).padStart(2, '0');
+                            const h = String(d.getHours()).padStart(2, '0');
+                            const m = String(d.getMinutes()).padStart(2, '0');
+                            timeText = ` em ${day}/${month} às ${h}:${m}`;
+                          }
+                        } catch {}
+                      }
+                      return `Última alteração por ✏️ ${actor}${timeText}`;
+                    })()
                   : 'Cadastre boletos, faturas ou despesas fixas'}
               </p>
             </div>

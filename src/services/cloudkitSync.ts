@@ -179,17 +179,24 @@ class CloudKitSyncEngine {
   public getCurrentUserName(): string {
     if (typeof window === 'undefined') return 'Carlos';
     const activeUser = localStorage.getItem('financas_active_user_name');
-    if (activeUser && activeUser.trim()) return activeUser.trim();
+    if (activeUser && activeUser.trim() && !/iphone|android|celular|smartphone|computador|dispositivo/i.test(activeUser)) {
+      return activeUser.trim();
+    }
     const storedRole = localStorage.getItem('financas_my_role');
     if (storedRole === 'Esposa') return 'Paula';
+
     const customName = localStorage.getItem('financas_my_device_custom_name');
     if (customName) {
       if (customName.toLowerCase().includes('paula') || customName.toLowerCase().includes('esposa')) return 'Paula';
       if (customName.toLowerCase().includes('carlos')) return 'Carlos';
-      return customName;
+      // If customName is a hardware device like "Meu iPhone", ignore it
+      if (!/iphone|android|celular|smartphone|computador|dispositivo/i.test(customName) && customName.trim()) {
+        return customName.trim();
+      }
     }
+
     const profiles = this.getProfiles();
-    if (profiles[0]?.name && profiles[0].name !== 'Você (Titular)' && profiles[0].name !== 'Você') {
+    if (profiles[0]?.name && profiles[0].name !== 'Você (Titular)' && profiles[0].name !== 'Você' && !/iphone|android|celular|computador/i.test(profiles[0].name)) {
       return profiles[0].name;
     }
     return 'Carlos';
@@ -721,9 +728,17 @@ class CloudKitSyncEngine {
       // Secure real bills in the safety vault!
       localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(cleaned));
 
+      const currentActor = this.getCurrentUserName();
       const migrated = cleaned.map(b => {
+        let actor = b.lastEditedBy;
+        if (!actor || /iphone|android|celular|computador|smartphone|dev_/i.test(actor)) {
+          const rawHint = (b.updatedByDevice || (b.status === 'paid' ? b.paidBy : '') || '').toLowerCase();
+          actor = rawHint.includes('paula') || rawHint.includes('esposa') ? 'Paula' : currentActor;
+        }
         return {
           ...b,
+          lastEditedBy: actor,
+          lastEditedAt: b.lastEditedAt || b.paidAt || b.updatedAt || new Date().toISOString(),
           updatedByDevice: b.updatedByDevice || 'Meu Celular',
         };
       });

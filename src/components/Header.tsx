@@ -95,13 +95,13 @@ export const Header: React.FC<HeaderProps> = ({
                   type="button"
                   onClick={onToggleActiveUser}
                   title="Alterando dívidas como este morador. Toque para alternar entre Carlos e Paula"
-                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold rounded-md text-[10px] flex items-center gap-1 border border-slate-700 active:scale-95 transition-all cursor-pointer shadow-2xs"
+                  className="px-1.5 py-0.5 bg-slate-800 hover:bg-slate-700 text-teal-300 font-bold rounded-md text-[10px] flex items-center gap-1 border border-slate-700 active:scale-95 transition-all cursor-pointer shadow-2xs shrink-0 whitespace-nowrap"
                 >
                   <span>{activeUserName === 'Paula' ? '👩🏻 Paula' : '👤 Carlos'}</span>
                   <span className="text-[8px] text-teal-400 opacity-80">▾</span>
                 </button>
               ) : (
-                <span className="text-teal-300 font-bold flex items-center gap-0.5 text-[10px]">
+                <span className="text-teal-300 font-bold flex items-center gap-0.5 text-[10px] shrink-0 whitespace-nowrap">
                   <span>{activeUserName === 'Paula' ? '👩🏻 Paula' : '👤 Carlos'}</span>
                 </span>
               )}

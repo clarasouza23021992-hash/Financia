@@ -279,7 +279,14 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                           </h4>
                           {item.actorName && (
                             <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-teal-500/15 text-teal-700 dark:text-teal-300 border border-teal-500/20">
-                              {item.actorName}
+                              {(() => {
+                                const raw = item.actorName || '';
+                                const low = raw.toLowerCase();
+                                if (low.includes('paula') || low.includes('esposa')) return 'Paula';
+                                if (low.includes('carlos') || low.includes('titular') || low.includes('você') || low.includes('meu')) return 'Carlos';
+                                if (!/iphone|android|celular|computador|dispositivo|dev_/i.test(raw)) return raw;
+                                return 'Carlos';
+                              })()}
                             </span>
                           )}
                           {!item.read && (
@@ -292,7 +299,8 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                       </div>
                     </div>
 
-                    <span className="text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0">
+                    <span className="text-[10px] text-slate-400 whitespace-nowrap flex-shrink-0 font-mono">
+                      {new Date(item.date).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit' })}{' '}
                       {new Date(item.date).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}
                     </span>
                   </div>

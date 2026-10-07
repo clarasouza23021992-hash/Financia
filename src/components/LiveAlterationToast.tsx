@@ -46,8 +46,17 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
   const isDeleted = notification.actionType === 'bill_deleted';
   const isRescheduled = notification.actionType === 'bill_rescheduled';
 
-  const actorName = notification.sourceUserName || 'Morador';
-  const isPaula = actorName.toLowerCase().includes('paula') || actorName.toLowerCase().includes('esposa');
+  const rawActor = notification.sourceUserName || 'Morador';
+  const lower = rawActor.toLowerCase();
+  let actorName = 'Carlos';
+  if (lower.includes('paula') || lower.includes('esposa') || lower.includes('cônjuge')) {
+    actorName = 'Paula';
+  } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
+    actorName = 'Carlos';
+  } else if (rawActor && !/iphone|android|celular|computador|dispositivo|dev_/i.test(rawActor)) {
+    actorName = rawActor.trim();
+  }
+  const isPaula = actorName === 'Paula';
   const avatar = isPaula ? '👩🏻' : '👤';
 
   let iconElement = <Edit3 className="w-4 h-4 text-amber-500" />;
@@ -119,7 +128,12 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
                   {actionVerb}
                 </span>
                 <span className="text-[10px] text-slate-400 font-mono ml-auto">
-                  Agora mesmo
+                  {(() => {
+                    const d = notification.timestamp ? new Date(notification.timestamp) : new Date();
+                    const h = String(d.getHours()).padStart(2, '0');
+                    const m = String(d.getMinutes()).padStart(2, '0');
+                    return `${h}:${m}`;
+                  })()}
                 </span>
               </div>
 

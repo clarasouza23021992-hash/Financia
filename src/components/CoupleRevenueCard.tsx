@@ -44,11 +44,9 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
     r =>
       (spouseProfileName && r.profileName === spouseProfileName) ||
       r.profileName === 'Esposa' ||
-      r.profileName === 'Clara' ||
       r.profileName === 'Paula' ||
       r.profileName === 'Cônjuge' ||
       (spouseProfileName && r.name.toLowerCase().includes(spouseProfileName.toLowerCase())) ||
-      r.name.toLowerCase().includes('clara') ||
       r.name.toLowerCase().includes('paula') ||
       r.name.toLowerCase().includes('esposa')
   );

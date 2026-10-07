@@ -33,9 +33,9 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [activeTab, setActiveTab] = useState<'export' | 'server' | 'restore'>('export');
   const [userEmail, setUserEmail] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('financas_user_backup_email') || 'clarasouza23021992@gmail.com';
+      return localStorage.getItem('financas_user_backup_email') || 'l.carlosramos92@gmail.com';
     }
-    return 'clarasouza23021992@gmail.com';
+    return 'l.carlosramos92@gmail.com';
   });
   const [isProcessing, setIsProcessing] = useState(false);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
@@ -416,7 +416,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
                 {/* Quick Email Selection Pills */}
                 <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                  {['clarasouza23021992@gmail.com', 'l.carlosramos92@gmail.com'].map((emailOption) => (
+                  {['l.carlosramos92@gmail.com'].map((emailOption) => (
                     <button
                       key={emailOption}
                       type="button"

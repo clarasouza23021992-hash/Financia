@@ -17,6 +17,7 @@ interface BillCardProps {
   onAttachReceipt: (bill: Bill) => void;
   onMoveMonth?: (bill: Bill, targetMonth: string) => void;
   onRestoreDueMonth?: (bill: Bill) => void;
+  onReassignActor?: (bill: Bill, newActor: string) => void;
 }
 
 export const BillCard: React.FC<BillCardProps> = ({
@@ -28,6 +29,7 @@ export const BillCard: React.FC<BillCardProps> = ({
   onAttachReceipt,
   onMoveMonth,
   onRestoreDueMonth,
+  onReassignActor,
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
@@ -411,9 +413,16 @@ export const BillCard: React.FC<BillCardProps> = ({
           const tooltip = `${actionLabel} ${displayName} em ${dateStr} às ${timeStr}`;
 
           return (
-            <div
-              className={`inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs ${badgeStyle}`}
-              title={tooltip}
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                if (onReassignActor) {
+                  onReassignActor(bill, isWife ? titularName : wifeName);
+                }
+              }}
+              className={`inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs transition-all active-press cursor-pointer hover:brightness-95 ${badgeStyle}`}
+              title={`${tooltip} • Toque para alternar autor entre Carlos e ${wifeName}`}
             >
               <span className="text-[10px] shrink-0 leading-none">{icon}</span>
               <span className="font-extrabold text-slate-900 dark:text-white tracking-tight leading-none">
@@ -422,7 +431,7 @@ export const BillCard: React.FC<BillCardProps> = ({
               <span className="text-[9.5px] opacity-80 font-mono leading-none tracking-tight">
                 • {dateStr} {timeStr}
               </span>
-            </div>
+            </button>
           );
         })()}
       </div>

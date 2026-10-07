@@ -214,9 +214,9 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
     let paidAt = b.paidAt;
     let paidBy = b.paidBy;
 
-    // Reset false paid status if debt has no receipt and was marked by Carlos/Paula or seed/preset
-    const isMockPaid = paidBy === 'Carlos' || paidBy === 'Paula' || isPreset || isAutoMigrated;
-    if ((isMockPaid || !b.receiptUrl) && status === 'paid' && (!paidAt || isMockPaid)) {
+    // Reset false paid status only for fictitious preset seed bills, never for real user marks
+    const isMockSeedPaid = (isPreset || isAutoMigrated) && !b.paidAt && (b as any).isMockSeed;
+    if (isMockSeedPaid && status === 'paid' && !b.receiptUrl) {
       status = 'pending';
       paidAt = undefined;
       paidBy = undefined;

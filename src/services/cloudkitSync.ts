@@ -28,7 +28,7 @@ const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
 export const DEFAULT_PROFILES: UserProfile[] = [
   { id: 'p1', name: 'Carlos', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
-  { id: 'p2', name: 'Clara', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
+  { id: 'p2', name: 'Paula', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
 ];
 
 export const DEFAULT_DEVICES: CloudDevice[] = [
@@ -123,18 +123,34 @@ class CloudKitSyncEngine {
     if (typeof window !== 'undefined') {
       // Check URL param ?house= or ?casa= and ?role=esposa
       try {
+        // Purge any legacy 'Clara' from storage
+        const currentWife = localStorage.getItem('financas_wife_name') || '';
+        if (currentWife.toLowerCase().includes('clara')) {
+          localStorage.setItem('financas_wife_name', 'Paula');
+          localStorage.setItem('financas_spouse_name', 'Paula');
+        }
+
         const urlParams = new URLSearchParams(window.location.search);
         const houseFromUrl = urlParams.get('house') || urlParams.get('casa');
         if (houseFromUrl && houseFromUrl.trim()) {
           const cleanHouse = houseFromUrl.trim().toLowerCase();
           localStorage.setItem('financas_household_id', cleanHouse);
         }
-        const roleFromUrl = urlParams.get('role');
-        if (roleFromUrl === 'esposa' || urlParams.has('esposa')) {
-          const wifeName = this.getWifeName();
+
+        const roleFromUrl = (urlParams.get('role') || urlParams.get('user') || urlParams.get('conta') || '').toLowerCase();
+        const isWifeParam = roleFromUrl === 'esposa' || roleFromUrl === 'paula' || urlParams.has('esposa') || urlParams.has('paula');
+        const isCarlosParam = roleFromUrl === 'carlos' || roleFromUrl === 'titular' || urlParams.has('carlos');
+
+        if (isWifeParam) {
+          const wifeName = 'Paula';
+          localStorage.setItem('financas_wife_name', wifeName);
+          localStorage.setItem('financas_spouse_name', wifeName);
           localStorage.setItem('financas_my_device_custom_name', `iPhone de ${wifeName}`);
           localStorage.setItem('financas_my_role', 'Esposa');
           localStorage.setItem('financas_active_user_name', wifeName);
+        } else if (isCarlosParam) {
+          localStorage.setItem('financas_my_role', 'Titular');
+          localStorage.setItem('financas_active_user_name', 'Carlos');
         }
       } catch {}
 
@@ -179,9 +195,9 @@ class CloudKitSyncEngine {
   }
 
   public getWifeName(): string {
-    if (typeof window === 'undefined') return 'Clara';
+    if (typeof window === 'undefined') return 'Paula';
     const stored = localStorage.getItem('financas_wife_name') || localStorage.getItem('financas_spouse_name');
-    if (stored && stored.trim() && !/iphone|android|celular|smartphone|computador/i.test(stored)) {
+    if (stored && stored.trim() && !/iphone|android|celular|smartphone|computador/i.test(stored) && !stored.toLowerCase().includes('clara')) {
       return stored.trim();
     }
     const profiles = this.getProfiles();
@@ -191,19 +207,15 @@ class CloudKitSyncEngine {
       p.role?.toLowerCase().includes('esposa') || 
       p.role?.toLowerCase().includes('cônjuge')
     );
-    if (wifeProfile?.name && wifeProfile.name !== 'Cônjuge' && wifeProfile.name !== 'Esposa' && !/iphone|android|celular/i.test(wifeProfile.name)) {
+    if (wifeProfile?.name && wifeProfile.name !== 'Cônjuge' && wifeProfile.name !== 'Esposa' && !/iphone|android|celular/i.test(wifeProfile.name) && !wifeProfile.name.toLowerCase().includes('clara')) {
       return wifeProfile.name;
     }
-    const backupEmail = localStorage.getItem('financas_user_backup_email');
-    if (backupEmail && backupEmail.toLowerCase().includes('clara')) {
-      return 'Clara';
-    }
-    return 'Clara';
+    return 'Paula';
   }
 
   public setWifeName(name: string): void {
     if (typeof window === 'undefined') return;
-    const clean = name.trim() || 'Clara';
+    const clean = name.trim() || 'Paula';
     localStorage.setItem('financas_wife_name', clean);
     localStorage.setItem('financas_spouse_name', clean);
     const profiles = this.getProfiles();
@@ -440,7 +452,7 @@ class CloudKitSyncEngine {
 
   public getWifeShareLink(): string {
     if (typeof window === 'undefined') return '';
-    return `${window.location.origin}/?house=${encodeURIComponent(this.getHouseholdId())}&role=esposa`;
+    return `${window.location.origin}/?house=${encodeURIComponent(this.getHouseholdId())}&role=paula`;
   }
 
   public subscribe(listener: () => void): () => void {
@@ -811,9 +823,11 @@ class CloudKitSyncEngine {
       const currentActor = this.getCurrentUserName();
       const migrated = cleaned.map(b => {
         let actor = b.lastEditedBy;
-        if (!actor || /iphone|android|celular|computador|smartphone|dev_/i.test(actor)) {
-          const rawHint = (b.updatedByDevice || (b.status === 'paid' ? b.paidBy : '') || '').toLowerCase();
-          actor = rawHint.includes('paula') || rawHint.includes('esposa') ? 'Paula' : currentActor;
+        const rawHint = (b.updatedByDevice || (b.status === 'paid' ? b.paidBy : '') || '').toLowerCase();
+        if (rawHint.includes('paula') || rawHint.includes('esposa')) {
+          actor = 'Paula';
+        } else if (!actor || /iphone|android|celular|computador|smartphone|dev_/i.test(actor)) {
+          actor = currentActor;
         }
         return {
           ...b,
@@ -1023,12 +1037,12 @@ class CloudKitSyncEngine {
     // Filter out mock bills and mock revenues
     bills = bills.filter(b => !isMockBill(b));
 
-    // 1. Sanitize falsely marked 'paid' status for debts that were automatically migrated, preset, or marked by Carlos/Paula without user receipt
+    // 1. Sanitize falsely marked 'paid' status only for fictitious preset seed bills, never for real user marks
     bills = bills.map(b => {
       const isAutoMigrated = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'));
       const isPreset = b.id.startsWith('bill-preset-') || b.id.startsWith('bill-streaming-') || b.id === 'bill-gas-pago' || b.id.startsWith('bill-condo-');
-      const isMockPaid = b.paidBy === 'Carlos' || b.paidBy === 'Paula' || isPreset || isAutoMigrated;
-      if ((isMockPaid || !b.receiptUrl) && b.status === 'paid' && (!b.paidAt || isMockPaid)) {
+      const isMockSeedPaid = (isPreset || isAutoMigrated) && !b.paidAt && (b as any).isMockSeed;
+      if (isMockSeedPaid && b.status === 'paid' && !b.receiptUrl) {
         return {
           ...b,
           status: 'pending' as const,
@@ -2805,7 +2819,7 @@ class CloudKitSyncEngine {
    * 1-Click Complete Household Backup:
    * Downloads JSON file, sends a snapshot to server, and prepares prefilled email
    */
-  public async createFullBackup(userEmail: string = 'clarasouza23021992@gmail.com'): Promise<{
+  public async createFullBackup(userEmail: string = 'l.carlosramos92@gmail.com'): Promise<{
     success: boolean;
     filename: string;
     billsCount: number;
@@ -3581,7 +3595,7 @@ class CloudKitSyncEngine {
               owner: 'Esposa',
               lastActive: foundWife.lastActive || 'Agora mesmo',
               isCurrent: false,
-              iCloudAccount: 'clarasouza23021992@gmail.com',
+              iCloudAccount: 'paula@icloud.com',
             };
           }
         }
@@ -3594,7 +3608,7 @@ class CloudKitSyncEngine {
             owner: 'Esposa',
             lastActive: 'Agora mesmo',
             isCurrent: false,
-            iCloudAccount: 'clarasouza23021992@gmail.com',
+            iCloudAccount: 'paula@icloud.com',
           };
         }
 

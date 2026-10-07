@@ -233,6 +233,16 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [paymentMonth, setPaymentMonth] = useState<string>('');
   const [customPaymentMonthEnabled, setCustomPaymentMonthEnabled] = useState<boolean>(false);
 
+  // Quem alterou ou registrou a conta (Carlos ou Paula)
+  const [authorActor, setAuthorActor] = useState<string>(() => {
+    if (initialBill?.lastEditedBy) {
+      const low = initialBill.lastEditedBy.toLowerCase();
+      if (low.includes('paula') || low.includes('esposa')) return 'Paula';
+      if (low.includes('carlos')) return 'Carlos';
+    }
+    return cloudkit.getCurrentUserName();
+  });
+
   // History suggestions state & notice
   const [historyNotice, setHistoryNotice] = useState<string | null>(null);
 
@@ -366,8 +376,18 @@ export const BillModal: React.FC<BillModalProps> = ({
         setApplyToFutureMonths(true);
         setFormError(null);
         setPreviewReceiptOpen(false);
+
+        const rawActorLow = (initialBill.lastEditedBy || (initialBill.status === 'paid' ? initialBill.paidBy : '') || initialBill.updatedByDevice || '').toLowerCase();
+        if (rawActorLow.includes('paula') || rawActorLow.includes('esposa')) {
+          setAuthorActor('Paula');
+        } else if (rawActorLow.includes('carlos')) {
+          setAuthorActor('Carlos');
+        } else {
+          setAuthorActor(cloudkit.getCurrentUserName());
+        }
       } else {
         // Default for new bill
+        setAuthorActor(cloudkit.getCurrentUserName());
         setName('');
         setAmount('');
         const defaultDate = defaultMonth ? `${defaultMonth}-10` : new Date().toISOString().split('T')[0];
@@ -733,6 +753,7 @@ export const BillModal: React.FC<BillModalProps> = ({
           splitHousehold: false,
           splitDetails: [],
           notes: notes.trim(),
+          lastEditedBy: authorActor,
           receiptName: receiptName || undefined,
           receiptUrl: receiptUrl || undefined,
           receiptSize: receiptSize || undefined,
@@ -826,6 +847,44 @@ export const BillModal: React.FC<BillModalProps> = ({
         {/* Modal Form Body & Pinned Footer wrapped inside form with noValidate */}
         <form noValidate onSubmit={handleSubmit} className="flex flex-col flex-1 min-h-0 overflow-hidden">
           <div className="p-4 sm:p-5 space-y-4 overflow-y-auto flex-1 min-h-0 overscroll-contain">
+
+          {/* Quem está alterando / registrando esta dívida */}
+          <div className="p-3 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 flex items-center justify-between gap-2 shadow-2xs">
+            <div className="min-w-0">
+              <span className="text-xs font-bold text-slate-800 dark:text-slate-200 flex items-center gap-1.5">
+                <span>✏️</span>
+                <span>Quem fez esta alteração:</span>
+              </span>
+              <p className="text-[10.5px] text-slate-500 dark:text-slate-400 truncate">
+                Aparecerá com a data e hora exatas no cartão da dívida
+              </p>
+            </div>
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={() => setAuthorActor('Carlos')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  authorActor === 'Carlos'
+                    ? 'bg-blue-600 text-white shadow-xs ring-2 ring-blue-400/40'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span>👤</span> Carlos
+              </button>
+              <button
+                type="button"
+                onClick={() => setAuthorActor('Paula')}
+                className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1 transition-all cursor-pointer ${
+                  authorActor === 'Paula'
+                    ? 'bg-pink-600 text-white shadow-xs ring-2 ring-pink-400/40'
+                    : 'bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 hover:bg-slate-100'
+                }`}
+              >
+                <span>👩🏻</span> Paula
+              </button>
+            </div>
+          </div>
+
           {/* Quick Pix Auto-Fill Banner */}
           <div className="bg-gradient-to-r from-teal-50 to-emerald-50 dark:from-teal-950/40 dark:to-emerald-950/40 p-3.5 rounded-2xl border border-teal-200 dark:border-teal-800/60 shadow-xs">
             <div className="flex items-center justify-between gap-2 mb-1.5">

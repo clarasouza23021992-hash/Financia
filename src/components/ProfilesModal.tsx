@@ -55,9 +55,9 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
   const [isRestoring, setIsRestoring] = useState(false);
   const [userEmail, setUserEmail] = useState(() => {
     if (typeof window !== 'undefined') {
-      return localStorage.getItem('financas_user_backup_email') || 'clarasouza23021992@gmail.com';
+      return localStorage.getItem('financas_user_backup_email') || 'l.carlosramos92@gmail.com';
     }
-    return 'clarasouza23021992@gmail.com';
+    return 'l.carlosramos92@gmail.com';
   });
   const [importedFilePayload, setImportedFilePayload] = useState<any | null>(null);
   const [importedFileName, setImportedFileName] = useState<string>('');
@@ -247,39 +247,66 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                 </p>
               </div>
 
-              {/* Status deste Aparelho */}
-              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2">
-                <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 block uppercase tracking-wider">
-                  Conta deste Celular:
-                </span>
-                <div className="flex items-center justify-between gap-2">
-                  <div className="flex items-center gap-2.5">
-                    <span className="text-2xl">
-                      {currentMyRole === 'Esposa' ? '👩🏻' : '👤'}
-                    </span>
-                    <div>
-                      <p className="text-sm font-extrabold text-slate-900 dark:text-white">
-                        {currentMyRole === 'Esposa' ? wifeInput : titularInput}
-                      </p>
-                      <p className="text-[10.5px] text-teal-600 dark:text-teal-400 font-semibold">
-                        {currentMyRole === 'Esposa' ? 'Conectado como Esposa' : 'Conectado como Titular'}
-                      </p>
+              {/* Status deste Aparelho (Cada um com sua conta individual) */}
+              <div className="p-3.5 rounded-2xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
+                    <span>📱</span>
+                    <span>Conta deste Celular (Individual)</span>
+                  </span>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-teal-100 dark:bg-teal-950/60 text-teal-800 dark:text-teal-300">
+                    {currentMyRole === 'Esposa' ? `👩🏻 ${wifeInput}` : `👤 ${titularInput}`}
+                  </span>
+                </div>
+                <p className="text-[11px] text-slate-500 dark:text-slate-400">
+                  Cada morador tem sua conta no seu aparelho. Toque para escolher de quem é este celular:
+                </p>
+
+                <div className="grid grid-cols-2 gap-2 pt-1">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      localStorage.setItem('financas_my_role', 'Titular');
+                      localStorage.setItem('financas_active_user_name', titularInput);
+                      localStorage.setItem('financas_my_device_custom_name', `iPhone de ${titularInput}`);
+                      cloudkit.setActiveUserName(titularInput);
+                      setCurrentMyRole('Titular');
+                      showFeedback(`✅ Este aparelho agora é a conta de: 👤 ${titularInput}`);
+                    }}
+                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${
+                      currentMyRole !== 'Esposa'
+                        ? 'bg-blue-50 dark:bg-blue-950/40 border-blue-400 dark:border-blue-700 ring-2 ring-blue-500/30'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-70 hover:opacity-100'
+                    }`}
+                  >
+                    <span className="text-xl shrink-0">👤</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-slate-900 dark:text-white truncate">{titularInput}</p>
+                      <p className="text-[10px] text-slate-500 dark:text-slate-400">Titular da Casa</p>
                     </div>
-                  </div>
+                  </button>
 
                   <button
                     type="button"
                     onClick={() => {
-                      const nextRole = currentMyRole === 'Esposa' ? 'Titular' : 'Esposa';
-                      localStorage.setItem('financas_my_role', nextRole);
-                      const targetName = nextRole === 'Esposa' ? wifeInput : titularInput;
-                      cloudkit.setActiveUserName(targetName);
-                      setCurrentMyRole(nextRole);
-                      showFeedback(`Aparelho configurado para: ${nextRole === 'Esposa' ? '👩🏻 ' + wifeInput : '👤 ' + titularInput}`);
+                      localStorage.setItem('financas_my_role', 'Esposa');
+                      localStorage.setItem('financas_active_user_name', wifeInput);
+                      localStorage.setItem('financas_my_device_custom_name', `iPhone de ${wifeInput}`);
+                      cloudkit.setActiveUserName(wifeInput);
+                      setCurrentMyRole('Esposa');
+                      showFeedback(`✅ Este aparelho agora é a conta de: 👩🏻 ${wifeInput}`);
                     }}
-                    className="px-2.5 py-1.5 text-[10px] font-bold rounded-xl bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 active-press hover:bg-slate-100 cursor-pointer"
+                    className={`p-2.5 rounded-xl border text-left flex items-center gap-2 transition-all cursor-pointer ${
+                      currentMyRole === 'Esposa'
+                        ? 'bg-pink-50 dark:bg-pink-950/40 border-pink-400 dark:border-pink-700 ring-2 ring-pink-500/30'
+                        : 'bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 opacity-70 hover:opacity-100'
+                    }`}
                   >
-                    Trocar Conta deste Aparelho
+                    <span className="text-xl shrink-0">👩🏻</span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-black text-slate-900 dark:text-white truncate">{wifeInput}</p>
+                      <p className="text-[10px] text-pink-600 dark:text-pink-400 font-semibold">Esposa</p>
+                    </div>
                   </button>
                 </div>
               </div>
@@ -328,7 +355,7 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                     type="text"
                     value={wifeInput}
                     onChange={(e) => setWifeInput(e.target.value)}
-                    placeholder="Ex: Clara"
+                    placeholder="Ex: Paula"
                     className="flex-1 px-3 py-2 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-bold text-slate-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-pink-500"
                   />
                   <button
@@ -565,7 +592,7 @@ export const ProfilesModal: React.FC<ProfilesModalProps> = ({
                     E-mail de Destino:
                   </label>
                   <div className="flex items-center gap-1.5 overflow-x-auto pb-1">
-                    {['clarasouza23021992@gmail.com', 'l.carlosramos92@gmail.com'].map((emailOption) => (
+                    {['l.carlosramos92@gmail.com'].map((emailOption) => (
                       <button
                         key={emailOption}
                         type="button"

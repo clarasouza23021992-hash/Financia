@@ -122,7 +122,7 @@ export default function App() {
   const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
 
-  // Active household member editing debts (Carlos on Carlos's device / Clara on wife's device)
+  // Active household member editing debts (Carlos on Carlos's device / Paula on wife's device)
   const [activeUserName, setActiveUserName] = useState<string>(() => cloudkit.getCurrentUserName());
   const [liveAlterationNotif, setLiveAlterationNotif] = useState<ChangeNotification | null>(null);
 
@@ -664,7 +664,7 @@ export default function App() {
       ...(editingBill || {}),
       ...billData,
       id: targetId,
-      lastEditedBy: activeUserName,
+      lastEditedBy: billData.lastEditedBy || activeUserName,
       lastEditedAt: new Date().toISOString(),
       isEdited: Boolean(editingBill),
       lastActionDescription: editingBill ? 'Editou a conta' : 'Cadastrou nova conta',
@@ -782,6 +782,21 @@ export default function App() {
     cloudkit.toggleBillStatus(bill.id, newStatus);
     setBills(cloudkit.getBills());
     showTemporaryToast(newStatus === 'paid' ? `Conta "${bill.name}" marcada como Paga!` : 'Status revertido para Pendente.');
+  };
+
+  const handleReassignActor = (bill: Bill, newActor: string) => {
+    const isWife = newActor.toLowerCase().includes('paula') || newActor.toLowerCase().includes('esposa');
+    const cleanActor = isWife ? cloudkit.getWifeName() : cloudkit.getTitularName();
+    const updated: Bill = {
+      ...bill,
+      lastEditedBy: cleanActor,
+      lastEditedAt: new Date().toISOString(),
+      lastActionDescription: bill.isEdited ? 'Editou a conta' : 'Cadastrou a conta',
+      paidBy: bill.status === 'paid' ? cleanActor : bill.paidBy,
+    };
+    cloudkit.saveBill(updated);
+    setBills(cloudkit.getBills());
+    showTemporaryToast(`✅ Alteração da dívida "${bill.name}" atribuída a ${cleanActor}!`);
   };
 
   // Handlers for Revenue operations
@@ -1389,6 +1404,7 @@ export default function App() {
                     onAttachReceipt={handleAttachReceipt}
                     onMoveMonth={handleMoveBillMonth}
                     onRestoreDueMonth={handleRestoreDueMonth}
+                    onReassignActor={handleReassignActor}
                   />
                 ))
               )}

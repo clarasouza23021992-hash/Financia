@@ -353,10 +353,36 @@ class CloudKitSyncEngine {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+          if (data.type === 'LIVE_BILLS_SYNC') {
+            const myDev = this.getCurrentDeviceInfo();
+            if (data.sourceDeviceId !== myDev.id) {
+              if (Array.isArray(data.bills) && data.bills.length > 0) {
+                const activeDeletedBills = this.getDeletedBillIds();
+                const filteredBills = data.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
+                const currentLocal = this.getBills();
+                const merged = this.mergeBillsLists(currentLocal, filteredBills);
+                this.safeSaveBillsToStorage(merged);
+                this.autoPropagateRecurringBills();
+                this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
+              }
+              if (Array.isArray(data.revenues) && data.revenues.length > 0) {
+                const activeDeletedRevenues = this.getDeletedRevenueIds();
+                const filteredRevs = data.revenues.filter((r: any) => r && r.id && !activeDeletedRevenues.includes(r.id));
+                const currentRevs = this.getRevenues();
+                const mergedRevs = this.deduplicateRevenues([...currentRevs, ...filteredRevs]);
+                this.saveRevenues(mergedRevs);
+              }
+            }
+          }
+
           if (data.type === 'CHANGE_NOTIFICATION' && data.notification) {
             const notif: ChangeNotification = data.notification;
             const myDev = this.getCurrentDeviceInfo();
-            if (notif.sourceDeviceId !== myDev.id) {
+            const currentUserName = this.getCurrentUserName();
+            const isDifferentDevice = notif.sourceDeviceId !== myDev.id;
+            const isDifferentUser = Boolean(notif.sourceUserName && notif.sourceUserName !== currentUserName);
+
+            if (isDifferentDevice || isDifferentUser) {
               this.lastSeenNotificationTime = notif.timestamp || new Date().toISOString();
               localStorage.setItem('financas_last_seen_notif_time', this.lastSeenNotificationTime);
               this.broadcastUpdate('REMOTE_CHANGE_NOTIFICATION', notif);

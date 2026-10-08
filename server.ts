@@ -482,12 +482,34 @@ async function startServer() {
       if (
         client.ws.readyState === WebSocket.OPEN &&
         client.householdId === cleanHouseId &&
-        client.deviceId !== notif.sourceDeviceId
+        (client.deviceId !== notif.sourceDeviceId || (notif.sourceUserName && client.userName !== notif.sourceUserName))
       ) {
         try {
           client.ws.send(payload);
         } catch (err) {
           console.error('Error sending WS notification to client:', err);
+        }
+      }
+    });
+  };
+
+  const broadcastHouseholdDataSync = (householdId: string, household: any, sourceDeviceId?: string) => {
+    const cleanHouseId = householdId.trim().toLowerCase();
+    const payload = JSON.stringify({
+      type: 'LIVE_BILLS_SYNC',
+      householdId: cleanHouseId,
+      bills: household.bills || [],
+      revenues: household.revenues || [],
+      lastUpdated: household.lastUpdated,
+      sourceDeviceId: sourceDeviceId || '',
+    });
+
+    wsClients.forEach((client) => {
+      if (client.ws.readyState === WebSocket.OPEN && client.householdId === cleanHouseId) {
+        try {
+          client.ws.send(payload);
+        } catch (err) {
+          console.error('Error sending WS sync to client:', err);
         }
       }
     });
@@ -894,6 +916,9 @@ async function startServer() {
     household.lastUpdated = nowIso;
     store[cleanId] = household;
     saveHouseholds(store);
+
+    // Broadcast updated bills and data in real-time to all connected devices in this household
+    broadcastHouseholdDataSync(cleanId, household, (device && device.id));
 
     res.json({
       success: true,

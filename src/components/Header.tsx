@@ -23,6 +23,8 @@ interface HeaderProps {
   isRefreshing?: boolean;
   isOffline: boolean;
   isWifeConnected?: boolean;
+  activeUserName?: string;
+  onToggleActiveUser?: () => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +41,8 @@ export const Header: React.FC<HeaderProps> = ({
   isRefreshing = false,
   isOffline,
   isWifeConnected = false,
+  activeUserName,
+  onToggleActiveUser,
 }) => {
   const [currentClock, setCurrentClock] = useState<string>(() => {
     const d = new Date();
@@ -85,6 +89,21 @@ export const Header: React.FC<HeaderProps> = ({
                 <Clock className="w-2.5 h-2.5 text-teal-400" />
                 <span>{currentClock}</span>
               </span>
+              {activeUserName && (
+                <>
+                  <span className="text-slate-500">•</span>
+                  <button
+                    type="button"
+                    onClick={onToggleActiveUser}
+                    className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700/60 active-press transition-colors cursor-pointer"
+                    title={`Perfil ativo: ${activeUserName}. Clique para alternar entre Carlos e Paula.`}
+                  >
+                    <span>{activeUserName.toLowerCase().includes('paula') ? '👩🏻' : '👤'}</span>
+                    <span>{activeUserName}</span>
+                    <span className="text-[9px] text-slate-400">▾</span>
+                  </button>
+                </>
+              )}
             </div>
           </div>
         </div>

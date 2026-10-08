@@ -172,6 +172,15 @@ export default function App() {
     sendNativeNotification(simulatedNotif.title, { body: simulatedNotif.message, sound: true });
   };
 
+  const handleToggleActiveUser = () => {
+    const wifeName = cloudkit.getWifeName();
+    const titularName = cloudkit.getTitularName();
+    const nextUser = activeUserName.toLowerCase().includes('paula') ? titularName : wifeName;
+    cloudkit.setActiveUserName(nextUser);
+    setActiveUserName(nextUser);
+    showTemporaryToast(`Perfil ativo: ${nextUser}`);
+  };
+
   // Map other months that contain bills (in case bills are scheduled in a different month)
   const otherMonthsWithBills = useMemo(() => {
     const map = new Map<string, number>();
@@ -270,9 +279,13 @@ export default function App() {
             });
           }
 
-          // Immediately update bills state
+          // Immediately update bills state and also fetch fresh state from server
           setBills(cloudkit.getBills());
           setRevenues(cloudkit.getRevenues());
+          cloudkit.syncWithServer().then(() => {
+            setBills(cloudkit.getBills());
+            setRevenues(cloudkit.getRevenues());
+          }).catch(() => {});
         }
       } else if (event.type === 'ACTIVE_USER_CHANGED') {
         setActiveUserName(event.payload || cloudkit.getCurrentUserName());
@@ -282,49 +295,63 @@ export default function App() {
     return () => unsubscribe();
   }, []);
 
-  // Periodic polling for remote alterations made by spouse on other devices
+  // Periodic polling & background live sync for remote alterations made by spouse on other devices
   useEffect(() => {
     const pollInterval = setInterval(() => {
       const houseId = cloudkit.getHouseholdId();
       const myDev = cloudkit.getCurrentDeviceInfo();
       const lastSeen = localStorage.getItem('financas_last_seen_notif_time') || new Date(Date.now() - 300000).toISOString();
-      
-      fetch(`/api/household/${encodeURIComponent(houseId)}/notifications?since=${encodeURIComponent(lastSeen)}&excludeDeviceId=${encodeURIComponent(myDev.id)}`)
+      const currentUserName = cloudkit.getCurrentUserName();
+
+      // 1. Always keep bills synced from server so alterations by spouse are instantly reflected
+      cloudkit.syncWithServer().then(() => {
+        setBills(cloudkit.getBills());
+        setRevenues(cloudkit.getRevenues());
+      }).catch(() => {});
+
+      // 2. Fetch new change notifications from spouse
+      fetch(`/api/household/${encodeURIComponent(houseId)}/notifications?since=${encodeURIComponent(lastSeen)}`)
         .then(res => res.json())
         .then(data => {
           if (data.success && Array.isArray(data.notifications) && data.notifications.length > 0) {
-            data.notifications.forEach((notif: ChangeNotification) => {
-              playNotificationChime();
-              setLiveAlterationNotif(notif);
-              const actor = notif.sourceUserName || 'Cônjuge';
-              const newInApp: InAppNotification = {
-                id: notif.id || `notif_${Date.now()}`,
-                title: notif.title || 'Alteração na Dívida',
-                message: notif.message || `${actor} alterou uma dívida`,
-                date: notif.timestamp || new Date().toISOString(),
-                type: notif.actionType === 'bill_paid' ? 'success' : 'info',
-                read: false,
-                actorName: actor,
-                deviceName: notif.sourceDeviceName,
-                sourceDeviceName: notif.sourceDeviceName,
-                actionType: notif.actionType,
-              };
-              setInAppNotifications(prev => {
-                const merged = [newInApp, ...prev.filter(n => n.id !== newInApp.id)];
-                saveStoredInAppNotifications(merged);
-                return merged;
+            const spouseNotifs = data.notifications.filter((n: ChangeNotification) =>
+              n && (n.sourceDeviceId !== myDev.id || (n.sourceUserName && n.sourceUserName !== currentUserName))
+            );
+
+            if (spouseNotifs.length > 0) {
+              spouseNotifs.forEach((notif: ChangeNotification) => {
+                playNotificationChime();
+                setLiveAlterationNotif(notif);
+                const actor = notif.sourceUserName || 'Cônjuge';
+                const newInApp: InAppNotification = {
+                  id: notif.id || `notif_${Date.now()}`,
+                  title: notif.title || 'Alteração na Dívida',
+                  message: notif.message || `${actor} alterou uma dívida`,
+                  date: notif.timestamp || new Date().toISOString(),
+                  type: notif.actionType === 'bill_paid' ? 'success' : 'info',
+                  read: false,
+                  actorName: actor,
+                  deviceName: notif.sourceDeviceName,
+                  sourceDeviceName: notif.sourceDeviceName,
+                  actionType: notif.actionType,
+                };
+                setInAppNotifications(prev => {
+                  const merged = [newInApp, ...prev.filter(n => n.id !== newInApp.id)];
+                  saveStoredInAppNotifications(merged);
+                  return merged;
+                });
+                sendNativeNotification(notif.title, { body: notif.message, sound: true });
               });
-              sendNativeNotification(notif.title, { body: notif.message, sound: true });
-            });
+            }
+
             const latest = data.notifications[data.notifications.length - 1];
             if (latest?.timestamp) {
               localStorage.setItem('financas_last_seen_notif_time', latest.timestamp);
             }
-            setBills(cloudkit.getBills());
           }
         })
         .catch(() => {});
-    }, 6000);
+    }, 4000);
 
     return () => clearInterval(pollInterval);
   }, []);
@@ -986,6 +1013,8 @@ export default function App() {
         isRefreshing={isRefreshing}
         isOffline={isOffline}
         isWifeConnected={isWifeConnected}
+        activeUserName={activeUserName}
+        onToggleActiveUser={handleToggleActiveUser}
       />
 
       {/* Intelligent Due Date Notification Toast Banner */}

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Filter, Plus, FileText, TrendingUp, 
@@ -125,6 +125,9 @@ export default function App() {
   // Active household member editing debts (Carlos on Carlos's device / Paula on wife's device)
   const [activeUserName, setActiveUserName] = useState<string>(() => cloudkit.getCurrentUserName());
   const [liveAlterationNotif, setLiveAlterationNotif] = useState<ChangeNotification | null>(null);
+  const handleDismissLiveToast = useCallback(() => {
+    setLiveAlterationNotif(null);
+  }, []);
 
   // In-App Notifications History & Due Date Alerts
   const [inAppNotifications, setInAppNotifications] = useState<InAppNotification[]>(() => getStoredInAppNotifications());
@@ -980,7 +983,7 @@ export default function App() {
       {/* Real-time Alteration Toast Notification Banner */}
       <LiveAlterationToast
         notification={liveAlterationNotif}
-        onDismiss={() => setLiveAlterationNotif(null)}
+        onDismiss={handleDismissLiveToast}
         onSelectBillName={(name) => {
           setSearchQuery(name);
           setCurrentTab('bills');

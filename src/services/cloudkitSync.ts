@@ -932,10 +932,20 @@ class CloudKitSyncEngine {
       } else {
         const incVersion = b.version || 0;
         const curVersion = current.version || 0;
-        const incUpdated = new Date(b.updatedAt || 0).getTime();
-        const curUpdated = new Date(current.updatedAt || 0).getTime();
-        if (incVersion > curVersion || incUpdated >= curUpdated) {
+        const incUpdated = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
+        const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
+        if (incVersion > curVersion) {
           map.set(b.id, b);
+        } else if (curVersion > incVersion) {
+          // keep current
+        } else if (incUpdated > curUpdated) {
+          map.set(b.id, b);
+        } else if (curUpdated > incUpdated) {
+          // keep current
+        } else {
+          if (b.status === 'paid' && current.status !== 'paid') {
+            map.set(b.id, b);
+          }
         }
       }
     });
@@ -989,12 +999,6 @@ class CloudKitSyncEngine {
           keepIncoming = true;
         } else if (existing.receiptUrl && !b.receiptUrl) {
           keepIncoming = false;
-        } else if (b.status === 'paid' && existing.status !== 'paid' && b.receiptUrl) {
-          // Only prioritize paid status if verified by attached receipt proof
-          keepIncoming = true;
-        } else if (existing.status === 'paid' && b.status !== 'paid' && !existing.receiptUrl) {
-          // Revert unverified paid status in favor of user's pending bill
-          keepIncoming = true;
         } else if (b.isProjected && !existing.isProjected) {
           keepIncoming = false;
         } else if (!b.isProjected && existing.isProjected) {
@@ -1010,12 +1014,21 @@ class CloudKitSyncEngine {
         } else {
           const bVer = b.version || 1;
           const eVer = existing.version || 1;
+          const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
+          const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
           if (bVer > eVer) {
             keepIncoming = true;
+          } else if (eVer > bVer) {
+            keepIncoming = false;
+          } else if (bTime > eTime) {
+            keepIncoming = true;
+          } else if (eTime > bTime) {
+            keepIncoming = false;
           } else {
-            const bTime = new Date(b.updatedAt || 0).getTime();
-            const eTime = new Date(existing.updatedAt || 0).getTime();
-            if (bTime > eTime) keepIncoming = true;
+            // If identical version and time, preserve paid status if either is paid
+            if (b.status === 'paid' && existing.status !== 'paid') {
+              keepIncoming = true;
+            }
           }
         }
 
@@ -1966,7 +1979,7 @@ class CloudKitSyncEngine {
     return this.upsertBill(bill as any);
   }
 
-  // Toggling paid status does NOT change debt parameters, but records audit trail of who paid/reopened
+  // Toggling paid status records audit trail of who paid/reopened with bumped version & updatedAt
   public toggleBillStatus(billId: string, status: 'pending' | 'paid' | 'overdue'): Bill | null {
     const bills = this.getBills();
     const existingIndex = bills.findIndex(b => b.id === billId);
@@ -1974,12 +1987,19 @@ class CloudKitSyncEngine {
     const existing = bills[existingIndex];
     const actor = this.getCurrentUserName();
     const isPaid = status === 'paid';
+    const nowIso = new Date().toISOString();
+    const newVersion = (existing.version || 1) + 1;
+    const activeDev = this.getCurrentDeviceInfo().name;
+
     const updated: Bill = {
       ...existing,
       status,
-      paidAt: isPaid ? new Date().toISOString() : undefined,
+      version: newVersion,
+      updatedAt: nowIso,
+      updatedByDevice: activeDev,
+      paidAt: isPaid ? nowIso : undefined,
       paidBy: isPaid ? actor : undefined,
-      lastEditedAt: new Date().toISOString(),
+      lastEditedAt: nowIso,
       lastEditedBy: actor,
       lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
       isEdited: true,
@@ -1988,6 +2008,7 @@ class CloudKitSyncEngine {
     bills[existingIndex] = updated;
     this.safeSaveBillsToStorage(bills);
     this.broadcastUpdate('BILL_UPSERTED', updated);
+    this.broadcastUpdate('BILLS_UPDATED', { count: bills.length });
 
     const title = isPaid ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄';
     const msg = isPaid

@@ -321,12 +321,6 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
         keepIncoming = true;
       } else if (existing.receiptUrl && !b.receiptUrl) {
         keepIncoming = false;
-      } else if (b.status === 'paid' && existing.status !== 'paid' && b.receiptUrl) {
-        // Only prioritize paid status if verified by attached receipt proof
-        keepIncoming = true;
-      } else if (existing.status === 'paid' && b.status !== 'paid' && !existing.receiptUrl) {
-        // Revert unverified paid status in favor of user's pending bill
-        keepIncoming = true;
       } else if (b.isProjected && !existing.isProjected) {
         keepIncoming = false;
       } else if (!b.isProjected && existing.isProjected) {
@@ -342,12 +336,21 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
       } else {
         const bVer = b.version || 1;
         const eVer = existing.version || 1;
+        const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
+        const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
         if (bVer > eVer) {
           keepIncoming = true;
+        } else if (eVer > bVer) {
+          keepIncoming = false;
+        } else if (bTime > eTime) {
+          keepIncoming = true;
+        } else if (eTime > bTime) {
+          keepIncoming = false;
         } else {
-          const bTime = new Date(b.updatedAt || 0).getTime();
-          const eTime = new Date(existing.updatedAt || 0).getTime();
-          if (bTime > eTime) keepIncoming = true;
+          // If identical version and time, preserve paid status if either is paid
+          if (b.status === 'paid' && existing.status !== 'paid') {
+            keepIncoming = true;
+          }
         }
       }
 
@@ -831,10 +834,12 @@ async function startServer() {
         } else {
           const incVersion = incoming.version || 0;
           const curVersion = current.version || 0;
-          const incUpdated = new Date(incoming.updatedAt || 0).getTime();
-          const curUpdated = new Date(current.updatedAt || 0).getTime();
+          const incUpdated = new Date(incoming.updatedAt || incoming.lastEditedAt || incoming.paidAt || 0).getTime();
+          const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
 
           if (incVersion > curVersion || incUpdated >= curUpdated) {
+            billMap.set(incoming.id, incoming);
+          } else if (incoming.status === 'paid' && current.status !== 'paid') {
             billMap.set(incoming.id, incoming);
           }
         }

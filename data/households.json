@@ -8,7 +8,7 @@
     "profiles": [
       {
         "id": "p1",
-        "name": "Você (Titular)",
+        "name": "Carlos",
         "role": "Administrador da Casa",
         "splitShare": 50,
         "splitPercentage": 50,
@@ -18,7 +18,7 @@
       },
       {
         "id": "p2",
-        "name": "Cônjuge",
+        "name": "Paula",
         "role": "Administradora da Casa",
         "splitShare": 50,
         "splitPercentage": 50,
@@ -29,12 +29,12 @@
     ],
     "devices": [
       {
-        "id": "dev_1791488115516_79zh4",
-        "name": "Meu iPhone (Início)",
+        "id": "dev_1791497677477_2i8uy",
+        "name": "Carlos (iPhone)",
         "model": "iPhone (Tela de Início)",
         "owner": "Você",
         "lastActive": "Agora mesmo",
-        "connectedAt": "2026-10-08T19:43:02.569Z"
+        "connectedAt": "2026-10-08T22:21:19.869Z"
       },
       {
         "id": "dev_esposa_permanente",
@@ -47,7 +47,7 @@
       }
     ],
     "isWifeConnected": true,
-    "lastUpdated": "2026-10-08T19:43:02.569Z",
+    "lastUpdated": "2026-10-08T22:21:19.869Z",
     "deletedBillIds": [],
     "deletedRevenueIds": []
   },

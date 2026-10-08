@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { X, CheckCircle2, Edit3, Paperclip, AlertCircle, ArrowRight, Bell, Trash2, Calendar, Smartphone } from 'lucide-react';
 import { ChangeNotification } from '../types/finance';
@@ -16,12 +16,15 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
   onSelectBillName,
 }) => {
   const [progress, setProgress] = useState(100);
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
+  // Reliable 5-second timer tied solely to notification id (won't be reset by parent polling/re-renders)
   useEffect(() => {
     if (!notification) return;
 
     setProgress(100);
-    const duration = 6500;
+    const duration = 5000;
     const interval = 50;
     const step = (interval / duration) * 100;
 
@@ -29,7 +32,7 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
       setProgress((prev) => {
         if (prev <= step) {
           clearInterval(timer);
-          onDismiss();
+          onDismissRef.current();
           return 0;
         }
         return prev - step;
@@ -37,7 +40,7 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
     }, interval);
 
     return () => clearInterval(timer);
-  }, [notification, onDismiss]);
+  }, [notification?.id, notification?.timestamp]);
 
   if (!notification) return null;
 
@@ -108,11 +111,11 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
   return (
     <AnimatePresence>
       <motion.div
-        initial={{ opacity: 0, y: -24, scale: 0.94 }}
+        initial={{ opacity: 0, y: -20, scale: 0.95 }}
         animate={{ opacity: 1, y: 0, scale: 1 }}
         exit={{ opacity: 0, y: -20, scale: 0.95 }}
         transition={{ type: 'spring', damping: 22, stiffness: 280 }}
-        className="fixed top-3 left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50 pointer-events-auto"
+        className="fixed top-[calc(env(safe-area-inset-top,20px)+54px)] left-3 right-3 sm:left-auto sm:right-4 sm:max-w-md z-50 pointer-events-auto"
       >
         <div className={`relative overflow-hidden rounded-2xl bg-white dark:bg-[#0D152A] shadow-2xl border-2 ${accentBorder} p-3.5 backdrop-blur-md`}>
           {/* Progress bar line */}
@@ -172,7 +175,7 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
                 </p>
               )}
 
-              {/* Origin device clearly labeled to avoid confusion */}
+              {/* Origin device clearly labeled */}
               <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
                 <span className="opacity-80">Aparelho da alteração:</span>
                 <span className="font-extrabold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60">
@@ -181,30 +184,41 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
                 </span>
               </div>
 
-              {/* Quick action button to scroll/filter */}
-              {notification.targetItemName && onSelectBillName && (
+              {/* Action buttons bar */}
+              <div className="flex items-center gap-2 mt-2 pt-1 border-t border-slate-100 dark:border-slate-800">
+                {notification.targetItemName && onSelectBillName && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSelectBillName(notification.targetItemName!);
+                      onDismiss();
+                    }}
+                    className="text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline inline-flex items-center gap-1 cursor-pointer"
+                  >
+                    <span>Localizar conta</span>
+                    <ArrowRight className="w-3 h-3" />
+                  </button>
+                )}
                 <button
                   type="button"
-                  onClick={() => {
-                    onSelectBillName(notification.targetItemName!);
-                    onDismiss();
-                  }}
-                  className="mt-1.5 text-[11px] font-bold text-teal-600 dark:text-teal-400 hover:underline inline-flex items-center gap-1"
+                  onClick={onDismiss}
+                  className="ml-auto text-[11px] font-extrabold px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 inline-flex items-center gap-1 transition-colors cursor-pointer"
                 >
-                  <span>Localizar esta conta</span>
-                  <ArrowRight className="w-3 h-3" />
+                  <X className="w-3 h-3" />
+                  <span>Fechar</span>
                 </button>
-              )}
+              </div>
             </div>
 
-            {/* Dismiss button */}
+            {/* Top right prominent dismiss button */}
             <button
               type="button"
               onClick={onDismiss}
-              className="w-7 h-7 rounded-lg hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center justify-center shrink-0 active:scale-90 transition-transform"
+              className="w-8 h-8 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-500 hover:text-slate-800 dark:text-slate-300 dark:hover:text-white flex items-center justify-center shrink-0 active:scale-90 transition-all cursor-pointer shadow-2xs"
               title="Fechar notificação"
+              aria-label="Fechar notificação"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-4 h-4 stroke-[2.5]" />
             </button>
           </div>
         </div>

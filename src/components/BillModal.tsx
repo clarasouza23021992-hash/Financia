@@ -235,11 +235,6 @@ export const BillModal: React.FC<BillModalProps> = ({
 
   // Quem alterou ou registrou a conta (Carlos ou Paula)
   const [authorActor, setAuthorActor] = useState<string>(() => {
-    if (initialBill?.lastEditedBy) {
-      const low = initialBill.lastEditedBy.toLowerCase();
-      if (low.includes('paula') || low.includes('esposa')) return 'Paula';
-      if (low.includes('carlos')) return 'Carlos';
-    }
     return cloudkit.getCurrentUserName();
   });
 
@@ -377,14 +372,8 @@ export const BillModal: React.FC<BillModalProps> = ({
         setFormError(null);
         setPreviewReceiptOpen(false);
 
-        const rawActorLow = (initialBill.lastEditedBy || (initialBill.status === 'paid' ? initialBill.paidBy : '') || initialBill.updatedByDevice || '').toLowerCase();
-        if (rawActorLow.includes('paula') || rawActorLow.includes('esposa')) {
-          setAuthorActor('Paula');
-        } else if (rawActorLow.includes('carlos')) {
-          setAuthorActor('Carlos');
-        } else {
-          setAuthorActor(cloudkit.getCurrentUserName());
-        }
+        // Default to active user who is editing the bill right now (Paula or Carlos)
+        setAuthorActor(cloudkit.getCurrentUserName());
       } else {
         // Default for new bill
         setAuthorActor(cloudkit.getCurrentUserName());

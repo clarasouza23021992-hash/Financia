@@ -493,6 +493,17 @@ async function startServer() {
     });
   };
 
+  const resolveCanonicalDeviceName = (sourceUserName?: string, sourceDeviceName?: string): string => {
+    const rawDev = (sourceDeviceName || '').trim();
+    if (rawDev.includes('Paula (iPhone)') || rawDev.includes('Carlos (iPhone)')) {
+      return rawDev.includes('Paula (iPhone)') ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+    }
+    const userLow = (sourceUserName || '').toLowerCase();
+    const devLow = rawDev.toLowerCase();
+    const isWife = userLow.includes('paula') || userLow.includes('esposa') || userLow.includes('clara') || devLow.includes('paula') || devLow.includes('esposa') || devLow.includes('clara');
+    return isWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+  };
+
   const recordChangeNotification = (householdId: string, params: {
     sourceDeviceId: string;
     sourceDeviceName?: string;
@@ -523,12 +534,17 @@ async function startServer() {
       household.notifications = [];
     }
 
+    const resolvedDevice = resolveCanonicalDeviceName(params.sourceUserName, params.sourceDeviceName);
+    const resolvedUser = (params.sourceUserName && (params.sourceUserName.toLowerCase().includes('paula') || params.sourceUserName.toLowerCase().includes('esposa')))
+      ? 'Paula'
+      : (params.sourceUserName && params.sourceUserName.toLowerCase().includes('carlos') ? 'Carlos' : (resolvedDevice.startsWith('Paula') ? 'Paula' : 'Carlos'));
+
     const notif: ChangeNotification = {
       id: `notif-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       householdId: cleanId,
       sourceDeviceId: params.sourceDeviceId,
-      sourceDeviceName: params.sourceDeviceName || 'Smartphone',
-      sourceUserName: params.sourceUserName || 'Morador',
+      sourceDeviceName: resolvedDevice,
+      sourceUserName: resolvedUser,
       actionType: params.actionType,
       title: params.title,
       message: params.message,
@@ -580,9 +596,9 @@ async function startServer() {
         } else if (msg.type === 'NOTIFY_CHANGE') {
           const houseId = (msg.householdId || clientState.householdId).trim().toLowerCase();
           const notif = recordChangeNotification(houseId, {
-            sourceDeviceId: msg.deviceId || clientState.deviceId,
-            sourceDeviceName: msg.deviceName || clientState.deviceName,
-            sourceUserName: msg.userName || clientState.userName,
+            sourceDeviceId: msg.sourceDeviceId || msg.deviceId || clientState.deviceId,
+            sourceDeviceName: msg.sourceDeviceName || msg.deviceName || clientState.deviceName,
+            sourceUserName: msg.sourceUserName || msg.userName || clientState.userName,
             actionType: msg.actionType,
             title: msg.title,
             message: msg.message,
@@ -652,7 +668,7 @@ async function startServer() {
     if (!wifeDev) {
       wifeDev = {
         id: 'dev_esposa_permanente',
-        name: 'iPhone da Esposa',
+        name: 'Paula (iPhone)',
         model: 'iPhone (Tela de Início)',
         owner: 'Esposa',
         lastActive: 'Agora mesmo',
@@ -666,7 +682,7 @@ async function startServer() {
     if (callerDevice && callerDevice.id) {
       activeUserDev = {
         id: callerDevice.id,
-        name: callerDevice.name || 'Meu iPhone (Início)',
+        name: callerDevice.name || 'Carlos (iPhone)',
         model: callerDevice.model || 'iPhone (Tela de Início)',
         owner: 'Você',
         lastActive: 'Agora mesmo',
@@ -677,7 +693,7 @@ async function startServer() {
     } else {
       activeUserDev = {
         id: 'dev_1790686586282_fecb4',
-        name: 'Meu iPhone (Início)',
+        name: 'Carlos (iPhone)',
         model: 'iPhone (Tela de Início)',
         owner: 'Você',
         lastActive: 'Agora mesmo',
@@ -890,15 +906,27 @@ async function startServer() {
   // Send a change notification directly via REST
   app.post('/api/household/:id/notify-change', (req, res) => {
     const { id } = req.params;
-    const { deviceId, deviceName, userName, actionType, title, message, targetItemName, amount } = req.body;
+    const {
+      deviceId,
+      sourceDeviceId,
+      deviceName,
+      sourceDeviceName,
+      userName,
+      sourceUserName,
+      actionType,
+      title,
+      message,
+      targetItemName,
+      amount,
+    } = req.body;
     if (!actionType || !title) {
       return res.status(400).json({ error: 'Dados insuficientes para notificação' });
     }
     const cleanId = id.trim().toLowerCase();
     const notif = recordChangeNotification(cleanId, {
-      sourceDeviceId: deviceId || 'unknown_dev',
-      sourceDeviceName: deviceName || 'Smartphone',
-      sourceUserName: userName || 'Morador',
+      sourceDeviceId: sourceDeviceId || deviceId || 'unknown_dev',
+      sourceDeviceName: sourceDeviceName || deviceName,
+      sourceUserName: sourceUserName || userName,
       actionType,
       title,
       message: message || '',

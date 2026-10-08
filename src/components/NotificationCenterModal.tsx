@@ -296,6 +296,20 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                               })()}
                             </span>
                           )}
+                          {/* Device badge */}
+                          {(() => {
+                            const rawDev = item.sourceDeviceName || item.deviceName || '';
+                            const actorLow = (item.actorName || '').toLowerCase();
+                            const devLow = rawDev.toLowerCase();
+                            const isWife = actorLow.includes('paula') || actorLow.includes('esposa') || devLow.includes('paula') || devLow.includes('esposa');
+                            const devLabel = isWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+                            return (
+                              <span className="text-[10px] font-extrabold px-1.5 py-0.2 rounded bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 inline-flex items-center gap-1">
+                                <Smartphone className="w-2.5 h-2.5 text-teal-500 shrink-0" />
+                                <span>{devLabel}</span>
+                              </span>
+                            );
+                          })()}
                           {!item.read && (
                             <span className="w-2 h-2 rounded-full bg-teal-500 flex-shrink-0" />
                           )}

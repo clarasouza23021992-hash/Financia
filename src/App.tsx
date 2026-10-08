@@ -142,7 +142,7 @@ export default function App() {
       id: `sim_${Date.now()}`,
       householdId: cloudkit.getHouseholdId(),
       sourceDeviceId: 'dev_spouse_sim',
-      sourceDeviceName: otherUser === wifeName ? `iPhone de ${wifeName}` : 'Meu iPhone',
+      sourceDeviceName: otherUser === wifeName ? 'Paula (iPhone)' : 'Carlos (iPhone)',
       sourceUserName: otherUser,
       actionType: 'bill_paid',
       title: 'Dívida Paga! ✅',
@@ -160,6 +160,8 @@ export default function App() {
       type: 'success',
       read: false,
       actorName: otherUser,
+      deviceName: simulatedNotif.sourceDeviceName,
+      sourceDeviceName: simulatedNotif.sourceDeviceName,
       actionType: 'bill_paid',
     };
     setInAppNotifications(prev => {
@@ -250,6 +252,8 @@ export default function App() {
             type: notifPayload.actionType === 'bill_paid' ? 'success' : 'info',
             read: false,
             actorName: actor,
+            deviceName: notifPayload.sourceDeviceName,
+            sourceDeviceName: notifPayload.sourceDeviceName,
             actionType: notifPayload.actionType,
           };
 
@@ -301,6 +305,8 @@ export default function App() {
                 type: notif.actionType === 'bill_paid' ? 'success' : 'info',
                 read: false,
                 actorName: actor,
+                deviceName: notif.sourceDeviceName,
+                sourceDeviceName: notif.sourceDeviceName,
                 actionType: notif.actionType,
               };
               setInAppNotifications(prev => {
@@ -797,6 +803,13 @@ export default function App() {
     cloudkit.saveBill(updated);
     setBills(cloudkit.getBills());
     showTemporaryToast(`✅ Alteração da dívida "${bill.name}" atribuída a ${cleanActor}!`);
+    cloudkit.notifyRemoteChange(
+      'bill_updated',
+      'Autor da Alteração Atualizado 👤',
+      `${cleanActor} foi confirmado(a) como autor(a) da alteração na conta "${bill.name}"`,
+      bill.name,
+      bill.amount
+    );
   };
 
   // Handlers for Revenue operations

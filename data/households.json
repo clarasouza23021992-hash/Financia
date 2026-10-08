@@ -30,7 +30,7 @@
     "devices": [
       {
         "id": "dev_1791329128947_htz2c",
-        "name": "Meu iPhone (Início)",
+        "name": "Carlos (iPhone)",
         "model": "iPhone (Tela de Início)",
         "owner": "Você",
         "lastActive": "Agora mesmo",
@@ -38,7 +38,7 @@
       },
       {
         "id": "dev_esposa_permanente",
-        "name": "iPhone da Esposa",
+        "name": "Paula (iPhone)",
         "model": "iPhone (Tela de Início)",
         "owner": "Esposa",
         "lastActive": "Agora mesmo",

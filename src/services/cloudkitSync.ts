@@ -311,6 +311,15 @@ class CloudKitSyncEngine {
     return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
+  public getCanonicalDeviceName(overrideUser?: string): string {
+    const rawUser = overrideUser || this.getCurrentUserName();
+    const low = (rawUser || '').toLowerCase();
+    const storedRole = typeof window !== 'undefined' ? (localStorage.getItem('financas_my_role') || '') : '';
+    const customDev = typeof window !== 'undefined' ? (localStorage.getItem('financas_my_device_custom_name') || '') : '';
+    const isWife = low.includes('paula') || low.includes('esposa') || low.includes('clara') || storedRole === 'Esposa' || storedRole === 'Cônjuge' || customDev.toLowerCase().includes('paula') || customDev.toLowerCase().includes('esposa');
+    return isWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+  }
+
   public connectWebSocket(): void {
     if (typeof window === 'undefined') return;
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
@@ -326,14 +335,17 @@ class CloudKitSyncEngine {
         const myDev = this.getCurrentDeviceInfo();
         const houseId = this.getHouseholdId();
         const userName = this.getCurrentUserName();
+        const canonicalDevName = this.getCanonicalDeviceName(userName);
 
         this.ws?.send(
           JSON.stringify({
             type: 'JOIN',
             householdId: houseId,
             deviceId: myDev.id,
-            deviceName: myDev.name,
+            deviceName: canonicalDevName,
+            sourceDeviceName: canonicalDevName,
             userName,
+            sourceUserName: userName,
           })
         );
       };
@@ -386,12 +398,13 @@ class CloudKitSyncEngine {
     const myDev = this.getCurrentDeviceInfo();
     const houseId = this.getHouseholdId();
     const userName = this.getCurrentUserName();
+    const canonicalDevName = this.getCanonicalDeviceName(userName); // strictly 'Paula (iPhone)' or 'Carlos (iPhone)'
 
     const notif: ChangeNotification = {
       id: `notif_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
       householdId: houseId,
       sourceDeviceId: myDev.id,
-      sourceDeviceName: myDev.name,
+      sourceDeviceName: canonicalDevName,
       sourceUserName: userName,
       actionType,
       title,
@@ -411,6 +424,10 @@ class CloudKitSyncEngine {
           JSON.stringify({
             type: 'NOTIFY_CHANGE',
             ...notif,
+            deviceName: canonicalDevName,
+            sourceDeviceName: canonicalDevName,
+            userName,
+            sourceUserName: userName,
           })
         );
       } catch (err) {
@@ -423,7 +440,13 @@ class CloudKitSyncEngine {
       fetch(`/api/household/${encodeURIComponent(houseId)}/notify-change`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(notif),
+        body: JSON.stringify({
+          ...notif,
+          deviceName: canonicalDevName,
+          sourceDeviceName: canonicalDevName,
+          userName,
+          sourceUserName: userName,
+        }),
       }).catch(() => {});
     } catch {}
   }
@@ -3259,13 +3282,20 @@ class CloudKitSyncEngine {
       model = 'Computador / Web';
     }
 
+    const userName = this.getCurrentUserName();
+    const isWife = userName.toLowerCase().includes('paula') || userName.toLowerCase().includes('esposa');
+    const canonicalName = this.getCanonicalDeviceName(userName); // 'Paula (iPhone)' or 'Carlos (iPhone)'
+
     const savedCustomName = localStorage.getItem('financas_my_device_custom_name');
+    const resolvedName = (savedCustomName && !/meu celular|meu iphone|iphone da esposa|meu android|iphone de carlos|iphone de paula/i.test(savedCustomName))
+      ? savedCustomName
+      : canonicalName;
 
     return {
       id: myId,
-      name: savedCustomName || defaultName,
+      name: resolvedName,
       model,
-      owner: 'Você',
+      owner: isWife ? 'Esposa' : 'Você',
       lastActive: 'Agora mesmo',
       isCurrent: true,
     };
@@ -3299,7 +3329,7 @@ class CloudKitSyncEngine {
 
     const permanentWifeDevice: CloudDevice = {
       id: 'dev_esposa_permanente',
-      name: 'iPhone da Esposa',
+      name: 'Paula (iPhone)',
       model: 'iPhone (Tela de Início)',
       owner: 'Esposa',
       lastActive: 'Agora mesmo',

@@ -295,6 +295,8 @@ export interface InAppNotification {
   read: boolean;
   billId?: string;
   actorName?: string;
+  deviceName?: string;
+  sourceDeviceName?: string;
   actionType?: string;
 }
 

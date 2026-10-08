@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, CheckCircle2, Edit3, Paperclip, AlertCircle, ArrowRight, Bell, Trash2, Calendar } from 'lucide-react';
+import { X, CheckCircle2, Edit3, Paperclip, AlertCircle, ArrowRight, Bell, Trash2, Calendar, Smartphone } from 'lucide-react';
 import { ChangeNotification } from '../types/finance';
 import { cloudkit } from '../services/cloudkitSync';
 
@@ -72,6 +72,12 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
   let badgeBg = 'bg-amber-100 text-amber-800 dark:bg-amber-950/70 dark:text-amber-300';
   let actionVerb = 'alterou a dívida';
 
+  // Canonical Device Label: strictly 'Paula (iPhone)' or 'Carlos (iPhone)'
+  const rawDev = (notification.sourceDeviceName || '').trim();
+  const devLow = rawDev.toLowerCase();
+  const isDevWife = isWife || devLow.includes('paula') || devLow.includes('esposa') || devLow.includes('clara');
+  const canonicalDevice = isDevWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+
   if (isPaid) {
     iconElement = <CheckCircle2 className="w-4 h-4 text-emerald-500" />;
     accentBorder = 'border-emerald-400 dark:border-emerald-500/60';
@@ -132,6 +138,10 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
                 <span className={`text-[10px] font-extrabold px-1.5 py-0.5 rounded-md ${badgeBg}`}>
                   {actorName}
                 </span>
+                <span className="text-[10px] font-extrabold px-1.5 py-0.5 rounded-md bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-300 border border-slate-200/80 dark:border-slate-700 inline-flex items-center gap-1 shadow-2xs">
+                  <Smartphone className="w-3 h-3 text-teal-600 dark:text-teal-400 shrink-0" />
+                  <span>{canonicalDevice}</span>
+                </span>
                 <span className="text-[11px] font-bold text-slate-800 dark:text-slate-200">
                   {actionVerb}
                 </span>
@@ -161,6 +171,15 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
                   {notification.message}
                 </p>
               )}
+
+              {/* Origin device clearly labeled to avoid confusion */}
+              <div className="flex items-center gap-1.5 mt-1.5 text-[10px] text-slate-500 dark:text-slate-400">
+                <span className="opacity-80">Aparelho da alteração:</span>
+                <span className="font-extrabold text-slate-800 dark:text-slate-200 inline-flex items-center gap-1 bg-slate-100/90 dark:bg-slate-800/90 px-1.5 py-0.5 rounded border border-slate-200/60 dark:border-slate-700/60">
+                  <Smartphone className="w-2.5 h-2.5 text-teal-600 dark:text-teal-400" />
+                  {canonicalDevice}
+                </span>
+              </div>
 
               {/* Quick action button to scroll/filter */}
               {notification.targetItemName && onSelectBillName && (

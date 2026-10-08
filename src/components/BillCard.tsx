@@ -421,8 +421,8 @@ export const BillCard: React.FC<BillCardProps> = ({
                   onReassignActor(bill, isWife ? titularName : wifeName);
                 }
               }}
-              className={`inline-flex items-center gap-1 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs transition-all active-press cursor-pointer hover:brightness-95 ${badgeStyle}`}
-              title={`${tooltip} • Toque para alternar autor entre Carlos e ${wifeName}`}
+              className={`inline-flex items-center gap-1.5 text-[10.5px] px-2 py-0.5 rounded-md border shrink-0 whitespace-nowrap font-medium shadow-2xs transition-all active-press cursor-pointer hover:brightness-95 ${badgeStyle}`}
+              title={`${tooltip} • Toque para alternar quem alterou (Carlos ⇄ ${wifeName})`}
             >
               <span className="text-[10px] shrink-0 leading-none">{icon}</span>
               <span className="font-extrabold text-slate-900 dark:text-white tracking-tight leading-none">
@@ -430,6 +430,9 @@ export const BillCard: React.FC<BillCardProps> = ({
               </span>
               <span className="text-[9.5px] opacity-80 font-mono leading-none tracking-tight">
                 • {dateStr} {timeStr}
+              </span>
+              <span className="text-[9px] font-bold opacity-70 border-l border-current/25 pl-1 leading-none" title="Trocar quem alterou">
+                ⇄
               </span>
             </button>
           );

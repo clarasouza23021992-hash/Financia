@@ -369,3 +369,33 @@ export interface WeeklyCoffeeRoutine {
   };
 }
 
+export interface PaymentPropagationLogEntry {
+  id: string;
+  timestamp: string;
+  formattedTime: string;
+  eventType: 
+    | 'STATUS_CHANGE_LOCAL'
+    | 'SYNC_DISPATCHED'
+    | 'SYNC_ACKNOWLEDGED'
+    | 'WS_BROADCAST_SENT'
+    | 'WS_UPDATE_RECEIVED'
+    | 'ID_RECONCILED'
+    | 'CONFLICT_RESOLVED'
+    | 'DIAGNOSTIC_CHECK';
+  billId: string;
+  canonicalId?: string;
+  billName: string;
+  billAmount: number;
+  month: string;
+  oldStatus?: 'pending' | 'paid' | 'overdue';
+  newStatus: 'pending' | 'paid' | 'overdue';
+  version: number;
+  actor: string;
+  deviceId: string;
+  deviceName: string;
+  householdId: string;
+  details: string;
+  success: boolean;
+  propagationLatencyMs?: number;
+}
+

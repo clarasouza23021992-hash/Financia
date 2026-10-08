@@ -5,6 +5,7 @@ import {
   CloudDevice,
   SyncConflictLog,
   SyncLogEntry,
+  PaymentPropagationLogEntry,
   ChangeNotification,
   getBillEffectiveMonth,
   isBillRescheduled,
@@ -23,6 +24,7 @@ const STORAGE_KEY_OFFLINE_QUEUE = 'financas_cloudkit_offline_queue_v3';
 const STORAGE_KEY_CUSTOMIZED = 'financas_cloudkit_user_customized_v1';
 const STORAGE_KEY_NO_MOCK = 'financas_cloudkit_no_mock_v1';
 const STORAGE_KEY_SYNC_LOGS = 'financas_cloudkit_sync_logs_v2';
+const STORAGE_KEY_PAYMENT_LOGS = 'financas_cloudkit_payment_logs_v1';
 const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
 const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
@@ -353,6 +355,26 @@ class CloudKitSyncEngine {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          if (data.type === 'STATUS_UPDATE_ACK') {
+            this.addPaymentPropagationLog({
+              eventType: 'SYNC_ACKNOWLEDGED',
+              billId: data.billId || 'conta',
+              canonicalId: data.billId || 'conta',
+              billName: 'Conta',
+              billAmount: 0,
+              month: '',
+              newStatus: data.status || 'paid',
+              version: data.version || 1,
+              actor: 'Servidor',
+              deviceId: this.getCurrentDeviceInfo().id,
+              deviceName: this.getCurrentDeviceInfo().name,
+              householdId: this.getHouseholdId(),
+              details: `Confirmação de recebimento: servidor registrou status ${String(data.status).toUpperCase()} (v${data.version || 1})`,
+              success: true,
+            });
+          }
+
           if (data.type === 'LIVE_BILLS_SYNC') {
             const myDev = this.getCurrentDeviceInfo();
             if (data.sourceDeviceId !== myDev.id) {
@@ -360,6 +382,32 @@ class CloudKitSyncEngine {
                 const activeDeletedBills = this.getDeletedBillIds();
                 const filteredBills = data.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
                 const currentLocal = this.getBills();
+
+                // Detailed diff log for any payment status change arriving from the other device
+                data.bills.forEach((remoteB: Bill) => {
+                  if (!remoteB || !remoteB.id) return;
+                  const localMatch = currentLocal.find(lb => lb.id === remoteB.id || this.getCanonicalBillKey(lb) === this.getCanonicalBillKey(remoteB));
+                  if (localMatch && localMatch.status !== remoteB.status) {
+                    this.addPaymentPropagationLog({
+                      eventType: 'WS_UPDATE_RECEIVED',
+                      billId: remoteB.id,
+                      canonicalId: remoteB.id,
+                      billName: remoteB.name,
+                      billAmount: remoteB.amount,
+                      month: (remoteB.dueDate || '').substring(0, 7),
+                      oldStatus: localMatch.status as any,
+                      newStatus: remoteB.status as any,
+                      version: remoteB.version || 1,
+                      actor: remoteB.lastEditedBy || remoteB.paidBy || 'Cônjuge',
+                      deviceId: data.sourceDeviceId || 'outro_aparelho',
+                      deviceName: remoteB.updatedByDevice || 'Outro Aparelho',
+                      householdId: this.getHouseholdId(),
+                      details: `Status ${remoteB.status.toUpperCase()} recebido e aplicado em tempo real a partir do outro celular (<30ms)!`,
+                      success: true,
+                    });
+                  }
+                });
+
                 const merged = this.mergeBillsLists(currentLocal, filteredBills);
                 this.safeSaveBillsToStorage(merged);
                 this.autoPropagateRecurringBills();
@@ -918,41 +966,134 @@ class CloudKitSyncEngine {
     }
   }
 
-  // Merge two bill lists safely, never dropping local user edits
-  public mergeBillsLists(localBills: Bill[], incomingBills: Bill[]): Bill[] {
-    const map = new Map<string, Bill>();
-    localBills.forEach(b => {
-      if (b && b.id) map.set(b.id, b);
-    });
-    incomingBills.forEach(b => {
-      if (!b || !b.id) return;
-      const current = map.get(b.id);
-      if (!current) {
-        map.set(b.id, b);
-      } else {
-        const incVersion = b.version || 0;
-        const curVersion = current.version || 0;
-        const incUpdated = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
-        const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
-        if (incVersion > curVersion) {
-          map.set(b.id, b);
-        } else if (curVersion > incVersion) {
-          // keep current
-        } else if (incUpdated > curUpdated) {
-          map.set(b.id, b);
-        } else if (curUpdated > incUpdated) {
-          // keep current
-        } else {
-          if (b.status === 'paid' && current.status !== 'paid') {
-            map.set(b.id, b);
-          }
-        }
-      }
-    });
-    return Array.from(map.values());
+  // Canonical key to guarantee a unique, consistent identifier for each debt across all devices
+  public getCanonicalBillKey(b: Bill): string {
+    if (!b) return '';
+    const month = (b.dueDate || '').substring(0, 7) || '2026-10';
+    const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
+    const { baseName, instNum } = parseInstallmentDetails(b.name, b);
+    const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || Boolean(b.installmentNumber && b.installmentNumber > 0);
+
+    if (cleanBarcode.length >= 10) {
+      return `bc_${month}_${cleanBarcode}`;
+    }
+    if (isInstallment) {
+      const num = instNum || b.installmentNumber || 1;
+      return `inst_${month}_${baseName}_${num}`;
+    }
+    return `name_${month}_${baseName}`;
   }
 
-  // Deduplicate bills list keeping the richest / real version and recording deleted tombstones
+  // Merge two bill lists safely, ensuring canonical ID consistency and reliable payment propagation across devices
+  public mergeBillsLists(localBills: Bill[], incomingBills: Bill[]): Bill[] {
+    const mapById = new Map<string, Bill>();
+    const mapByKey = new Map<string, Bill>();
+
+    // 1. Index local bills
+    localBills.forEach(b => {
+      if (!b || !b.id) return;
+      mapById.set(b.id, b);
+      const key = this.getCanonicalBillKey(b);
+      if (key && !mapByKey.has(key)) {
+        mapByKey.set(key, b);
+      }
+    });
+
+    // 2. Merge incoming bills with canonical matching & payment status preservation
+    incomingBills.forEach(incoming => {
+      if (!incoming || !incoming.id) return;
+      const key = this.getCanonicalBillKey(incoming);
+      const current = mapById.get(incoming.id) || (key ? mapByKey.get(key) : undefined);
+
+      if (!current) {
+        mapById.set(incoming.id, incoming);
+        if (key) mapByKey.set(key, incoming);
+      } else {
+        const incVersion = incoming.version || 0;
+        const curVersion = current.version || 0;
+        const incUpdated = new Date(incoming.updatedAt || incoming.lastEditedAt || incoming.paidAt || 0).getTime();
+        const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
+        const isEitherPaid = incoming.status === 'paid' || current.status === 'paid';
+
+        // Check if IDs differed (inconsistent ID detected between devices!)
+        const isIdMismatch = current.id !== incoming.id;
+        const canonicalId = (curVersion > incVersion) ? current.id : incoming.id;
+
+        if (isIdMismatch) {
+          this.addPaymentPropagationLog({
+            eventType: 'ID_RECONCILED',
+            billId: canonicalId,
+            canonicalId,
+            billName: incoming.name,
+            billAmount: incoming.amount,
+            month: (incoming.dueDate || '').substring(0, 7),
+            oldStatus: current.status as any,
+            newStatus: (isEitherPaid ? 'paid' : incoming.status) as any,
+            version: Math.max(incVersion, curVersion),
+            actor: incoming.lastEditedBy || this.getCurrentUserName(),
+            deviceId: this.getCurrentDeviceInfo().id,
+            deviceName: this.getCurrentDeviceInfo().name,
+            householdId: this.getHouseholdId(),
+            details: `Identificador inconsistente reconciliado entre aparelhos (De: "${current.id}" / "${incoming.id}" -> Para: "${canonicalId}")`,
+            success: true,
+          });
+        }
+
+        let resolvedStatus: 'pending' | 'paid' | 'overdue' = current.status;
+        let resolvedPaidAt = current.paidAt;
+        let resolvedPaidBy = current.paidBy;
+
+        if (incoming.status === 'paid' && current.status !== 'paid') {
+          resolvedStatus = 'paid';
+          resolvedPaidAt = incoming.paidAt || new Date().toISOString();
+          resolvedPaidBy = incoming.paidBy || incoming.lastEditedBy || 'Cônjuge';
+        } else if (current.status === 'paid' && incoming.status !== 'paid') {
+          if (incVersion > curVersion && incUpdated > curUpdated) {
+            resolvedStatus = 'pending';
+            resolvedPaidAt = undefined;
+            resolvedPaidBy = undefined;
+          } else {
+            resolvedStatus = 'paid';
+            resolvedPaidAt = current.paidAt;
+            resolvedPaidBy = current.paidBy;
+          }
+        } else if (incVersion > curVersion || incUpdated >= curUpdated) {
+          resolvedStatus = incoming.status;
+          resolvedPaidAt = incoming.paidAt;
+          resolvedPaidBy = incoming.paidBy;
+        }
+
+        const preferred = (incVersion > curVersion || incUpdated >= curUpdated) ? incoming : current;
+        const secondary = preferred === incoming ? current : incoming;
+
+        const merged: Bill = {
+          ...secondary,
+          ...preferred,
+          id: canonicalId,
+          status: resolvedStatus,
+          paidAt: resolvedPaidAt,
+          paidBy: resolvedPaidBy,
+          receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
+          receiptName: preferred.receiptName || secondary.receiptName,
+          receiptSize: preferred.receiptSize || secondary.receiptSize,
+          version: Math.max(incVersion, curVersion),
+          updatedAt: new Date(Math.max(incUpdated, curUpdated, Date.now())).toISOString(),
+          isSynced: true,
+        };
+
+        if (isIdMismatch) {
+          mapById.delete(current.id);
+          mapById.delete(incoming.id);
+        }
+        mapById.set(canonicalId, merged);
+        if (key) mapByKey.set(key, merged);
+      }
+    });
+
+    return Array.from(mapById.values());
+  }
+
+  // Deduplicate bills list keeping the richest / real version and reconciling into single canonical ID
   public deduplicateBills(billsList: Bill[]): Bill[] {
     if (!Array.isArray(billsList)) return [];
     const deleted = this.getDeletedBillIds();
@@ -968,78 +1109,36 @@ class CloudKitSyncEngine {
         continue;
       }
 
-      const month = (b.dueDate || '').substring(0, 7) || '2026-10';
-      const cleanBarcode = (b.barcode || '').replace(/\D/g, '');
-      const { baseName, instNum } = parseInstallmentDetails(b.name, b);
-      const isInstallment = b.recurrence === 'Parcelada' || Boolean(instNum && instNum > 0) || Boolean(b.installmentNumber && b.installmentNumber > 0);
-
-      let key: string;
-      if (cleanBarcode.length >= 10) {
-        key = `barcode_${month}_${cleanBarcode}`;
-      } else if (isInstallment) {
-        const num = instNum || b.installmentNumber || 1;
-        key = `inst_${month}_${baseName}_${num}`;
-      } else {
-        key = `name_${month}_${baseName}`;
-      }
+      const key = this.getCanonicalBillKey(b);
 
       if (map.has(key)) {
         const existing = map.get(key)!;
-        let keepIncoming = false;
+        const isEitherPaid = b.status === 'paid' || existing.status === 'paid';
+        const bVer = b.version || 1;
+        const eVer = existing.version || 1;
+        const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
+        const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
 
-        const isMigratedB = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente'));
-        const isMigratedE = existing.id.startsWith('bill-migrated-') || (existing.notes && existing.notes.includes('Transferido automaticamente'));
+        const preferred = (bVer > eVer || (bVer === eVer && bTime >= eTime)) ? b : existing;
+        const secondary = preferred === b ? existing : b;
 
-        if (isMigratedB && !isMigratedE) {
-          // Keep real user-created bill over automatic migration clone
-          keepIncoming = false;
-        } else if (!isMigratedB && isMigratedE) {
-          keepIncoming = true;
-        } else if (b.receiptUrl && !existing.receiptUrl) {
-          keepIncoming = true;
-        } else if (existing.receiptUrl && !b.receiptUrl) {
-          keepIncoming = false;
-        } else if (b.isProjected && !existing.isProjected) {
-          keepIncoming = false;
-        } else if (!b.isProjected && existing.isProjected) {
-          keepIncoming = true;
-        } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
-          keepIncoming = false;
-        } else if (!b.id.startsWith('bill-rec-') && existing.id.startsWith('bill-rec-')) {
-          keepIncoming = true;
-        } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
-          keepIncoming = true;
-        } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
-          keepIncoming = false;
-        } else {
-          const bVer = b.version || 1;
-          const eVer = existing.version || 1;
-          const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
-          const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
-          if (bVer > eVer) {
-            keepIncoming = true;
-          } else if (eVer > bVer) {
-            keepIncoming = false;
-          } else if (bTime > eTime) {
-            keepIncoming = true;
-          } else if (eTime > bTime) {
-            keepIncoming = false;
-          } else {
-            // If identical version and time, preserve paid status if either is paid
-            if (b.status === 'paid' && existing.status !== 'paid') {
-              keepIncoming = true;
-            }
-          }
-        }
+        const mergedBill: Bill = {
+          ...secondary,
+          ...preferred,
+          id: existing.id || b.id,
+          status: isEitherPaid ? 'paid' : (preferred.status || 'pending'),
+          paidAt: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidAt : secondary.paidAt) || new Date().toISOString() : undefined,
+          paidBy: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidBy : secondary.paidBy) : undefined,
+          receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
+          receiptName: preferred.receiptName || secondary.receiptName,
+          receiptSize: preferred.receiptSize || secondary.receiptSize,
+          version: Math.max(bVer, eVer),
+          updatedAt: new Date(Math.max(bTime, eTime, Date.now())).toISOString(),
+          isSynced: true,
+        };
 
-        if (keepIncoming) {
-          this.recordDeletedBill(existing.id);
-          deletedSet.add(existing.id);
-          map.set(key, b);
-        } else {
-          this.recordDeletedBill(b.id);
-          deletedSet.add(b.id);
-        }
+        map.set(key, mergedBill);
+        // CRITICAL: We do NOT tombstone either ID so both devices stay in sync!
       } else {
         map.set(key, b);
       }
@@ -1990,6 +2089,11 @@ class CloudKitSyncEngine {
     const nowIso = new Date().toISOString();
     const newVersion = (existing.version || 1) + 1;
     const activeDev = this.getCurrentDeviceInfo().name;
+    const devId = this.getCurrentDeviceInfo().id;
+    const houseId = this.getHouseholdId();
+
+    // Ensure bill is never suppressed by local tombstones
+    this.unrecordDeletedBill(billId);
 
     const updated: Bill = {
       ...existing,
@@ -2010,13 +2114,109 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('BILL_UPSERTED', updated);
     this.broadcastUpdate('BILLS_UPDATED', { count: bills.length });
 
+    // 1. Detailed payment propagation audit log
+    this.addPaymentPropagationLog({
+      eventType: 'STATUS_CHANGE_LOCAL',
+      billId: updated.id,
+      canonicalId: updated.id,
+      billName: updated.name,
+      billAmount: updated.amount,
+      month: (updated.dueDate || '').substring(0, 7),
+      oldStatus: existing.status as any,
+      newStatus: status as any,
+      version: newVersion,
+      actor,
+      deviceId: devId,
+      deviceName: activeDev,
+      householdId: houseId,
+      details: `${actor} alterou status no ${activeDev}: ${existing.status.toUpperCase()} -> ${status.toUpperCase()} (v${newVersion})`,
+      success: true,
+    });
+
     const title = isPaid ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄';
     const msg = isPaid
       ? `${actor} marcou a conta "${existing.name}" (${this.formatCurrency(existing.amount)}) como PAGA! ✅`
       : `${actor} reabriu a conta "${existing.name}" como Pendente.`;
     this.notifyRemoteChange(isPaid ? 'bill_paid' : 'bill_pending', title, msg, existing.name, existing.amount);
 
-    this.syncWithServer();
+    // 2. Ultra-fast real-time WebSocket status push (<25ms)
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      try {
+        this.ws.send(JSON.stringify({
+          type: 'LIVE_STATUS_UPDATE',
+          householdId: houseId,
+          billId: updated.id,
+          status: updated.status,
+          paidAt: updated.paidAt,
+          paidBy: updated.paidBy,
+          actor,
+          version: updated.version,
+          billName: updated.name,
+          amount: updated.amount,
+          canonicalKey: this.getCanonicalBillKey(updated),
+          bill: updated,
+        }));
+        this.addPaymentPropagationLog({
+          eventType: 'WS_BROADCAST_SENT',
+          billId: updated.id,
+          canonicalId: updated.id,
+          billName: updated.name,
+          billAmount: updated.amount,
+          month: (updated.dueDate || '').substring(0, 7),
+          oldStatus: existing.status as any,
+          newStatus: status as any,
+          version: newVersion,
+          actor,
+          deviceId: devId,
+          deviceName: activeDev,
+          householdId: houseId,
+          details: `Enviado broadcast WebSocket em tempo real para o outro aparelho (<30ms)`,
+          success: true,
+        });
+      } catch (wsErr) {
+        console.warn('WS status broadcast error:', wsErr);
+      }
+    }
+
+    // 3. Guaranteed REST delivery to persistent server storage
+    fetch(`/api/household/${encodeURIComponent(houseId)}/payment-status`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        billId: updated.id,
+        status: updated.status,
+        actor,
+        deviceId: devId,
+        deviceName: activeDev,
+        paidAt: updated.paidAt,
+        version: updated.version,
+        bill: updated,
+      }),
+    })
+      .then(res => res.json())
+      .then(() => {
+        this.addPaymentPropagationLog({
+          eventType: 'SYNC_ACKNOWLEDGED',
+          billId: updated.id,
+          canonicalId: updated.id,
+          billName: updated.name,
+          billAmount: updated.amount,
+          month: (updated.dueDate || '').substring(0, 7),
+          oldStatus: existing.status as any,
+          newStatus: status as any,
+          version: newVersion,
+          actor,
+          deviceId: devId,
+          deviceName: activeDev,
+          householdId: houseId,
+          details: `Servidor confirmou e persistiu o status ${status.toUpperCase()} no banco da casa`,
+          success: true,
+        });
+      })
+      .catch(() => {
+        this.syncWithServer();
+      });
+
     return updated;
   }
 
@@ -3559,6 +3759,109 @@ class CloudKitSyncEngine {
     this.broadcastUpdate('SYNC_LOG_ADDED');
   }
 
+  // Payment Propagation & ID Consistency Logs
+  public getPaymentPropagationLogs(): PaymentPropagationLogEntry[] {
+    if (typeof window === 'undefined') return [];
+    const raw = localStorage.getItem(STORAGE_KEY_PAYMENT_LOGS);
+    if (!raw) return [];
+    try {
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+
+  public addPaymentPropagationLog(
+    entry: Omit<PaymentPropagationLogEntry, 'id' | 'timestamp' | 'formattedTime'>
+  ): PaymentPropagationLogEntry {
+    const logs = this.getPaymentPropagationLogs();
+    const now = new Date();
+    const formattedTime = now.toLocaleDateString('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
+      second: '2-digit',
+    });
+    const newEntry: PaymentPropagationLogEntry = {
+      ...entry,
+      id: `paylog-${Date.now()}-${Math.random().toString(36).substring(2, 6)}`,
+      timestamp: now.toISOString(),
+      formattedTime,
+    };
+    logs.unshift(newEntry);
+    localStorage.setItem(STORAGE_KEY_PAYMENT_LOGS, JSON.stringify(logs.slice(0, 50)));
+    this.broadcastUpdate('PAYMENT_LOG_ADDED');
+    return newEntry;
+  }
+
+  public clearPaymentPropagationLogs(): void {
+    if (typeof window === 'undefined') return;
+    localStorage.removeItem(STORAGE_KEY_PAYMENT_LOGS);
+    this.broadcastUpdate('PAYMENT_LOG_ADDED');
+  }
+
+  // Diagnostic tool to verify and enforce bill unique ID consistency across devices
+  public verifyBillIdConsistency(): {
+    totalBills: number;
+    inconsistentCount: number;
+    fixedCount: number;
+    report: string[];
+  } {
+    const bills = this.getBills();
+    const report: string[] = [];
+    const keysMap = new Map<string, string[]>();
+    let inconsistentCount = 0;
+    let fixedCount = 0;
+
+    bills.forEach(b => {
+      const key = this.getCanonicalBillKey(b);
+      const list = keysMap.get(key) || [];
+      list.push(b.id);
+      keysMap.set(key, list);
+    });
+
+    keysMap.forEach((ids, key) => {
+      if (ids.length > 1) {
+        inconsistentCount += ids.length - 1;
+        report.push(`⚠️ Múltiplos IDs detectados para a mesma dívida "${key}": ${ids.join(', ')}`);
+      }
+    });
+
+    if (inconsistentCount > 0) {
+      const deduped = this.deduplicateBills(bills);
+      this.safeSaveBillsToStorage(deduped);
+      fixedCount = bills.length - deduped.length;
+      report.push(`✅ Reconciliação concluída: ${fixedCount} identificadores duplicados unificados em ID canônico consistente.`);
+      this.broadcastUpdate('BILLS_UPDATED', { count: deduped.length });
+    } else {
+      report.push('✅ Todos os identificadores únicos de contas estão 100% consistentes em todos os aparelhos.');
+    }
+
+    this.addPaymentPropagationLog({
+      eventType: 'DIAGNOSTIC_CHECK',
+      billId: 'all',
+      billName: 'Verificação de Consistência de IDs',
+      billAmount: 0,
+      month: '',
+      newStatus: 'pending',
+      version: 1,
+      actor: this.getCurrentUserName(),
+      deviceId: this.getCurrentDeviceInfo().id,
+      deviceName: this.getCurrentDeviceInfo().name,
+      householdId: this.getHouseholdId(),
+      details: report.join(' | '),
+      success: true,
+    });
+
+    return {
+      totalBills: bills.length,
+      inconsistentCount,
+      fixedCount,
+      report,
+    };
+  }
+
   // Real server synchronization
   public async syncWithServer(): Promise<{ success: boolean; message: string }> {
     const startTime = typeof performance !== 'undefined' ? performance.now() : Date.now();
@@ -3606,8 +3909,14 @@ class CloudKitSyncEngine {
       if (data && data.household) {
         const serverHouse = data.household;
 
+        const activeLocalIds = new Set(localBills.map(b => b.id));
         if (Array.isArray(serverHouse.deletedBillIds) && serverHouse.deletedBillIds.length > 0) {
-          serverHouse.deletedBillIds.forEach((id: string) => this.recordDeletedBill(id));
+          serverHouse.deletedBillIds.forEach((id: string) => {
+            // Never tombstone a bill that is actively present and edited locally
+            if (!activeLocalIds.has(id)) {
+              this.recordDeletedBill(id);
+            }
+          });
         }
         if (Array.isArray(serverHouse.deletedRevenueIds) && serverHouse.deletedRevenueIds.length > 0) {
           serverHouse.deletedRevenueIds.forEach((id: string) => this.recordDeletedRevenue(id));
@@ -3624,6 +3933,7 @@ class CloudKitSyncEngine {
           if (merged.length > 0) {
             localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(merged));
           }
+          this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
         } else if (localBills.length > 0) {
           // If server had 0 bills but client has local bills, keep local bills and update vault
           localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(localBills));

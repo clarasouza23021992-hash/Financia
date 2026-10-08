@@ -145,6 +145,28 @@ function saveHouseholds(data: Record<string, HouseholdData>) {
   }
 }
 
+function getOrCreateHousehold(cleanId: string): { store: Record<string, HouseholdData>; household: HouseholdData } {
+  const store = loadHouseholds();
+  let household = store[cleanId];
+  if (!household) {
+    household = {
+      id: cleanId,
+      name: 'Minha Casa',
+      code: cleanId.toUpperCase(),
+      bills: [],
+      revenues: [],
+      devices: [],
+      profiles: [],
+      notifications: [],
+      lastUpdated: new Date().toISOString(),
+      deletedBillIds: [],
+      deletedRevenueIds: [],
+    };
+    store[cleanId] = household;
+  }
+  return { store, household };
+}
+
 function normalizeBillTitleServer(name: string): string {
   return (name || '')
     .normalize('NFD')
@@ -308,60 +330,34 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
 
     if (map.has(key)) {
       const existing = map.get(key);
-      let keepIncoming = false;
+      const isEitherPaid = b.status === 'paid' || existing.status === 'paid';
+      const bVer = b.version || 1;
+      const eVer = existing.version || 1;
+      const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
+      const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
 
-      const isMigratedB = b.id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente'));
-      const isMigratedE = existing.id.startsWith('bill-migrated-') || (existing.notes && existing.notes.includes('Transferido automaticamente'));
+      // Determine which version has more recent edits
+      const preferred = (bVer > eVer || (bVer === eVer && bTime >= eTime)) ? b : existing;
+      const secondary = preferred === b ? existing : b;
 
-      if (isMigratedB && !isMigratedE) {
-        keepIncoming = false;
-      } else if (!isMigratedB && isMigratedE) {
-        keepIncoming = true;
-      } else if (b.receiptUrl && !existing.receiptUrl) {
-        keepIncoming = true;
-      } else if (existing.receiptUrl && !b.receiptUrl) {
-        keepIncoming = false;
-      } else if (b.isProjected && !existing.isProjected) {
-        keepIncoming = false;
-      } else if (!b.isProjected && existing.isProjected) {
-        keepIncoming = true;
-      } else if (b.id.startsWith('bill-rec-') && !existing.id.startsWith('bill-rec-')) {
-        keepIncoming = false;
-      } else if (!b.id.startsWith('bill-rec-') && existing.id.startsWith('bill-rec-')) {
-        keepIncoming = true;
-      } else if ((b.amount || 0) > 0 && (existing.amount || 0) === 0) {
-        keepIncoming = true;
-      } else if ((existing.amount || 0) > 0 && (b.amount || 0) === 0) {
-        keepIncoming = false;
-      } else {
-        const bVer = b.version || 1;
-        const eVer = existing.version || 1;
-        const bTime = new Date(b.updatedAt || b.lastEditedAt || b.paidAt || 0).getTime();
-        const eTime = new Date(existing.updatedAt || existing.lastEditedAt || existing.paidAt || 0).getTime();
-        if (bVer > eVer) {
-          keepIncoming = true;
-        } else if (eVer > bVer) {
-          keepIncoming = false;
-        } else if (bTime > eTime) {
-          keepIncoming = true;
-        } else if (eTime > bTime) {
-          keepIncoming = false;
-        } else {
-          // If identical version and time, preserve paid status if either is paid
-          if (b.status === 'paid' && existing.status !== 'paid') {
-            keepIncoming = true;
-          }
-        }
-      }
+      const mergedBill: any = {
+        ...secondary,
+        ...preferred,
+        // Canonical ID: prioritize stable existing ID so other devices match
+        id: existing.id || b.id,
+        // CRITICAL: If either record was marked paid, the reconciled bill MUST remain paid!
+        status: isEitherPaid ? 'paid' : (preferred.status || 'pending'),
+        paidAt: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidAt : secondary.paidAt) || new Date().toISOString() : undefined,
+        paidBy: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidBy : secondary.paidBy) : undefined,
+        receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
+        receiptName: preferred.receiptName || secondary.receiptName,
+        receiptSize: preferred.receiptSize || secondary.receiptSize,
+        version: Math.max(bVer, eVer),
+        updatedAt: new Date(Math.max(bTime, eTime, Date.now())).toISOString(),
+      };
 
-      if (keepIncoming) {
-        extraDeleted.push(existing.id);
-        deletedSet.add(existing.id);
-        map.set(key, b);
-      } else {
-        extraDeleted.push(b.id);
-        deletedSet.add(b.id);
-      }
+      map.set(key, mergedBill);
+      // NOTE: We do NOT push either ID into extraDeleted, preserving sync propagation for both devices!
     } else {
       map.set(key, b);
     }
@@ -631,6 +627,74 @@ async function startServer() {
             amount: msg.amount,
           });
           broadcastChangeNotification(houseId, notif);
+        } else if (msg.type === 'LIVE_STATUS_UPDATE') {
+          const houseId = (msg.householdId || clientState.householdId).trim().toLowerCase();
+          const { store, household } = getOrCreateHousehold(houseId);
+          const targetBillId = msg.billId;
+          const newStatus = msg.status; // 'paid' | 'pending'
+          const actor = msg.actor || msg.sourceUserName || clientState.userName || 'Morador';
+          const nowIso = new Date().toISOString();
+
+          // CRITICAL: Un-tombstone billId so status change propagates without being suppressed
+          if (household.deletedBillIds) {
+            household.deletedBillIds = household.deletedBillIds.filter((id: string) => id !== targetBillId);
+          }
+
+          let updatedBillRecord: any = null;
+          if (Array.isArray(household.bills)) {
+            const idx = household.bills.findIndex((b: any) => b && (b.id === targetBillId || (msg.canonicalKey && b.id.includes(msg.canonicalKey))));
+            if (idx !== -1) {
+              const cur = household.bills[idx];
+              const isPaid = newStatus === 'paid';
+              updatedBillRecord = {
+                ...cur,
+                status: newStatus,
+                paidAt: isPaid ? (msg.paidAt || nowIso) : undefined,
+                paidBy: isPaid ? (msg.paidBy || actor) : undefined,
+                lastEditedAt: nowIso,
+                lastEditedBy: actor,
+                lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+                version: Math.max((cur.version || 1) + 1, (msg.version || 1)),
+                updatedAt: nowIso,
+                isEdited: true,
+              };
+              household.bills[idx] = updatedBillRecord;
+            } else if (msg.bill) {
+              updatedBillRecord = msg.bill;
+              household.bills.unshift(updatedBillRecord);
+            }
+          }
+
+          if (updatedBillRecord) {
+            household.lastUpdated = nowIso;
+            store[houseId] = household;
+            saveHouseholds(store);
+
+            const notif = recordChangeNotification(houseId, {
+              sourceDeviceId: clientState.deviceId,
+              sourceDeviceName: clientState.deviceName,
+              sourceUserName: actor,
+              actionType: newStatus === 'paid' ? 'bill_paid' : 'bill_pending',
+              title: newStatus === 'paid' ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄',
+              message: `${actor} marcou "${updatedBillRecord.name || msg.billName || 'a conta'}" como ${newStatus === 'paid' ? 'PAGA' : 'Pendente'}`,
+              targetItemName: updatedBillRecord.name || msg.billName,
+              amount: updatedBillRecord.amount || msg.amount,
+            });
+            broadcastChangeNotification(houseId, notif);
+
+            // Broadcast updated data to all devices in the household
+            broadcastHouseholdDataSync(houseId, household, clientState.deviceId);
+
+            try {
+              ws.send(JSON.stringify({
+                type: 'STATUS_UPDATE_ACK',
+                billId: targetBillId,
+                status: newStatus,
+                version: updatedBillRecord.version,
+                timestamp: nowIso,
+              }));
+            } catch {}
+          }
         }
       } catch (err) {
         console.error('WS message error:', err);
@@ -818,11 +882,19 @@ async function startServer() {
       );
     }
 
-    // Merge Bills (Take incoming or higher version/updatedAt)
+    // Merge Bills (Take incoming or higher version/updatedAt, with payment preservation)
     if (Array.isArray(bills) && bills.length > 0) {
+      // CRITICAL: Un-tombstone any bill actively present in the sync payload so payments & edits are never dropped!
+      const incomingBillIds = new Set(bills.map((b: any) => b && b.id).filter(Boolean));
+      if (household.deletedBillIds) {
+        household.deletedBillIds = household.deletedBillIds.filter((id: string) => !incomingBillIds.has(id));
+      }
+
       const billMap = new Map<string, any>();
       (household.bills || []).forEach((b: any) => {
-        if (b && b.id) billMap.set(b.id, b);
+        if (b && b.id && !household.deletedBillIds?.includes(b.id)) {
+          billMap.set(b.id, b);
+        }
       });
 
       bills.forEach((incoming: any) => {
@@ -837,9 +909,32 @@ async function startServer() {
           const incUpdated = new Date(incoming.updatedAt || incoming.lastEditedAt || incoming.paidAt || 0).getTime();
           const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
 
-          if (incVersion > curVersion || incUpdated >= curUpdated) {
-            billMap.set(incoming.id, incoming);
-          } else if (incoming.status === 'paid' && current.status !== 'paid') {
+          // CRITICAL: Status transition with payment preservation
+          if (incoming.status === 'paid' && current.status !== 'paid') {
+            billMap.set(incoming.id, {
+              ...current,
+              ...incoming,
+              status: 'paid',
+              paidAt: incoming.paidAt || new Date().toISOString(),
+              paidBy: incoming.paidBy || incoming.lastEditedBy || 'Cônjuge',
+              version: Math.max(incVersion, curVersion + 1),
+              updatedAt: new Date(Math.max(incUpdated, curUpdated, Date.now())).toISOString(),
+            });
+          } else if (current.status === 'paid' && incoming.status !== 'paid') {
+            // Did incoming explicitly reopen as pending with a strictly higher version and newer timestamp?
+            if (incVersion > curVersion && incUpdated > curUpdated) {
+              billMap.set(incoming.id, incoming);
+            } else {
+              // Preserve paid status so delayed/offline sync from other device does not revert spouse's payment
+              billMap.set(incoming.id, {
+                ...incoming,
+                status: 'paid',
+                paidAt: current.paidAt,
+                paidBy: current.paidBy,
+                version: Math.max(curVersion, incVersion),
+              });
+            }
+          } else if (incVersion > curVersion || incUpdated >= curUpdated) {
             billMap.set(incoming.id, incoming);
           }
         }
@@ -965,6 +1060,74 @@ async function startServer() {
     });
     broadcastChangeNotification(cleanId, notif);
     res.json({ success: true, notification: notif });
+  });
+
+  // Atomic payment status update endpoint with instant WebSocket broadcast
+  app.post('/api/household/:id/payment-status', (req, res) => {
+    const { id } = req.params;
+    const { billId, status, actor, deviceId, deviceName, paidAt, version, bill } = req.body;
+    if (!billId || !status) {
+      return res.status(400).json({ error: 'billId e status são obrigatórios' });
+    }
+    const cleanId = id.trim().toLowerCase();
+    const { store, household } = getOrCreateHousehold(cleanId);
+    const nowIso = new Date().toISOString();
+
+    // Un-tombstone billId
+    if (household.deletedBillIds) {
+      household.deletedBillIds = household.deletedBillIds.filter((bid: string) => bid !== billId);
+    }
+
+    let updatedBill: any = null;
+    if (Array.isArray(household.bills)) {
+      const idx = household.bills.findIndex((b: any) => b && b.id === billId);
+      if (idx !== -1) {
+        const cur = household.bills[idx];
+        const isPaid = status === 'paid';
+        updatedBill = {
+          ...cur,
+          status,
+          paidAt: isPaid ? (paidAt || nowIso) : undefined,
+          paidBy: isPaid ? (actor || 'Morador') : undefined,
+          lastEditedAt: nowIso,
+          lastEditedBy: actor || cur.lastEditedBy || 'Morador',
+          lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+          version: Math.max((cur.version || 1) + 1, (version || 1)),
+          updatedAt: nowIso,
+          isEdited: true,
+        };
+        household.bills[idx] = updatedBill;
+      } else if (bill) {
+        updatedBill = bill;
+        household.bills.unshift(updatedBill);
+      }
+    }
+
+    if (updatedBill) {
+      household.lastUpdated = nowIso;
+      store[cleanId] = household;
+      saveHouseholds(store);
+
+      // Record notification
+      const notif = recordChangeNotification(cleanId, {
+        sourceDeviceId: deviceId || 'unknown_dev',
+        sourceDeviceName: deviceName || 'Smartphone',
+        sourceUserName: actor || 'Morador',
+        actionType: status === 'paid' ? 'bill_paid' : 'bill_pending',
+        title: status === 'paid' ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄',
+        message: `${actor || 'Morador'} marcou "${updatedBill.name}" como ${status === 'paid' ? 'PAGA' : 'Pendente'}`,
+        targetItemName: updatedBill.name,
+        amount: updatedBill.amount,
+      });
+      broadcastChangeNotification(cleanId, notif);
+
+      // Broadcast full sync to all connected devices
+      broadcastHouseholdDataSync(cleanId, household, deviceId);
+
+      return res.json({ success: true, bill: updatedBill, household });
+    }
+
+    return res.status(404).json({ error: 'Conta não encontrada no servidor' });
   });
 
   // Get notifications for household

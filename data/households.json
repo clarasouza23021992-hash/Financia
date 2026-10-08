@@ -29,12 +29,12 @@
     ],
     "devices": [
       {
-        "id": "dev_1791497677477_2i8uy",
+        "id": "dev_1791498745211_wri5p",
         "name": "Carlos (iPhone)",
         "model": "iPhone (Tela de Início)",
         "owner": "Você",
         "lastActive": "Agora mesmo",
-        "connectedAt": "2026-10-08T22:21:19.869Z"
+        "connectedAt": "2026-10-08T22:46:37.415Z"
       },
       {
         "id": "dev_esposa_permanente",
@@ -47,9 +47,26 @@
       }
     ],
     "isWifeConnected": true,
-    "lastUpdated": "2026-10-08T22:21:19.869Z",
-    "deletedBillIds": [],
-    "deletedRevenueIds": []
+    "lastUpdated": "2026-10-08T22:46:38.376Z",
+    "deletedBillIds": [
+      "test-bill-1"
+    ],
+    "deletedRevenueIds": [],
+    "notifications": [
+      {
+        "id": "notif-1791499592140-c7a28",
+        "householdId": "casa-familia",
+        "sourceDeviceId": "unknown_dev",
+        "sourceDeviceName": "Paula (iPhone)",
+        "sourceUserName": "Paula",
+        "actionType": "bill_paid",
+        "title": "Conta Paga! ✅",
+        "message": "Paula marcou \"Teste Luz\" como PAGA",
+        "targetItemName": "Teste Luz",
+        "amount": 150,
+        "timestamp": "2026-10-08T22:46:32.140Z"
+      }
+    ]
   },
   "minha-casa": {
     "id": "minha-casa",

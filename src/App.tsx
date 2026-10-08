@@ -5,7 +5,7 @@ import {
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Images
+  Images, X
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -1020,27 +1020,33 @@ export default function App() {
         onToggleActiveUser={handleToggleActiveUser}
       />
 
-      {/* Intelligent Due Date Notification Toast Banner */}
+      {/* Intelligent Due Date & Alteration Notification Toast Banner */}
       {toastNotification && (
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-3 sm:px-4 mt-1 flex-shrink-0">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto px-3 sm:px-4 mt-1.5 flex-shrink-0 animate-in fade-in slide-in-from-top-2 duration-200">
           <div 
             onClick={() => setIsNotificationCenterOpen(true)}
-            className="cursor-pointer bg-slate-900 dark:bg-slate-800 text-white px-3.5 py-1.5 rounded-xl shadow-md border border-slate-700/80 flex items-center justify-between gap-2 animate-fade-in text-xs hover:bg-slate-800 transition-colors"
+            className="cursor-pointer bg-slate-900 dark:bg-slate-800 text-white px-3.5 py-2 rounded-2xl shadow-lg border border-slate-700/80 flex items-center justify-between gap-3 text-xs hover:bg-slate-800/95 transition-all"
           >
-            <div className="flex items-center gap-2 min-w-0">
-              <Bell className="w-4 h-4 text-[#FFD166] flex-shrink-0 animate-pulse" />
-              <span className="font-semibold truncate">{toastNotification}</span>
+            <div className="flex items-center gap-2.5 min-w-0 flex-1">
+              <div className="w-6 h-6 rounded-lg bg-amber-400/20 text-[#FFD166] flex items-center justify-center shrink-0">
+                <Bell className="w-3.5 h-3.5 animate-pulse" />
+              </div>
+              <span className="font-semibold text-slate-100 truncate">{toastNotification}</span>
             </div>
-            <div className="flex items-center gap-1.5 flex-shrink-0">
-              <span className="text-[10px] text-teal-400 font-bold hidden sm:inline">Ver lembretes</span>
+            <div className="flex items-center gap-2 flex-shrink-0">
+              <span className="text-[10px] text-teal-400 font-bold hidden sm:inline hover:underline">Ver detalhes</span>
               <button
+                type="button"
                 onClick={(e) => {
                   e.stopPropagation();
                   setToastNotification(null);
                 }}
-                className="text-slate-400 hover:text-white text-[11px] font-bold px-1.5 py-0.5"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-xl bg-white/20 hover:bg-white/30 text-white font-extrabold text-[11px] transition-all shrink-0 cursor-pointer shadow-2xs active:scale-95"
+                title="Fechar notificação"
+                aria-label="Fechar notificação"
               >
-                Dispensar
+                <X className="w-3.5 h-3.5 stroke-[2.5]" />
+                <span>Fechar</span>
               </button>
             </div>
           </div>

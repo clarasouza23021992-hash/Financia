@@ -41,6 +41,7 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
   const [filter, setFilter] = useState<'all' | 'changes' | 'urgent' | 'unread'>('all');
   const [permission, setPermission] = useState<NotificationPermission>(() => getNotificationPermission());
   const [testSent, setTestSent] = useState(false);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
 
   if (!isOpen) return null;
 
@@ -205,16 +206,38 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                 Ler todas
               </button>
             )}
-            {notifications.length > 0 && (
+            {notifications.length > 0 && !showClearConfirm && (
               <button
                 type="button"
-                onClick={onClearAll}
-                className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 px-2 py-1 flex items-center gap-1"
+                onClick={() => setShowClearConfirm(true)}
+                className="text-[11px] font-semibold text-rose-500 hover:text-rose-600 px-2 py-1 flex items-center gap-1 cursor-pointer"
                 title="Limpar histórico"
               >
                 <Trash2 className="w-3 h-3" />
                 <span>Limpar</span>
               </button>
+            )}
+            {showClearConfirm && (
+              <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/50 px-2 py-1 rounded-xl border border-rose-300 dark:border-rose-800 text-[11px]">
+                <span className="text-rose-700 dark:text-rose-300 font-bold">Apagar tudo?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClearAll();
+                    setShowClearConfirm(false);
+                  }}
+                  className="font-black text-rose-600 hover:text-rose-800 dark:text-rose-400 dark:hover:text-rose-200 underline cursor-pointer"
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowClearConfirm(false)}
+                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                >
+                  Não
+                </button>
+              </div>
             )}
           </div>
         </div>

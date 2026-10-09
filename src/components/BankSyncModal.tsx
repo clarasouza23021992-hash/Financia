@@ -61,6 +61,8 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
   const [copiedWebhook, setCopiedWebhook] = useState(false);
   const [testingWebhook, setTestingWebhook] = useState(false);
   const [webhookTestStatus, setWebhookTestStatus] = useState<string | null>(null);
+  const [deletingConnId, setDeletingConnId] = useState<string | null>(null);
+  const [showClearAllConfirm, setShowClearAllConfirm] = useState(false);
 
   // Sync state with open/props
   useEffect(() => {
@@ -125,19 +127,17 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
 
   const handleDeleteConnection = (id: string, e: React.MouseEvent) => {
     e.stopPropagation();
-    if (confirm('Deseja realmente remover esta conta/cartão?')) {
-      const updated = bankSync.deleteConnection(id);
-      setConnections(updated);
-      showNotification('Conexão removida com sucesso.');
-    }
+    const updated = bankSync.deleteConnection(id);
+    setConnections(updated);
+    setDeletingConnId(null);
+    showNotification('Conexão removida com sucesso.');
   };
 
   const handleClearAllMock = () => {
-    if (confirm('Deseja limpar todos os dados bancários cadastrados e começar do zero com suas contas e cartões reais?')) {
-      bankSync.clearAllConnections();
-      setConnections([]);
-      showNotification('Todas as conexões foram limpas.');
-    }
+    bankSync.clearAllConnections();
+    setConnections([]);
+    setShowClearAllConfirm(false);
+    showNotification('Todas as conexões foram limpas.');
   };
 
   // Launch purchase tab preselecting a card
@@ -784,13 +784,39 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
                             >
                               <Edit3 className="w-3.5 h-3.5" />
                             </button>
-                            <button
-                              onClick={(e) => handleDeleteConnection(conn.id, e)}
-                              className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 text-slate-600 dark:text-slate-400 transition-colors"
-                              title="Excluir cartão"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
+                            {deletingConnId === conn.id ? (
+                              <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 p-1 rounded-lg text-[10px] border border-rose-300 dark:border-rose-800">
+                                <span className="text-rose-700 dark:text-rose-300 font-bold">Apagar?</span>
+                                <button
+                                  type="button"
+                                  onClick={(e) => handleDeleteConnection(conn.id, e)}
+                                  className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                                >
+                                  Sim
+                                </button>
+                                <button
+                                  type="button"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setDeletingConnId(null);
+                                  }}
+                                  className="text-slate-500 cursor-pointer"
+                                >
+                                  Não
+                                </button>
+                              </div>
+                            ) : (
+                              <button
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  setDeletingConnId(conn.id);
+                                }}
+                                className="p-1.5 rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-rose-50 hover:text-rose-600 text-slate-600 dark:text-slate-400 transition-colors cursor-pointer"
+                                title="Excluir cartão"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            )}
                           </div>
                         </div>
 
@@ -884,14 +910,34 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
                     <span>{isSyncing ? 'Atualizando saldos e faturas...' : 'Sincronizar Todas as Contas Agora'}</span>
                   </button>
 
-                  {connections.length > 0 && (
+                  {connections.length > 0 && !showClearAllConfirm && (
                     <button
                       type="button"
-                      onClick={handleClearAllMock}
-                      className="text-[11px] text-slate-400 hover:text-rose-500 py-1 transition-colors self-center"
+                      onClick={() => setShowClearAllConfirm(true)}
+                      className="text-[11px] text-slate-400 hover:text-rose-500 py-1 transition-colors self-center cursor-pointer"
                     >
                       Remover todas as conexões cadastradas
                     </button>
+                  )}
+
+                  {connections.length > 0 && showClearAllConfirm && (
+                    <div className="flex items-center justify-center gap-2 bg-rose-50 dark:bg-rose-950/50 p-2 rounded-xl text-xs border border-rose-300 dark:border-rose-800">
+                      <span className="text-rose-700 dark:text-rose-300 font-bold">Remover todas as conexões?</span>
+                      <button
+                        type="button"
+                        onClick={handleClearAllMock}
+                        className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                      >
+                        Sim, Limpar Tudo
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => setShowClearAllConfirm(false)}
+                        className="text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                      >
+                        Cancelar
+                      </button>
+                    </div>
                   )}
                 </div>
               </>

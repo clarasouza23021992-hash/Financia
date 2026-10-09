@@ -193,7 +193,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
           {monthsList.map((month) => {
             const isSelected = month.id === selectedMonthId;
             const isMonthCurrent = month.id === '2026-11';
-            const count = bills.filter(b => getBillEffectiveMonth(b) === month.id).length;
+            const count = bills.filter(b => b && b.category !== 'Salário & Renda' && getBillEffectiveMonth(b) === month.id).length;
 
             return (
               <button

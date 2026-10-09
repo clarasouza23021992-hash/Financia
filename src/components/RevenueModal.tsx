@@ -402,10 +402,8 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
                   onDeleteRequest(initialRevenue);
                   onClose();
                 } else if (onDelete) {
-                  if (confirm(`Excluir a receita "${initialRevenue.name}"?`)) {
-                    onDelete(initialRevenue.id);
-                    onClose();
-                  }
+                  onDelete(initialRevenue.id);
+                  onClose();
                 }
               }}
               className="px-3 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl transition-colors active-press"

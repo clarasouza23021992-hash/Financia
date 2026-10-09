@@ -65,6 +65,7 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
 
   // Adding new goal
   const [isAddingGoal, setIsAddingGoal] = useState(false);
+  const [deletingGoalId, setDeletingGoalId] = useState<string | null>(null);
   const [newGoalName, setNewGoalName] = useState('');
   const [newGoalTarget, setNewGoalTarget] = useState('');
   const [newGoalCurrent, setNewGoalCurrent] = useState('');
@@ -130,6 +131,7 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
 
   const handleDeleteGoal = (id: string) => {
     setGoals((prev) => prev.filter((g) => g.id !== id));
+    setDeletingGoalId(null);
   };
 
   const handleAdjustGoalSavings = (goalId: string, isAdd: boolean) => {
@@ -502,14 +504,34 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
                         <span className={`text-xs font-extrabold ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
                           {percent}%
                         </span>
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteGoal(g.id)}
-                          className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors"
-                          title="Remover meta"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
+                        {deletingGoalId === g.id ? (
+                          <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 p-1 rounded-lg text-[10px] border border-rose-300 dark:border-rose-800">
+                            <span className="text-rose-700 dark:text-rose-300 font-bold">Apagar?</span>
+                            <button
+                              type="button"
+                              onClick={() => handleDeleteGoal(g.id)}
+                              className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                            >
+                              Sim
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setDeletingGoalId(null)}
+                              className="text-slate-500 cursor-pointer"
+                            >
+                              Não
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingGoalId(g.id)}
+                            className="w-7 h-7 flex items-center justify-center text-slate-400 hover:text-rose-500 transition-colors cursor-pointer"
+                            title="Remover meta com confirmação"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 

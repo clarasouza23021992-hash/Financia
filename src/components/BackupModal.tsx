@@ -49,6 +49,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [importedFileName, setImportedFileName] = useState<string>('');
   const [importMethod, setImportMethod] = useState<'file' | 'paste'>('file');
   const [pastedEmailText, setPastedEmailText] = useState<string>('');
+  const [confirmRestoreFilename, setConfirmRestoreFilename] = useState<string | null>(null);
 
   // Household stats
   const activeBills = cloudkit.getBills();
@@ -159,10 +160,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
   // Restore from Server Snapshot
   const handleRestoreServerItem = async (filename: string) => {
-    if (!window.confirm(`Deseja restaurar o backup "${filename}"? Esta ação atualizará as dívidas e receitas da casa.`)) {
-      return;
-    }
-
+    setConfirmRestoreFilename(null);
     setIsProcessing(true);
     setSuccessMsg(null);
     setErrorMsg(null);
@@ -568,14 +566,35 @@ export const BackupModal: React.FC<BackupModalProps> = ({
                             <Download className="w-3 h-3" />
                             <span>Baixar</span>
                           </a>
-                          <button
-                            type="button"
-                            onClick={() => handleRestoreServerItem(item.filename)}
-                            disabled={isProcessing}
-                            className="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-bold rounded-lg active-press transition-colors cursor-pointer"
-                          >
-                            Restaurar Este Ponto
-                          </button>
+                          {confirmRestoreFilename === item.filename ? (
+                            <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/50 p-1 rounded-xl text-[11px] border border-amber-300 dark:border-amber-800">
+                              <span className="text-amber-800 dark:text-amber-200 font-bold">Restaurar?</span>
+                              <button
+                                type="button"
+                                onClick={() => handleRestoreServerItem(item.filename)}
+                                disabled={isProcessing}
+                                className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                              >
+                                Sim
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => setConfirmRestoreFilename(null)}
+                                className="text-slate-600 dark:text-slate-400 cursor-pointer"
+                              >
+                                Não
+                              </button>
+                            </div>
+                          ) : (
+                            <button
+                              type="button"
+                              onClick={() => setConfirmRestoreFilename(item.filename)}
+                              disabled={isProcessing}
+                              className="px-3 py-1 bg-teal-600 hover:bg-teal-500 text-white text-[11px] font-bold rounded-lg active-press transition-colors cursor-pointer"
+                            >
+                              Restaurar Este Ponto
+                            </button>
+                          )}
                         </div>
                       </div>
                     );

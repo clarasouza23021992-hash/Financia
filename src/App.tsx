@@ -45,6 +45,7 @@ import { BudgetGoalsModal } from './components/BudgetGoalsModal';
 import { CategoriesManagerModal } from './components/CategoriesManagerModal';
 import { BackupModal } from './components/BackupModal';
 import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
+import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -526,6 +527,13 @@ export default function App() {
     return () => clearInterval(timer);
   }, [bills, notifications]);
 
+  // Action Feedback Toast state (confirmação visual de Salvo, Editado, Excluído)
+  const [actionToast, setActionToast] = useState<ActionToastData | null>(null);
+
+  const showActionToast = useCallback((toast: ActionToastData) => {
+    setActionToast(toast);
+  }, []);
+
   const showTemporaryToast = (msg: string) => {
     setToastNotification(msg);
     setTimeout(() => {
@@ -581,8 +589,8 @@ export default function App() {
     return devices.find(d => d.id === activeDeviceId) || devices[0];
   }, [devices, activeDeviceId]);
 
-  // Month-aware Bills: returns actual saved bills for the selected month based on effective payment month
-  const currentMonthBills = useMemo(() => {
+  // All valid bills excluding mocks and salary items
+  const allValidBills = useMemo(() => {
     return bills
       .filter(b => !isMockBill(b))
       .filter(b => {
@@ -593,9 +601,13 @@ export default function App() {
         if (b.id && b.id.startsWith('bill-migrated-')) return false;
         if (b.notes && b.notes.includes('Transferido automaticamente para Dívidas')) return false;
         return true;
-      })
-      .filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
-  }, [bills, selectedMonth.id]);
+      });
+  }, [bills]);
+
+  // Month-aware Bills: returns actual saved bills for the selected month based on effective payment month
+  const currentMonthBills = useMemo(() => {
+    return allValidBills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+  }, [allValidBills, selectedMonth.id]);
 
   // Month-aware Revenues: returns actual saved revenues for the selected month
   const currentMonthRevenues = useMemo(() => {
@@ -659,11 +671,14 @@ export default function App() {
 
   // Handler to clear fictitious demo bills so user sees only real data
   const handleClearMockBills = () => {
-    if (confirm('Deseja remover as contas de demonstração e manter apenas os seus lançamentos reais?')) {
-      const remaining = cloudkit.clearMockBills();
-      setBills(remaining);
-      showTemporaryToast('Contas de exemplo removidas. Apenas seus lançamentos reais permanecem salvos!');
-    }
+    const remaining = cloudkit.clearMockBills();
+    setBills(remaining);
+    showActionToast({
+      id: `clear-mock-${Date.now()}`,
+      type: 'delete',
+      title: 'Contas de Exemplo Removidas! 🗑️',
+      message: 'Apenas os seus lançamentos e dívidas reais permanecem salvos no aplicativo.',
+    });
   };
 
   // Handler to deep scan and restore lost or hidden debts across all local storage, safety vault and server
@@ -889,6 +904,12 @@ export default function App() {
     const targetLabel = monthNames[billMonth] || billMonth;
 
     if (finalBillData.recurrence === 'Parcelada' && installmentConfig && installmentConfig.totalInstallments > 1) {
+      showActionToast({
+        id: `save-bill-${Date.now()}`,
+        type: 'save',
+        title: 'Dívida Parcelada Salva! 💾',
+        message: `A despesa "${finalBillData.name}" foi dividida em ${installmentConfig.totalInstallments} parcelas e salva com sucesso!`,
+      });
       showTemporaryToast(`✅ Dívida parcelada em ${installmentConfig.totalInstallments}x salva e lançada nos próximos meses!`);
     } else if (billMonth && billMonth !== selectedMonth.id) {
       const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === billMonth) || {
@@ -897,9 +918,29 @@ export default function App() {
         shortLabel: billMonth,
       };
       setSelectedMonth(targetMonthOption);
+      showActionToast({
+        id: `save-bill-${Date.now()}`,
+        type: finalBillData.isEdited ? 'edit' : 'save',
+        title: finalBillData.isEdited ? 'Conta Editada com Sucesso! ✏️' : 'Conta Salva com Sucesso! 💾',
+        message: `A despesa "${finalBillData.name}" foi salva com vencimento em ${targetLabel}.`,
+      });
       showTemporaryToast(`✅ Conta salva com vencimento em ${targetLabel}!`);
+    } else if (finalBillData.isEdited || targetId) {
+      showActionToast({
+        id: `edit-bill-${Date.now()}`,
+        type: 'edit',
+        title: 'Conta Editada com Sucesso! ✏️',
+        message: `As alterações da conta "${finalBillData.name}" foram salvas por ${activeUserName}.`,
+      });
+      showTemporaryToast(`Conta atualizada por ${activeUserName}!`);
     } else {
-      showTemporaryToast(targetId ? `Conta atualizada por ${activeUserName}!` : `Nova conta cadastrada por ${activeUserName}!`);
+      showActionToast({
+        id: `save-bill-${Date.now()}`,
+        type: 'save',
+        title: 'Conta Salva com Sucesso! 💾',
+        message: `A nova conta "${finalBillData.name}" foi cadastrada com sucesso por ${activeUserName}!`,
+      });
+      showTemporaryToast(`Nova conta cadastrada por ${activeUserName}!`);
     }
   };
 
@@ -937,6 +978,13 @@ export default function App() {
     };
     setSelectedMonth(targetMonthOption);
 
+    showActionToast({
+      id: `move-bill-${Date.now()}`,
+      type: 'edit',
+      title: 'Conta Reagendada com Sucesso! 🗓️',
+      message: `A despesa "${bill.name}" foi reagendada para ${targetLabel}.`,
+    });
+
     const formattedDueDate = bill.dueDate ? bill.dueDate.split('-').reverse().join('/') : '';
     if (isReturningToDueMonth) {
       showTemporaryToast(`✅ Conta "${bill.name}" restaurada para pagar no mês de vencimento (${targetLabel})!`);
@@ -961,6 +1009,12 @@ export default function App() {
     cloudkit.deleteBill(bill.id, bill, selectedMonth.id);
     setBills(cloudkit.getBills());
     setBillToDelete(null);
+    showActionToast({
+      id: `delete-bill-${Date.now()}`,
+      type: 'delete',
+      title: 'Conta Excluída com Sucesso! 🗑️',
+      message: `A dívida "${bill.name}" foi apagada de ${selectedMonth.label}.`,
+    });
     showTemporaryToast(`Conta "${bill.name}" excluída de ${selectedMonth.label}.`);
   };
 
@@ -968,6 +1022,12 @@ export default function App() {
     const deletedIds = cloudkit.deleteBillSeries(bill);
     setBills(cloudkit.getBills());
     setBillToDelete(null);
+    showActionToast({
+      id: `delete-bill-series-${Date.now()}`,
+      type: 'delete',
+      title: 'Conta Excluída de Todos os Meses! 🗑️',
+      message: `A dívida "${bill.name}" foi removida de todos os meses (${deletedIds.length} ocorrências)!`,
+    });
     showTemporaryToast(`🗑️ Dívida "${bill.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
@@ -977,6 +1037,21 @@ export default function App() {
     cloudkit.toggleBillStatus(bill.id, newStatus, actor);
     setBills(cloudkit.getBills());
     const actorLabel = newStatus === 'paid' ? ` por ${actor}` : '';
+    if (newStatus === 'paid') {
+      showActionToast({
+        id: `paid-bill-${Date.now()}`,
+        type: 'save',
+        title: 'Conta Marcada como Paga! ✅',
+        message: `A despesa "${bill.name}" foi confirmada como PAGA por ${actor}.`,
+      });
+    } else {
+      showActionToast({
+        id: `pending-bill-${Date.now()}`,
+        type: 'edit',
+        title: 'Status Alterado para Pendente 🔄',
+        message: `A conta "${bill.name}" retornou para pendente.`,
+      });
+    }
     showTemporaryToast(newStatus === 'paid' ? `Conta "${bill.name}" marcada como Paga${actorLabel}! ✅` : 'Status revertido para Pendente.');
   };
 
@@ -992,6 +1067,12 @@ export default function App() {
     };
     cloudkit.saveBill(updated);
     setBills(cloudkit.getBills());
+    showActionToast({
+      id: `actor-reassign-${Date.now()}`,
+      type: 'edit',
+      title: 'Autor Atualizado com Sucesso! 👤',
+      message: `Alteração na conta "${bill.name}" atribuída a ${cleanActor}.`,
+    });
     showTemporaryToast(`✅ Alteração da dívida "${bill.name}" atribuída a ${cleanActor}!`);
     cloudkit.notifyRemoteChange(
       'bill_updated',
@@ -1004,8 +1085,24 @@ export default function App() {
 
   // Handlers for Revenue operations
   const handleSaveRevenue = (revData: Partial<Revenue> & { name: string; amount: number; date: string; category: string; profileName?: string; applyToFutureMonths?: boolean }) => {
+    const isEdit = Boolean(editingRevenue && editingRevenue.id === revData.id);
     cloudkit.saveRevenue(revData as any);
     setRevenues(cloudkit.getRevenues());
+    if (isEdit) {
+      showActionToast({
+        id: `edit-rev-${Date.now()}`,
+        type: 'edit',
+        title: 'Receita Editada com Sucesso! ✏️',
+        message: `As alterações da receita "${revData.name}" foram salvas com sucesso.`,
+      });
+    } else {
+      showActionToast({
+        id: `save-rev-${Date.now()}`,
+        type: 'save',
+        title: 'Receita Salva com Sucesso! 💾',
+        message: `A receita "${revData.name}" foi cadastrada com sucesso!`,
+      });
+    }
     showTemporaryToast(`Receita "${revData.name}" salva com sucesso!`);
   };
 
@@ -1013,6 +1110,12 @@ export default function App() {
     cloudkit.deleteRevenue(rev.id);
     setRevenues(cloudkit.getRevenues());
     setRevenueToDelete(null);
+    showActionToast({
+      id: `delete-rev-${Date.now()}`,
+      type: 'delete',
+      title: 'Receita Excluída com Sucesso! 🗑️',
+      message: `A receita "${rev.name}" foi removida deste mês.`,
+    });
     showTemporaryToast(`🗑️ Receita "${rev.name}" removida deste mês.`);
   };
 
@@ -1020,6 +1123,12 @@ export default function App() {
     const deletedIds = cloudkit.deleteRevenueSeries(rev);
     setRevenues(cloudkit.getRevenues());
     setRevenueToDelete(null);
+    showActionToast({
+      id: `delete-rev-series-${Date.now()}`,
+      type: 'delete',
+      title: 'Receita Excluída de Todos os Meses! 🗑️',
+      message: `A receita "${rev.name}" foi removida de todos os meses (${deletedIds.length} ocorrências)!`,
+    });
     showTemporaryToast(`🗑️ Receita "${rev.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
@@ -1238,7 +1347,7 @@ export default function App() {
                 const updated = cloudkit.autoPropagateRecurringBills([month.id]);
                 setBills(updated);
               }}
-              bills={bills}
+              bills={allValidBills}
             />
 
             {/* Quick Pull / Manual Refresh Toolbar Bar */}
@@ -1756,6 +1865,9 @@ export default function App() {
           setEditingBill(null);
         }}
         onSave={handleSaveBill}
+        onDeleteRequest={(bill) => {
+          setBillToDelete(bill);
+        }}
         initialBill={editingBill}
         defaultMonth={selectedMonth.id}
         onOpenManageCategories={() => setIsCategoriesModalOpen(true)}
@@ -1957,6 +2069,12 @@ export default function App() {
           setQuickActionsOrder(newOrder);
           showTemporaryToast('✨ Nova ordem dos botões salva!');
         }}
+      />
+
+      {/* Visual Feedback Confirmation Toast (Salvo, Editado, Excluído) */}
+      <ActionFeedbackToast
+        toast={actionToast}
+        onDismiss={() => setActionToast(null)}
       />
     </div>
   );

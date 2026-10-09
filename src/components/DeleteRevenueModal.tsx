@@ -31,22 +31,23 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
         {/* Header */}
         <div className="bg-rose-600 text-white px-5 py-4 flex items-center justify-between">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-white/20 flex items-center justify-center text-white">
-              <Trash2 className="w-4 h-4" />
+            <div className="w-9 h-9 rounded-xl bg-white/20 flex items-center justify-center text-white flex-shrink-0">
+              <Trash2 className="w-5 h-5" />
             </div>
             <div>
-              <h2 className="text-sm font-bold tracking-tight">
-                Excluir Receita
+              <h2 className="text-sm font-black tracking-tight">
+                Confirmar Exclusão da Receita
               </h2>
-              <p className="text-[11px] text-rose-100">
-                Selecione o escopo da exclusão
+              <p className="text-[11px] text-rose-100 font-medium">
+                Você tem certeza de que deseja apagar este lançamento?
               </p>
             </div>
           </div>
           <button
             type="button"
             onClick={onClose}
-            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-rose-100 hover:text-white transition-colors"
+            className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-rose-100 hover:text-white transition-colors cursor-pointer"
+            aria-label="Fechar modal"
           >
             <X className="w-4 h-4" />
           </button>
@@ -76,6 +77,10 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
                 Data: {revenue.date.split('-').reverse().join('/')}
               </div>
             </div>
+          </div>
+
+          <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 rounded-2xl text-xs text-amber-900 dark:text-amber-200 leading-relaxed">
+            ⚠️ <strong>Atenção:</strong> Deseja realmente excluir a receita <strong>"{revenue.name}"</strong>? Esta ação removerá o valor do seu cálculo financeiro.
           </div>
 
           {/* Opções de Exclusão */}
@@ -138,9 +143,9 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
             <button
               type="button"
               onClick={onClose}
-              className="px-4 py-2 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active-press"
+              className="px-4 py-2 text-xs font-bold text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white active-press rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors cursor-pointer"
             >
-              Cancelar
+              Cancelar e Manter Receita
             </button>
           </div>
         </div>

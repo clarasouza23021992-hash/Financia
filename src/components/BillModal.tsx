@@ -25,6 +25,7 @@ interface BillModalProps {
   defaultMonth?: string;
   onOpenManageCategories?: () => void;
   existingBills?: Bill[];
+  onDeleteRequest?: (bill: Bill) => void;
 }
 
 const PIX_TYPES: PixKeyType[] = ['CNPJ', 'CPF', 'Celular', 'E-mail', 'Pix Copia e Cola', 'Aleatória'];
@@ -177,6 +178,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   isOpen,
   onClose,
   onSave,
+  onDeleteRequest,
   initialBill,
   defaultMonth,
   onOpenManageCategories,
@@ -2017,10 +2019,25 @@ export const BillModal: React.FC<BillModalProps> = ({
             </div>
 
             <div className="flex items-center gap-2 flex-shrink-0">
+              {initialBill && onDeleteRequest && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onDeleteRequest(initialBill);
+                    onClose();
+                  }}
+                  className="px-3.5 py-2 text-xs font-bold text-rose-600 hover:text-rose-700 dark:text-rose-400 dark:hover:text-rose-300 hover:bg-rose-50 dark:hover:bg-rose-950/40 rounded-xl flex items-center gap-1.5 transition-colors cursor-pointer active-press border border-rose-200 dark:border-rose-900/60"
+                  title="Excluir esta conta com confirmação"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  <span className="hidden sm:inline">Excluir Conta</span>
+                  <span className="sm:hidden">Excluir</span>
+                </button>
+              )}
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press rounded-xl"
+                className="px-4 py-2.5 text-xs font-semibold text-slate-600 dark:text-slate-400 hover:text-slate-900 active-press rounded-xl cursor-pointer"
               >
                 Cancelar
               </button>

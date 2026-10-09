@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
   X, Tag, Plus, Edit2, Trash2, Check, RefreshCw, 
   Sparkles, AlertCircle, ArrowRight, ShieldAlert,
@@ -44,6 +44,8 @@ export const CategoriesManagerModal: React.FC<CategoriesManagerModalProps> = ({
 
   // Delete Confirmation State
   const [deletingCategory, setDeletingCategory] = useState<CustomCategory | null>(null);
+  const [showResetConfirm, setShowResetConfirm] = useState(false);
+  const feedbackTimeoutRef = useRef<any>(null);
   const [feedbackMsg, setFeedbackMsg] = useState<{ text: string; type: 'success' | 'error' | 'info' } | null>(null);
 
   // Sync with storage on open
@@ -53,6 +55,7 @@ export const CategoriesManagerModal: React.FC<CategoriesManagerModalProps> = ({
       setIsEditing(false);
       setEditingId(null);
       setDeletingCategory(null);
+      setShowResetConfirm(false);
       setSearch('');
     }
   }, [isOpen]);
@@ -192,12 +195,11 @@ export const CategoriesManagerModal: React.FC<CategoriesManagerModalProps> = ({
   };
 
   const handleResetDefaults = () => {
-    if (confirm('Deseja restaurar a lista de categorias padrão do aplicativo? Suas categorias personalizadas serão reiniciadas.')) {
-      const defaults = resetToDefaultCategories();
-      setCategories(defaults);
-      if (onCategoriesUpdated) onCategoriesUpdated(defaults);
-      showFeedback('Categorias restauradas para os padrões de fábrica.', 'info');
-    }
+    const defaults = resetToDefaultCategories();
+    setCategories(defaults);
+    if (onCategoriesUpdated) onCategoriesUpdated(defaults);
+    showFeedback('Categorias restauradas para os padrões de fábrica.', 'info');
+    setShowResetConfirm(false);
   };
 
   // Filter categories by search
@@ -278,15 +280,35 @@ export const CategoriesManagerModal: React.FC<CategoriesManagerModalProps> = ({
           </div>
 
           <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-            <button
-              type="button"
-              onClick={handleResetDefaults}
-              className="px-2.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-semibold flex items-center gap-1"
-              title="Restaurar lista original de categorias"
-            >
-              <RefreshCw className="w-3 h-3" />
-              <span>Padrões</span>
-            </button>
+            {!showResetConfirm ? (
+              <button
+                type="button"
+                onClick={() => setShowResetConfirm(true)}
+                className="px-2.5 py-1.5 text-xs text-slate-500 dark:text-slate-400 hover:text-slate-700 dark:hover:text-slate-200 font-semibold flex items-center gap-1 cursor-pointer"
+                title="Restaurar lista original de categorias"
+              >
+                <RefreshCw className="w-3 h-3" />
+                <span>Padrões</span>
+              </button>
+            ) : (
+              <div className="flex items-center gap-1.5 bg-amber-50 dark:bg-amber-950/50 px-2 py-1 rounded-xl border border-amber-300 dark:border-amber-800 text-[11px]">
+                <span className="text-amber-800 dark:text-amber-200 font-bold">Restaurar padrões?</span>
+                <button
+                  type="button"
+                  onClick={handleResetDefaults}
+                  className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setShowResetConfirm(false)}
+                  className="text-slate-500 hover:text-slate-700 dark:text-slate-400 cursor-pointer"
+                >
+                  Não
+                </button>
+              </div>
+            )}
 
             {!isEditing && (
               <button

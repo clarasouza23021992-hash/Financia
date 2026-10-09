@@ -27,6 +27,7 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [showDisconnectConfirm, setShowDisconnectConfirm] = useState(false);
 
   const wifeShareUrl = typeof window !== 'undefined' ? cloudkit.getWifeShareLink() : '';
   const householdCode = cloudkit.getHouseholdCode();
@@ -139,18 +140,36 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
                   </p>
                 </div>
               </div>
-              {onDisconnectWife && (
+              {onDisconnectWife && !showDisconnectConfirm && (
                 <button
                   type="button"
-                  onClick={() => {
-                    if (window.confirm('Deseja realmente desconectar o celular da esposa?')) {
-                      onDisconnectWife(wifeDevice.id);
-                    }
-                  }}
-                  className="px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-100 dark:bg-rose-950/60 rounded-lg"
+                  onClick={() => setShowDisconnectConfirm(true)}
+                  className="px-2.5 py-1 text-[11px] font-bold text-rose-600 hover:text-rose-700 bg-rose-100 dark:bg-rose-950/60 rounded-lg cursor-pointer"
                 >
                   Desconectar
                 </button>
+              )}
+              {onDisconnectWife && showDisconnectConfirm && (
+                <div className="flex items-center gap-1.5 bg-rose-100 dark:bg-rose-950/70 p-1.5 rounded-xl text-[11px]">
+                  <span className="text-rose-900 dark:text-rose-200 font-bold">Desconectar?</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onDisconnectWife(wifeDevice.id);
+                      setShowDisconnectConfirm(false);
+                    }}
+                    className="font-black text-rose-600 dark:text-rose-400 underline cursor-pointer"
+                  >
+                    Sim
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowDisconnectConfirm(false)}
+                    className="text-slate-600 dark:text-slate-300 cursor-pointer"
+                  >
+                    Não
+                  </button>
+                </div>
               )}
             </div>
           ) : (

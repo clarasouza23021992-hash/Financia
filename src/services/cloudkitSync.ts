@@ -90,16 +90,9 @@ export function isMockBill(b: Partial<Bill>): boolean {
   ) {
     return true;
   }
-  // Only exact unedited preset IDs without any user action are mock seeds
-  if (
-    !b.paidAt && !b.receiptUrl && !b.isEdited &&
-    (id === 'bill-condominio' || id === 'bill-luz' || id === 'bill-gas' || id === 'bill-internet' || id === 'bill-financiamento' || id === 'bill-mercado' || id === 'bill-saude')
-  ) {
-    return true;
-  }
   if (b.category === 'Salário & Renda') return true;
   const lowerName = String(b.name || '').toLowerCase();
-  if (lowerName === 'meu salário' || lowerName === 'salário esposa' || lowerName === 'salario') return true;
+  if (lowerName === 'meu salário' || lowerName === 'salário esposa') return true;
   return false;
 }
 

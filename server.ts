@@ -79,34 +79,36 @@ if (!fs.existsSync(BACKUPS_DIR)) {
 // Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
 function isMockBillServer(b: any): boolean {
   if (!b) return true;
+  // CRITICAL: Any bill edited by user, paid, with receipt, or user-created is NEVER a mock bill!
+  if (
+    b.isEdited === true ||
+    Boolean(b.lastEditedAt) ||
+    Boolean(b.paidAt) ||
+    Boolean(b.receiptUrl) ||
+    b.isRealUserDebt === true ||
+    b.isCustomized === true
+  ) {
+    return false;
+  }
   if (b.isMockSeed === true || b.isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
   if (
-    id.startsWith('bill-condo-') ||
-    id.startsWith('bill-luz-') ||
-    id.startsWith('bill-gas-') ||
-    id.startsWith('bill-preset-') ||
-    id.startsWith('bill-streaming-') ||
     id.startsWith('bill-mock-') ||
     id.startsWith('bill-sample-') ||
-    id === 'bill-gas-pago' ||
-    id === 'bill-condominio' ||
-    id === 'bill-luz' ||
-    id === 'bill-gas' ||
-    id === 'bill-internet' ||
-    id === 'bill-financiamento' ||
-    id === 'bill-mercado' ||
-    id === 'bill-saude'
+    id === 'bill-gas-pago'
   ) {
     return true;
   }
-  // Remove any bills migrated from revenue and salary items so salaries never count towards debts!
-  if (id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'))) {
+  // Only exact unedited preset IDs without any user action are mock seeds
+  if (
+    !b.paidAt && !b.receiptUrl && !b.isEdited &&
+    (id === 'bill-condominio' || id === 'bill-luz' || id === 'bill-gas' || id === 'bill-internet' || id === 'bill-financiamento' || id === 'bill-mercado' || id === 'bill-saude')
+  ) {
     return true;
   }
   if (b.category === 'Salário & Renda') return true;
   const lowerName = String(b.name || '').toLowerCase();
-  if (lowerName.includes('salário') || lowerName.includes('salario')) return true;
+  if (lowerName === 'meu salário' || lowerName === 'salário esposa' || lowerName === 'salario') return true;
   return false;
 }
 

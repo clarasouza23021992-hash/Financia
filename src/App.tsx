@@ -5,7 +5,7 @@ import {
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Images, X
+  Images, X, RotateCcw
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -76,14 +76,36 @@ export default function App() {
   const [selectedMonth, setSelectedMonth] = useState<MonthOption>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('financas_selected_month_id');
-      // If user had previously stuck on 2026-10, migrate them to 2026-11 as requested
-      if (saved && saved !== '2026-10') {
+      if (saved) {
         const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === saved);
         if (found) return found;
       }
+      // If no saved month, check which month has real bills!
+      try {
+        const currentBills = cloudkit.getBills();
+        if (currentBills.length > 0) {
+          const monthCounts = new Map<string, number>();
+          currentBills.forEach(b => {
+            const m = getBillEffectiveMonth(b);
+            if (m) monthCounts.set(m, (monthCounts.get(m) || 0) + 1);
+          });
+          let bestMonth = '';
+          let maxCount = 0;
+          monthCounts.forEach((count, m) => {
+            if (count > maxCount) {
+              maxCount = count;
+              bestMonth = m;
+            }
+          });
+          if (bestMonth) {
+            const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === bestMonth);
+            if (found) return found;
+          }
+        }
+      } catch {}
     }
-    // Default to November 2026 (current month requested and synchronized with calendar)
-    return INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === '2026-11') || {
+    // Default to November 2026 or October 2026
+    return INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === '2026-11') || INITIAL_SUBSEQUENT_MONTHS[2] || {
       id: '2026-11',
       label: 'Novembro de 2026',
       shortLabel: 'Nov 2026',
@@ -222,24 +244,38 @@ export default function App() {
     { id: 'notif-4', title: 'Notificar quando o cônjuge/morador anexar comprovante', daysBeforeDue: 0, enabled: true },
   ]);
 
-  // Automatic check to ensure bills & revenues are safe and thoroughly deduplicated
+  // Automatic check to ensure bills & revenues are safe, recurring debts propagated, and real data visible
   useEffect(() => {
-    // Ensure app opens on current month (Novembro 2026) synchronized with calendar
     const savedMonth = localStorage.getItem('financas_selected_month_id');
-    if (!savedMonth || savedMonth === '2026-10') {
-      localStorage.setItem('financas_selected_month_id', '2026-11');
-      const nov = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === '2026-11');
-      if (nov && selectedMonth.id !== '2026-11') {
-        setSelectedMonth(nov);
+    if (savedMonth) {
+      const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === savedMonth);
+      if (found && found.id !== selectedMonth.id) {
+        setSelectedMonth(found);
       }
     }
 
     cloudkit.cleanupAndDeduplicateAllBills();
     cloudkit.ensureDefaultDataIfEmpty();
+    cloudkit.autoPropagateRecurringBills();
     const updatedBills = cloudkit.getBills();
     const updatedRevs = cloudkit.getRevenues();
     setBills(updatedBills);
     setRevenues(updatedRevs);
+
+    // If current selected month has 0 bills, but user has bills in another month, auto-navigate to that month!
+    if (!savedMonth && updatedBills.length > 0) {
+      const inCurrent = updatedBills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+      if (inCurrent.length === 0) {
+        const otherM = getBillEffectiveMonth(updatedBills[0]) || (updatedBills[0].dueDate || '').substring(0, 7);
+        if (otherM) {
+          const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === otherM);
+          if (found) {
+            setSelectedMonth(found);
+            localStorage.setItem('financas_selected_month_id', found.id);
+          }
+        }
+      }
+    }
   }, []);
 
   // When selected month changes, refresh local state without re-generating duplicates
@@ -627,6 +663,61 @@ export default function App() {
       const remaining = cloudkit.clearMockBills();
       setBills(remaining);
       showTemporaryToast('Contas de exemplo removidas. Apenas seus lançamentos reais permanecem salvos!');
+    }
+  };
+
+  // Handler to deep scan and restore lost or hidden debts across all local storage, safety vault and server
+  const [isRecoveringData, setIsRecoveringData] = useState(false);
+  const handleRecoverLostData = async () => {
+    setIsRecoveringData(true);
+    try {
+      const res = await cloudkit.scanAndRecoverLostData();
+      const updatedBills = cloudkit.getBills();
+      const updatedRevs = cloudkit.getRevenues();
+      setBills(updatedBills);
+      setRevenues(updatedRevs);
+
+      if (res.billsRecovered > 0) {
+        // If current month has 0 bills, automatically switch to the month that has the recovered bills!
+        const inCur = updatedBills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+        if (inCur.length === 0 && res.foundOtherMonths.length > 0) {
+          const targetM = res.foundOtherMonths[0];
+          const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === targetM) || {
+            id: targetM,
+            label: getMonthNamePtBr(targetM),
+            shortLabel: targetM,
+          };
+          setSelectedMonth(found);
+          localStorage.setItem('financas_selected_month_id', found.id);
+        }
+        setStatusFilter('all');
+        setCategoryFilter('Todas');
+        setSearchQuery('');
+        showTemporaryToast(`✅ ${res.billsRecovered} dívida(s) real(is) recuperada(s) e restaurada(s) com sucesso!`);
+      } else if (updatedBills.length > 0) {
+        const inCur = updatedBills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+        if (inCur.length === 0) {
+          const firstM = getBillEffectiveMonth(updatedBills[0]) || (updatedBills[0].dueDate || '').substring(0, 7);
+          const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === firstM);
+          if (found) {
+            setSelectedMonth(found);
+            localStorage.setItem('financas_selected_month_id', found.id);
+            setStatusFilter('all');
+            showTemporaryToast(`Suas dívidas estão no mês de ${found.label}. Exibindo na tela!`);
+            return;
+          }
+        }
+        setStatusFilter('all');
+        setCategoryFilter('Todas');
+        setSearchQuery('');
+        showTemporaryToast(`✅ Todas as suas ${updatedBills.length} dívidas estão salvas e seguras!`);
+      } else {
+        showTemporaryToast('Nenhuma dívida antiga encontrada no histórico local ou na nuvem.');
+      }
+    } catch (err: any) {
+      showTemporaryToast('Erro ao recuperar dívidas: ' + (err?.message || 'Tente novamente'));
+    } finally {
+      setIsRecoveringData(false);
     }
   };
 
@@ -1451,64 +1542,110 @@ export default function App() {
             {/* List of Bill Cards */}
             <div className="px-4 py-2 space-y-3">
               {filteredBills.length === 0 ? (
-                <div className="bg-white dark:bg-[#131D38] p-6 sm:p-7 rounded-3xl text-center border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
-                  <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto">
-                    <FileText className="w-6 h-6" />
-                  </div>
-                  <h3 className="text-sm font-bold text-slate-900 dark:text-white">
-                    {currentMonthBills.length === 0
-                      ? `Nenhuma conta em ${selectedMonth.label}`
-                      : 'Nenhuma conta encontrada nos filtros'}
-                  </h3>
-                  <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
-                    {currentMonthBills.length === 0
-                      ? `Você ainda não visualiza contas em ${selectedMonth.label}. Se você já havia cadastrado ou se suas informações sumiram, use o Recuperador de Dados abaixo ou veja se suas contas estão em outro mês.`
-                      : 'Nenhuma despesa corresponde aos filtros selecionados.'}
-                  </p>
-
-                  {/* Indicator if bills are present in another month */}
-                  {currentMonthBills.length === 0 && otherMonthsWithBills.length > 0 && (
-                    <div className="p-3 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-300/80 dark:border-amber-700/60 text-xs text-amber-900 dark:text-amber-200 text-left space-y-2">
-                      <div className="font-bold flex items-center gap-1.5 text-xs">
-                        <span>💡 Suas contas cadastradas foram localizadas em outro mês:</span>
-                      </div>
-                      <div className="flex flex-wrap gap-2">
-                        {otherMonthsWithBills.map(({ monthId, count }) => (
-                          <button
-                            key={monthId}
-                            type="button"
-                            onClick={() => {
-                              const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
-                                id: monthId,
-                                label: monthId,
-                                shortLabel: monthId,
-                              };
-                              setSelectedMonth(found);
-                            }}
-                            className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-900 dark:text-amber-100 font-bold rounded-xl border border-amber-400/40 flex items-center gap-1 active-press text-[11px]"
-                          >
-                            <span>Ver {count} conta(s) em {monthId}</span>
-                            <ChevronRight className="w-3.5 h-3.5" />
-                          </button>
-                        ))}
-                      </div>
+                currentMonthBills.length > 0 ? (
+                  // Situation A: Bills exist in this month, but an active filter / search hid them
+                  <div className="bg-white dark:bg-[#131D38] p-6 sm:p-7 rounded-3xl text-center border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-amber-50 dark:bg-amber-950/40 text-amber-600 dark:text-amber-400 flex items-center justify-center mx-auto">
+                      <Filter className="w-6 h-6" />
                     </div>
-                  )}
-
-                  <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setEditingBill(null);
-                        setIsBillModalOpen(true);
-                      }}
-                      className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-bold text-xs rounded-xl shadow-xs active-press"
-                    >
-                      <Plus className="w-4 h-4 stroke-[3]" />
-                      <span>Cadastrar Nova Conta</span>
-                    </button>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Nenhuma conta corresponde ao filtro ativo
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      Você possui <strong>{currentMonthBills.length} dívida(s)</strong> cadastradas em {selectedMonth.label}, porém o filtro selecionado ({statusFilter !== 'all' ? `filtro "${statusFilter}"` : ''}{categoryFilter !== 'Todas' ? ` / categoria "${categoryFilter}"` : ''}{searchQuery ? ` / busca "${searchQuery}"` : ''}) ocultou os lançamentos.
+                    </p>
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-1">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setStatusFilter('all');
+                          setCategoryFilter('Todas');
+                          setSearchQuery('');
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2.5 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-bold text-xs rounded-xl shadow-xs active-press transition-all cursor-pointer"
+                      >
+                        <RotateCcw className="w-4 h-4 stroke-[2.5]" />
+                        <span>Limpar Filtros e Ver Todas as {currentMonthBills.length} Dívidas</span>
+                      </button>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  // Situation B: No bills registered for this specific month
+                  <div className="bg-white dark:bg-[#131D38] p-6 sm:p-7 rounded-3xl text-center border border-slate-200 dark:border-slate-800 shadow-xs space-y-3.5">
+                    <div className="w-12 h-12 rounded-2xl bg-teal-50 dark:bg-teal-950/40 text-teal-600 dark:text-teal-400 flex items-center justify-center mx-auto">
+                      <FileText className="w-6 h-6" />
+                    </div>
+                    <h3 className="text-sm font-bold text-slate-900 dark:text-white">
+                      Nenhuma conta em {selectedMonth.label}
+                    </h3>
+                    <p className="text-xs text-slate-500 dark:text-slate-400 max-w-sm mx-auto leading-relaxed">
+                      {otherMonthsWithBills.length > 0 
+                        ? `Suas contas cadastradas foram localizadas em outro mês abaixo. Você pode abri-las com 1 clique!`
+                        : `Você ainda não visualiza contas em ${selectedMonth.label}. Se suas dívidas sumiram, use o Recuperador de Dívidas abaixo para restaurá-las instantaneamente.`}
+                    </p>
+
+                    {/* Indicator if bills are present in another month */}
+                    {otherMonthsWithBills.length > 0 && (
+                      <div className="p-3.5 bg-amber-50 dark:bg-amber-950/40 rounded-2xl border border-amber-300/80 dark:border-amber-700/60 text-xs text-amber-900 dark:text-amber-200 text-left space-y-2.5">
+                        <div className="font-bold flex items-center gap-1.5 text-xs">
+                          <span className="text-base">💡</span>
+                          <span>Suas dívidas cadastradas foram encontradas em outro mês:</span>
+                        </div>
+                        <div className="flex flex-wrap gap-2">
+                          {otherMonthsWithBills.map(({ monthId, count }) => {
+                            const found = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === monthId) || {
+                              id: monthId,
+                              label: getMonthNamePtBr(monthId),
+                              shortLabel: monthId,
+                            };
+                            return (
+                              <button
+                                key={monthId}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedMonth(found);
+                                  localStorage.setItem('financas_selected_month_id', found.id);
+                                  setStatusFilter('all');
+                                  setCategoryFilter('Todas');
+                                  setSearchQuery('');
+                                }}
+                                className="px-3 py-2 bg-[#0A1128] dark:bg-teal-500 hover:opacity-90 text-white dark:text-[#0A1128] font-extrabold rounded-xl shadow-xs flex items-center gap-1.5 active-press text-xs cursor-pointer transition-all"
+                              >
+                                <span>Abrir {count} conta(s) em {found.label}</span>
+                                <ChevronRight className="w-3.5 h-3.5 stroke-[2.5]" />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    )}
+
+                    <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
+                      <button
+                        type="button"
+                        onClick={handleRecoverLostData}
+                        disabled={isRecoveringData}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs active-press transition-all cursor-pointer disabled:opacity-50"
+                        title="Fazer varredura no armazenamento local e na nuvem para recuperar dívidas perdidas"
+                      >
+                        <Search className="w-4 h-4 stroke-[2.5]" />
+                        <span>{isRecoveringData ? 'Varrendo dados...' : '🔍 Recuperador de Dívidas Salvas'}</span>
+                      </button>
+
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setEditingBill(null);
+                          setIsBillModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1.5 px-4 py-2 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-bold text-xs rounded-xl shadow-xs active-press"
+                      >
+                        <Plus className="w-4 h-4 stroke-[3]" />
+                        <span>Cadastrar Nova Conta</span>
+                      </button>
+                    </div>
+                  </div>
+                )
               ) : (
                 filteredBills.map(bill => (
                   <BillCard

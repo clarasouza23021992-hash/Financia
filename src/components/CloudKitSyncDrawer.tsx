@@ -130,6 +130,21 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
     setPropagationLogs([]);
   };
 
+  const [isRecovering, setIsRecovering] = useState(false);
+  const handleRecoverData = async () => {
+    setIsRecovering(true);
+    try {
+      const res = await cloudkit.scanAndRecoverLostData();
+      loadLogs();
+      setSyncSuccessMsg(`✅ Varredura concluída: ${res.billsRecovered} contas/dívidas e ${res.revenuesRecovered} receitas resgatadas e sincronizadas.`);
+      setTimeout(() => setSyncSuccessMsg(null), 5000);
+    } catch (e: any) {
+      setSyncSuccessMsg('Erro na recuperação: ' + (e?.message || 'Tente novamente'));
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
   return (
     <div 
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-xs p-3 sm:p-4 overflow-y-auto animate-in fade-in duration-150"
@@ -324,14 +339,25 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
                   Garante que quando você ou sua esposa marcar uma conta como <strong>paga</strong> ou <strong>pendente</strong>, o identificador único seja exatamente idêntico em ambos os aparelhos, sem perda de dados.
                 </p>
 
-                <div className="flex items-center gap-2 pt-1">
+                <div className="flex items-center gap-2 pt-1 flex-wrap">
                   <button
                     type="button"
                     onClick={handleVerifyConsistency}
-                    className="flex-1 py-2 px-3 bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs"
+                    className="flex-1 py-2 px-3 bg-teal-600 hover:bg-teal-700 text-white font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs whitespace-nowrap"
                   >
                     <CheckCircle2 className="w-3.5 h-3.5" />
                     <span>Verificar Consistência de IDs</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleRecoverData}
+                    disabled={isRecovering}
+                    className="py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs whitespace-nowrap disabled:opacity-50"
+                    title="Realiza varredura profunda no armazenamento local e nuvem para recuperar dívidas perdidas"
+                  >
+                    <RefreshCw className={`w-3.5 h-3.5 ${isRecovering ? 'animate-spin' : ''}`} />
+                    <span>{isRecovering ? 'Varrendo...' : 'Recuperar Dívidas'}</span>
                   </button>
 
                   {propagationLogs.length > 0 && (

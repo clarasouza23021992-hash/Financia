@@ -70,34 +70,36 @@ export const MOCK_BILL_IDS = [
 
 export function isMockBill(b: Partial<Bill>): boolean {
   if (!b) return true;
+  // CRITICAL: Any bill edited by user, marked as paid, with receipt, or user-created is NEVER mock!
+  if (
+    b.isEdited === true || 
+    Boolean(b.lastEditedAt) || 
+    Boolean(b.paidAt) || 
+    Boolean(b.receiptUrl) || 
+    (b as any).isRealUserDebt === true ||
+    (b as any).isCustomized === true
+  ) {
+    return false;
+  }
   if ((b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
   if (
-    id.startsWith('bill-condo-') ||
-    id.startsWith('bill-luz-') ||
-    id.startsWith('bill-gas-') ||
-    id.startsWith('bill-preset-') ||
-    id.startsWith('bill-streaming-') ||
     id.startsWith('bill-mock-') ||
     id.startsWith('bill-sample-') ||
-    id === 'bill-gas-pago' ||
-    id === 'bill-condominio' ||
-    id === 'bill-luz' ||
-    id === 'bill-gas' ||
-    id === 'bill-internet' ||
-    id === 'bill-financiamento' ||
-    id === 'bill-mercado' ||
-    id === 'bill-saude'
+    id === 'bill-gas-pago'
   ) {
     return true;
   }
-  // Exclude bills that were mistakenly created by migrating revenues or that are salary
-  if (id.startsWith('bill-migrated-') || (b.notes && b.notes.includes('Transferido automaticamente para Dívidas'))) {
+  // Only exact unedited preset IDs without any user action are mock seeds
+  if (
+    !b.paidAt && !b.receiptUrl && !b.isEdited &&
+    (id === 'bill-condominio' || id === 'bill-luz' || id === 'bill-gas' || id === 'bill-internet' || id === 'bill-financiamento' || id === 'bill-mercado' || id === 'bill-saude')
+  ) {
     return true;
   }
   if (b.category === 'Salário & Renda') return true;
   const lowerName = String(b.name || '').toLowerCase();
-  if (lowerName.includes('salário') || lowerName.includes('salario')) return true;
+  if (lowerName === 'meu salário' || lowerName === 'salário esposa' || lowerName === 'salario') return true;
   return false;
 }
 
@@ -982,24 +984,32 @@ class CloudKitSyncEngine {
     let raw = localStorage.getItem(STORAGE_KEY_BILLS);
 
     // Fallback checks on older storage keys and permanent Safety Vault so user's real bills are NEVER lost!
-    if (!raw || raw === '[]') {
+    if (!raw || raw === '[]' || raw === 'null') {
       const fallbackKeys = [
         STORAGE_KEY_SAFETY_VAULT_BILLS,
+        'financas_safety_vault_bills_v2',
+        'financas_safety_vault_bills_v1',
+        'financas_cloudkit_bills_v3',
         'financas_cloudkit_bills_v2',
         'financas_cloudkit_bills_v1',
         'financas_cloudkit_bills',
+        'financas_bills_v3',
+        'financas_bills_v2',
+        'financas_bills',
         'household_bills',
         'financas_bills_backup',
+        'financas_bills_local',
       ];
       for (const k of fallbackKeys) {
         const legacy = localStorage.getItem(k);
         if (legacy && legacy !== 'null' && legacy !== 'undefined' && legacy !== '[]') {
           try {
             const parsed = JSON.parse(legacy);
-            const cleaned = Array.isArray(parsed) ? parsed.filter(b => !isMockBill(b)) : [];
+            const cleaned = Array.isArray(parsed) ? parsed.filter(b => b && (b.amount !== undefined || b.name) && !isMockBill(b)) : [];
             if (cleaned.length > 0) {
               raw = JSON.stringify(cleaned);
               localStorage.setItem(STORAGE_KEY_BILLS, raw);
+              localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, raw);
               break;
             }
           } catch {}
@@ -1007,12 +1017,12 @@ class CloudKitSyncEngine {
       }
     }
 
-    if (!raw || raw === '[]') {
+    if (!raw || raw === '[]' || raw === 'null') {
       const vaultData = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS);
-      if (vaultData && vaultData !== '[]') {
+      if (vaultData && vaultData !== '[]' && vaultData !== 'null') {
         try {
           const parsed = JSON.parse(vaultData);
-          const cleaned = Array.isArray(parsed) ? parsed.filter(b => !isMockBill(b)) : [];
+          const cleaned = Array.isArray(parsed) ? parsed.filter(b => b && (b.amount !== undefined || b.name) && !isMockBill(b)) : [];
           if (cleaned.length > 0) {
             localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(cleaned));
             return this.deduplicateBills(cleaned);
@@ -1025,10 +1035,17 @@ class CloudKitSyncEngine {
     try {
       const parsed: Bill[] = JSON.parse(raw);
       // Strip only exact legacy mock bills
-      const cleaned = parsed.filter(b => !isMockBill(b));
+      let cleaned = parsed.filter(b => !isMockBill(b));
       
+      // Safety safeguard: if filtering purged everything, but parsed had real bills, keep them!
+      if (cleaned.length === 0 && parsed.length > 0) {
+        const potentialReal = parsed.filter(b => b && (Number(b.amount) > 0 || (b.name && b.name.trim().length > 0)));
+        if (potentialReal.length > 0) {
+          cleaned = potentialReal;
+        }
+      }
+
       if (cleaned.length === 0) {
-        localStorage.setItem(STORAGE_KEY_BILLS, '[]');
         return [];
       }
 

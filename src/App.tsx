@@ -139,18 +139,34 @@ export default function App() {
   const handleSimulateSpouseAlteration = () => {
     const wifeName = cloudkit.getWifeName();
     const otherUser = activeUserName === wifeName ? cloudkit.getTitularName() : wifeName;
-    const sampleBill = bills[0] || { name: 'Energia Elétrica (Enel)', amount: 245.60 };
+    const currentBills = cloudkit.getBills();
+    // Prioritize an unpaid bill in the currently selected month
+    const sampleBill = currentBills.find(b => (b.dueDate || '').startsWith(selectedMonth.id) && b.status !== 'paid') ||
+      currentBills.find(b => b.status !== 'paid') ||
+      currentBills[0] ||
+      { name: 'Energia Elétrica (Enel)', amount: 245.60, id: 'sample-sim-1' };
+
     playNotificationChime();
+
+    // Mark the bill as paid by spouse locally and propagate via CloudKit
+    if (sampleBill.id) {
+      cloudkit.toggleBillStatus(sampleBill.id, 'paid', otherUser);
+      setBills(cloudkit.getBills());
+    }
+
+    const canonicalDev = otherUser === wifeName ? 'Paula (iPhone)' : 'Carlos (iPhone)';
     const simulatedNotif: ChangeNotification = {
       id: `sim_${Date.now()}`,
       householdId: cloudkit.getHouseholdId(),
       sourceDeviceId: 'dev_spouse_sim',
-      sourceDeviceName: otherUser === wifeName ? 'Paula (iPhone)' : 'Carlos (iPhone)',
+      sourceDeviceName: canonicalDev,
       sourceUserName: otherUser,
       actionType: 'bill_paid',
       title: 'Dívida Paga! ✅',
-      message: `${otherUser} marcou a conta "${sampleBill.name}" (R$ ${Number(sampleBill.amount).toFixed(2).replace('.', ',')}) como PAGA! ✅`,
+      message: `${otherUser} (${canonicalDev}) marcou a conta "${sampleBill.name}" (${cloudkit.formatCurrency(sampleBill.amount)}) como PAGA! ✅`,
       targetItemName: sampleBill.name,
+      targetBillId: sampleBill.id,
+      bill: sampleBill as any,
       amount: sampleBill.amount,
       timestamp: new Date().toISOString(),
     };
@@ -235,7 +251,7 @@ export default function App() {
   // Sync with CloudKit Real-Time BroadcastChannel & WebSockets
   useEffect(() => {
     const unsubscribe = cloudkit.onSync((event) => {
-      if (event.type === 'BILLS_UPDATED' || event.type === 'BILL_UPSERTED' || event.type === 'BILL_DELETED') {
+      if (event.type === 'BILLS_UPDATED' || event.type === 'BILL_UPSERTED' || event.type === 'BILL_DELETED' || event.type === 'PAYMENT_STATUS_CHANGED') {
         setBills(cloudkit.getBills());
         setConflictLogs(cloudkit.getConflictLogs());
       } else if (event.type === 'REVENUES_UPDATED' || event.type === 'REVENUE_UPSERTED' || event.type === 'REVENUE_DELETED') {
@@ -280,6 +296,31 @@ export default function App() {
               body: notifPayload.message,
               sound: true,
             });
+          }
+
+          // If this is a payment status change notification, immediately apply it to local bills so UI updates INSTANTLY
+          if (notifPayload.actionType === 'bill_paid') {
+            cloudkit.applyRemoteStatusUpdate(
+              notifPayload.targetBillId || '',
+              'paid',
+              notifPayload.sourceUserName,
+              notifPayload.timestamp,
+              notifPayload.bill?.version,
+              notifPayload.sourceDeviceName,
+              notifPayload.targetItemName,
+              notifPayload.bill
+            );
+          } else if (notifPayload.actionType === 'bill_pending') {
+            cloudkit.applyRemoteStatusUpdate(
+              notifPayload.targetBillId || '',
+              'pending',
+              notifPayload.sourceUserName,
+              undefined,
+              notifPayload.bill?.version,
+              notifPayload.sourceDeviceName,
+              notifPayload.targetItemName,
+              notifPayload.bill
+            );
           }
 
           // Immediately update bills state and also fetch fresh state from server
@@ -344,6 +385,32 @@ export default function App() {
                   return merged;
                 });
                 sendNativeNotification(notif.title, { body: notif.message, sound: true });
+
+                if (notif.actionType === 'bill_paid') {
+                  cloudkit.applyRemoteStatusUpdate(
+                    notif.targetBillId || '',
+                    'paid',
+                    notif.sourceUserName,
+                    notif.timestamp,
+                    notif.bill?.version,
+                    notif.sourceDeviceName,
+                    notif.targetItemName,
+                    notif.bill
+                  );
+                  setBills(cloudkit.getBills());
+                } else if (notif.actionType === 'bill_pending') {
+                  cloudkit.applyRemoteStatusUpdate(
+                    notif.targetBillId || '',
+                    'pending',
+                    notif.sourceUserName,
+                    undefined,
+                    notif.bill?.version,
+                    notif.sourceDeviceName,
+                    notif.targetItemName,
+                    notif.bill
+                  );
+                  setBills(cloudkit.getBills());
+                }
               });
             }
 
@@ -815,9 +882,11 @@ export default function App() {
 
   const handleTogglePaid = (bill: Bill) => {
     const newStatus = bill.status === 'paid' ? 'pending' : 'paid';
-    cloudkit.toggleBillStatus(bill.id, newStatus);
+    const actor = activeUserName || cloudkit.getCurrentUserName();
+    cloudkit.toggleBillStatus(bill.id, newStatus, actor);
     setBills(cloudkit.getBills());
-    showTemporaryToast(newStatus === 'paid' ? `Conta "${bill.name}" marcada como Paga!` : 'Status revertido para Pendente.');
+    const actorLabel = newStatus === 'paid' ? ` por ${actor}` : '';
+    showTemporaryToast(newStatus === 'paid' ? `Conta "${bill.name}" marcada como Paga${actorLabel}! ✅` : 'Status revertido para Pendente.');
   };
 
   const handleReassignActor = (bill: Bill, newActor: string) => {

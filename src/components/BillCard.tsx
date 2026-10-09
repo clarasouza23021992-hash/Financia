@@ -342,26 +342,58 @@ export const BillCard: React.FC<BillCardProps> = ({
         
         {/* Identificação de quem fez a alteração / registrou a dívida (Ultra compacto, sem aumentar o tamanho da tela) */}
         {(() => {
-          const rawActor = (bill.lastEditedBy || (bill.status === 'paid' ? bill.paidBy : '') || bill.updatedByDevice || '').trim();
-          const lower = rawActor.toLowerCase();
-
+          const isPaid = bill.status === 'paid';
           const wifeName = cloudkit.getWifeName();
           const wifeLower = wifeName.toLowerCase();
           const titularName = cloudkit.getTitularName();
 
-          // Identifica QUEM FOI DE FATO (reconhece a esposa e Carlos com precisão)
+          // Check all possible indicators of who performed the action / payment
+          const paidLower = (bill.paidBy || '').toLowerCase();
+          const editLower = (bill.lastEditedBy || '').toLowerCase();
+          const devLower = (bill.updatedByDevice || '').toLowerCase();
+          const actionDesc = (bill.lastActionDescription || '').toLowerCase();
+
+          const isWifePaid = 
+            paidLower.includes(wifeLower) || paidLower.includes('esposa') || paidLower.includes('cônjuge') || paidLower.includes('clara') || paidLower.includes('paula') ||
+            (!bill.paidBy && (devLower.includes('paula') || devLower.includes('esposa') || editLower.includes('paula') || editLower.includes('esposa') || actionDesc.includes('paula') || actionDesc.includes('esposa')));
+
+          const isCarlosPaid = 
+            paidLower.includes('carlos') || paidLower.includes('você') || paidLower.includes('titular') || paidLower.includes('meu') ||
+            (!bill.paidBy && (devLower.includes('carlos') || editLower.includes('carlos')));
+
           let displayName = titularName;
           let isWife = false;
 
-          if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula')) {
-            displayName = wifeName;
-            isWife = true;
-          } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
-            displayName = titularName;
-            isWife = false;
-          } else if (rawActor && !/iphone|android|celular|computador|smartphone|dispositivo|dev_/i.test(rawActor)) {
-            displayName = rawActor.trim();
-            isWife = false;
+          if (isPaid) {
+            if (isWifePaid) {
+              displayName = wifeName;
+              isWife = true;
+            } else if (isCarlosPaid) {
+              displayName = titularName;
+              isWife = false;
+            } else if (bill.paidBy && !/iphone|android|celular|computador|smartphone|dispositivo|dev_/i.test(bill.paidBy)) {
+              displayName = bill.paidBy.trim();
+              isWife = false;
+            } else if (devLower.includes('paula') || editLower.includes('paula')) {
+              displayName = wifeName;
+              isWife = true;
+            } else {
+              displayName = titularName;
+              isWife = false;
+            }
+          } else {
+            const rawActor = (bill.lastEditedBy || bill.updatedByDevice || '').trim();
+            const lower = rawActor.toLowerCase();
+            if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula') || devLower.includes('paula')) {
+              displayName = wifeName;
+              isWife = true;
+            } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
+              displayName = titularName;
+              isWife = false;
+            } else if (rawActor && !/iphone|android|celular|computador|smartphone|dispositivo|dev_/i.test(rawActor)) {
+              displayName = rawActor.trim();
+              isWife = false;
+            }
           }
 
           // Data e hora exatas da alteração/pagamento/criação (DD/MM HH:mm)
@@ -389,7 +421,6 @@ export const BillCard: React.FC<BillCardProps> = ({
             timeStr = `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
           }
 
-          const isPaid = bill.status === 'paid';
           const isEdited = Boolean(bill.isEdited && bill.lastEditedAt);
           
           let icon = isWife ? '👩🏻' : '👤';
@@ -399,9 +430,11 @@ export const BillCard: React.FC<BillCardProps> = ({
             : 'bg-slate-100/90 dark:bg-slate-800/80 text-slate-700 dark:text-slate-300 border-slate-200/80 dark:border-slate-700/60';
 
           if (isPaid) {
-            icon = '✅';
+            icon = isWife ? '👩🏻' : '👤';
             actionLabel = 'Pago por';
-            badgeStyle = 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60';
+            badgeStyle = isWife
+              ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-300 dark:border-emerald-700 font-bold'
+              : 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-900 dark:text-emerald-300 border-emerald-200/80 dark:border-emerald-800/60 font-bold';
           } else if (isEdited) {
             icon = isWife ? '👩🏻' : '✏️';
             actionLabel = bill.lastActionDescription || 'Alterado por';
@@ -419,7 +452,7 @@ export const BillCard: React.FC<BillCardProps> = ({
             >
               <span className="text-[10px] shrink-0 leading-none">{icon}</span>
               <span className="font-extrabold text-slate-900 dark:text-white tracking-tight leading-none">
-                {displayName}
+                {isPaid ? `Pago por ${displayName}` : displayName}
               </span>
               <span className="text-[9.5px] opacity-80 font-mono leading-none tracking-tight">
                 • {dateStr} {timeStr}

@@ -339,6 +339,8 @@ export interface ChangeNotification {
   title: string;
   message: string;
   targetItemName?: string;
+  targetBillId?: string;
+  bill?: Bill;
   amount?: number;
   timestamp: string;
 }

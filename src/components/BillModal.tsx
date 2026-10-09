@@ -734,6 +734,8 @@ export const BillModal: React.FC<BillModalProps> = ({
           splitDetails: [],
           notes: notes.trim(),
           lastEditedBy: cloudkit.getCurrentUserName(),
+          paidBy: initialBill?.paidBy,
+          paidAt: initialBill?.paidAt,
           receiptName: receiptName || undefined,
           receiptUrl: receiptUrl || undefined,
           receiptSize: receiptSize || undefined,

@@ -283,15 +283,17 @@ export const NotificationCenterModal: React.FC<NotificationCenterModalProps> = (
                               {(() => {
                                 const raw = item.actorName || '';
                                 const low = raw.toLowerCase();
+                                const rawDev = item.sourceDeviceName || item.deviceName || '';
+                                const devLow = rawDev.toLowerCase();
                                 const wifeName = cloudkit.getWifeName();
                                 const titularName = cloudkit.getTitularName();
-                                if (low.includes(wifeName.toLowerCase()) || low.includes('esposa') || low.includes('cônjuge') || low.includes('clara') || low.includes('paula')) {
+                                if (low.includes(wifeName.toLowerCase()) || low.includes('esposa') || low.includes('cônjuge') || low.includes('clara') || low.includes('paula') || devLow.includes('paula') || devLow.includes('esposa')) {
                                   return `👩🏻 ${wifeName}`;
                                 }
                                 if (low.includes('carlos') || low.includes('titular') || low.includes('você') || low.includes('meu')) {
                                   return `👤 ${titularName}`;
                                 }
-                                if (!/iphone|android|celular|computador|dispositivo|dev_/i.test(raw)) return raw;
+                                if (!/iphone|android|celular|computador|dispositivo|dev_/i.test(raw) && raw.trim()) return raw;
                                 return `👤 ${titularName}`;
                               })()}
                             </span>

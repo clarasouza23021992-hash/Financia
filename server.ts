@@ -27,8 +27,21 @@ export interface ChangeNotification {
   title: string;
   message: string;
   targetItemName?: string;
+  targetBillId?: string;
+  bill?: any;
   amount?: number;
   timestamp: string;
+}
+
+function resolveCanonicalDeviceName(sourceUserName?: string, sourceDeviceName?: string): string {
+  const rawDev = (sourceDeviceName || '').trim();
+  if (rawDev.includes('Paula (iPhone)') || rawDev.includes('Carlos (iPhone)')) {
+    return rawDev.includes('Paula (iPhone)') ? 'Paula (iPhone)' : 'Carlos (iPhone)';
+  }
+  const userLow = (sourceUserName || '').toLowerCase();
+  const devLow = rawDev.toLowerCase();
+  const isWife = userLow.includes('paula') || userLow.includes('esposa') || userLow.includes('clara') || devLow.includes('paula') || devLow.includes('esposa') || devLow.includes('clara');
+  return isWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
 }
 
 interface HouseholdData {
@@ -340,6 +353,46 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
       const preferred = (bVer > eVer || (bVer === eVer && bTime >= eTime)) ? b : existing;
       const secondary = preferred === b ? existing : b;
 
+      // Identify payment author: if either record was marked by Paula/wife/cônjuge, prioritize Paula!
+      const bIsWife = Boolean(
+        (b.paidBy || b.lastEditedBy || b.updatedByDevice || '').toLowerCase().includes('paula') ||
+        (b.paidBy || b.lastEditedBy || b.updatedByDevice || '').toLowerCase().includes('esposa') ||
+        (b.paidBy || b.lastEditedBy || b.updatedByDevice || '').toLowerCase().includes('cônjuge')
+      );
+      const eIsWife = Boolean(
+        (existing.paidBy || existing.lastEditedBy || existing.updatedByDevice || '').toLowerCase().includes('paula') ||
+        (existing.paidBy || existing.lastEditedBy || existing.updatedByDevice || '').toLowerCase().includes('esposa') ||
+        (existing.paidBy || existing.lastEditedBy || existing.updatedByDevice || '').toLowerCase().includes('cônjuge')
+      );
+
+      let paidSource: any = undefined;
+      if (b.status === 'paid' && existing.status === 'paid') {
+        if (eIsWife && !bIsWife) paidSource = existing;
+        else if (bIsWife && !eIsWife) paidSource = b;
+        else paidSource = (bVer >= eVer || bTime >= eTime) ? b : existing;
+      } else if (b.status === 'paid') {
+        paidSource = b;
+      } else if (existing.status === 'paid') {
+        paidSource = existing;
+      }
+
+      let resolvedPaidBy: string | undefined = undefined;
+      if (isEitherPaid) {
+        if (bIsWife || eIsWife) {
+          resolvedPaidBy = 'Paula';
+        } else if (paidSource) {
+          resolvedPaidBy = paidSource.paidBy || paidSource.lastEditedBy || 'Paula';
+        } else {
+          resolvedPaidBy = 'Paula';
+        }
+      }
+
+      const resolvedLastEditedBy = isEitherPaid && resolvedPaidBy ? resolvedPaidBy : preferred.lastEditedBy;
+      const resolvedLastActionDesc = isEitherPaid ? 'Marcou como Pago' : preferred.lastActionDescription;
+      const resolvedUpdatedByDev = isEitherPaid && (bIsWife || eIsWife)
+        ? 'Paula (iPhone)'
+        : (isEitherPaid && paidSource ? (paidSource.updatedByDevice || resolveCanonicalDeviceName(resolvedPaidBy)) : preferred.updatedByDevice);
+
       const mergedBill: any = {
         ...secondary,
         ...preferred,
@@ -347,8 +400,11 @@ function deduplicateBillsServer(bills: any[], deletedIds: string[] = []): { bill
         id: existing.id || b.id,
         // CRITICAL: If either record was marked paid, the reconciled bill MUST remain paid!
         status: isEitherPaid ? 'paid' : (preferred.status || 'pending'),
-        paidAt: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidAt : secondary.paidAt) || new Date().toISOString() : undefined,
-        paidBy: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidBy : secondary.paidBy) : undefined,
+        paidAt: isEitherPaid ? (paidSource?.paidAt || preferred.paidAt || secondary.paidAt || new Date().toISOString()) : undefined,
+        paidBy: resolvedPaidBy,
+        lastEditedBy: resolvedLastEditedBy,
+        lastActionDescription: resolvedLastActionDesc,
+        updatedByDevice: resolvedUpdatedByDev,
         receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
         receiptName: preferred.receiptName || secondary.receiptName,
         receiptSize: preferred.receiptSize || secondary.receiptSize,
@@ -514,17 +570,6 @@ async function startServer() {
     });
   };
 
-  const resolveCanonicalDeviceName = (sourceUserName?: string, sourceDeviceName?: string): string => {
-    const rawDev = (sourceDeviceName || '').trim();
-    if (rawDev.includes('Paula (iPhone)') || rawDev.includes('Carlos (iPhone)')) {
-      return rawDev.includes('Paula (iPhone)') ? 'Paula (iPhone)' : 'Carlos (iPhone)';
-    }
-    const userLow = (sourceUserName || '').toLowerCase();
-    const devLow = rawDev.toLowerCase();
-    const isWife = userLow.includes('paula') || userLow.includes('esposa') || userLow.includes('clara') || devLow.includes('paula') || devLow.includes('esposa') || devLow.includes('clara');
-    return isWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
-  };
-
   const recordChangeNotification = (householdId: string, params: {
     sourceDeviceId: string;
     sourceDeviceName?: string;
@@ -533,6 +578,8 @@ async function startServer() {
     title: string;
     message: string;
     targetItemName?: string;
+    targetBillId?: string;
+    bill?: any;
     amount?: number;
   }): ChangeNotification => {
     const store = loadHouseholds();
@@ -570,6 +617,8 @@ async function startServer() {
       title: params.title,
       message: params.message,
       targetItemName: params.targetItemName,
+      targetBillId: params.targetBillId,
+      bill: params.bill,
       amount: params.amount,
       timestamp: new Date().toISOString(),
     };
@@ -624,6 +673,8 @@ async function startServer() {
             title: msg.title,
             message: msg.message,
             targetItemName: msg.targetItemName,
+            targetBillId: msg.targetBillId || msg.billId,
+            bill: msg.bill,
             amount: msg.amount,
           });
           broadcastChangeNotification(houseId, notif);
@@ -642,7 +693,16 @@ async function startServer() {
 
           let updatedBillRecord: any = null;
           if (Array.isArray(household.bills)) {
-            const idx = household.bills.findIndex((b: any) => b && (b.id === targetBillId || (msg.canonicalKey && b.id.includes(msg.canonicalKey))));
+            const cleanTargetName = normalizeBillTitleServer(msg.billName || msg.bill?.name || '');
+            const targetMonth = (msg.bill?.dueDate || '').substring(0, 7);
+            const idx = household.bills.findIndex((b: any) => 
+              b && (
+                b.id === targetBillId || 
+                (msg.canonicalKey && b.id && b.id.includes(msg.canonicalKey)) ||
+                (cleanTargetName && b.name && normalizeBillTitleServer(b.name) === cleanTargetName && (!targetMonth || (b.dueDate || '').substring(0, 7) === targetMonth))
+              )
+            );
+            const canonicalDev = resolveCanonicalDeviceName(actor, clientState.deviceName);
             if (idx !== -1) {
               const cur = household.bills[idx];
               const isPaid = newStatus === 'paid';
@@ -654,33 +714,71 @@ async function startServer() {
                 lastEditedAt: nowIso,
                 lastEditedBy: actor,
                 lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+                updatedByDevice: canonicalDev,
                 version: Math.max((cur.version || 1) + 1, (msg.version || 1)),
                 updatedAt: nowIso,
                 isEdited: true,
               };
               household.bills[idx] = updatedBillRecord;
             } else if (msg.bill) {
-              updatedBillRecord = msg.bill;
+              updatedBillRecord = {
+                ...msg.bill,
+                status: newStatus,
+                paidAt: newStatus === 'paid' ? (msg.paidAt || nowIso) : undefined,
+                paidBy: newStatus === 'paid' ? (msg.paidBy || actor) : undefined,
+                lastEditedAt: nowIso,
+                lastEditedBy: actor,
+                lastActionDescription: newStatus === 'paid' ? 'Marcou como Pago' : 'Reabriu como Pendente',
+                updatedByDevice: canonicalDev,
+              };
               household.bills.unshift(updatedBillRecord);
             }
           }
 
           if (updatedBillRecord) {
             household.lastUpdated = nowIso;
+            // Clean & deduplicate records
+            const dedupResult = deduplicateBillsServer(household.bills, household.deletedBillIds);
+            household.bills = dedupResult.bills;
+            household.deletedBillIds = dedupResult.deletedIds;
             store[houseId] = household;
             saveHouseholds(store);
 
+            const canonicalDev = resolveCanonicalDeviceName(actor, clientState.deviceName);
             const notif = recordChangeNotification(houseId, {
               sourceDeviceId: clientState.deviceId,
-              sourceDeviceName: clientState.deviceName,
+              sourceDeviceName: canonicalDev,
               sourceUserName: actor,
               actionType: newStatus === 'paid' ? 'bill_paid' : 'bill_pending',
               title: newStatus === 'paid' ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄',
-              message: `${actor} marcou "${updatedBillRecord.name || msg.billName || 'a conta'}" como ${newStatus === 'paid' ? 'PAGA' : 'Pendente'}`,
+              message: `${actor} (${canonicalDev}) marcou "${updatedBillRecord.name || msg.billName || 'a conta'}" como ${newStatus === 'paid' ? 'PAGA' : 'Pendente'}`,
               targetItemName: updatedBillRecord.name || msg.billName,
+              targetBillId: updatedBillRecord.id,
+              bill: updatedBillRecord,
               amount: updatedBillRecord.amount || msg.amount,
             });
             broadcastChangeNotification(houseId, notif);
+
+            // Broadcast ultra-fast live status update to all connected clients
+            const liveBroadcastPayload = JSON.stringify({
+              type: 'LIVE_STATUS_UPDATE_BROADCAST',
+              householdId: houseId,
+              billId: updatedBillRecord.id,
+              status: newStatus,
+              paidAt: updatedBillRecord.paidAt,
+              paidBy: updatedBillRecord.paidBy,
+              actor: updatedBillRecord.lastEditedBy || actor,
+              sourceDeviceName: canonicalDev,
+              version: updatedBillRecord.version,
+              bill: updatedBillRecord,
+            });
+            wsClients.forEach((client) => {
+              if (client.ws.readyState === WebSocket.OPEN && client.householdId === houseId) {
+                try {
+                  client.ws.send(liveBroadcastPayload);
+                } catch {}
+              }
+            });
 
             // Broadcast updated data to all devices in the household
             broadcastHouseholdDataSync(houseId, household, clientState.deviceId);
@@ -909,14 +1007,29 @@ async function startServer() {
           const incUpdated = new Date(incoming.updatedAt || incoming.lastEditedAt || incoming.paidAt || 0).getTime();
           const curUpdated = new Date(current.updatedAt || current.lastEditedAt || current.paidAt || 0).getTime();
 
+          const bIsWife = Boolean(
+            (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('paula') ||
+            (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('esposa') ||
+            (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('cônjuge')
+          );
+          const curIsWife = Boolean(
+            (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('paula') ||
+            (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('esposa') ||
+            (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('cônjuge')
+          );
+
           // CRITICAL: Status transition with payment preservation
           if (incoming.status === 'paid' && current.status !== 'paid') {
+            const paidByActor = bIsWife ? 'Paula' : (incoming.paidBy || incoming.lastEditedBy || 'Paula');
             billMap.set(incoming.id, {
               ...current,
               ...incoming,
               status: 'paid',
               paidAt: incoming.paidAt || new Date().toISOString(),
-              paidBy: incoming.paidBy || incoming.lastEditedBy || 'Cônjuge',
+              paidBy: paidByActor,
+              lastEditedBy: paidByActor,
+              lastActionDescription: 'Marcou como Pago',
+              updatedByDevice: bIsWife ? 'Paula (iPhone)' : (incoming.updatedByDevice || resolveCanonicalDeviceName(paidByActor)),
               version: Math.max(incVersion, curVersion + 1),
               updatedAt: new Date(Math.max(incUpdated, curUpdated, Date.now())).toISOString(),
             });
@@ -926,14 +1039,33 @@ async function startServer() {
               billMap.set(incoming.id, incoming);
             } else {
               // Preserve paid status so delayed/offline sync from other device does not revert spouse's payment
+              const paidByActor = curIsWife ? 'Paula' : (current.paidBy || current.lastEditedBy || 'Paula');
               billMap.set(incoming.id, {
                 ...incoming,
                 status: 'paid',
                 paidAt: current.paidAt,
-                paidBy: current.paidBy,
+                paidBy: paidByActor,
+                lastEditedBy: paidByActor,
+                lastActionDescription: current.lastActionDescription || 'Marcou como Pago',
+                updatedByDevice: curIsWife ? 'Paula (iPhone)' : (current.updatedByDevice || resolveCanonicalDeviceName(paidByActor)),
                 version: Math.max(curVersion, incVersion),
               });
             }
+          } else if (incoming.status === 'paid' && current.status === 'paid') {
+            // Both are paid: ensure Paula is preserved if either paid it
+            const paidByActor = (curIsWife || bIsWife) ? 'Paula' : (incoming.paidBy || current.paidBy || 'Paula');
+            billMap.set(incoming.id, {
+              ...current,
+              ...incoming,
+              status: 'paid',
+              paidAt: incoming.paidAt || current.paidAt || new Date().toISOString(),
+              paidBy: paidByActor,
+              lastEditedBy: paidByActor,
+              lastActionDescription: 'Marcou como Pago',
+              updatedByDevice: (curIsWife || bIsWife) ? 'Paula (iPhone)' : (incoming.updatedByDevice || current.updatedByDevice),
+              version: Math.max(incVersion, curVersion),
+              updatedAt: new Date(Math.max(incUpdated, curUpdated, Date.now())).toISOString(),
+            });
           } else if (incVersion > curVersion || incUpdated >= curUpdated) {
             billMap.set(incoming.id, incoming);
           }
@@ -1042,6 +1174,8 @@ async function startServer() {
       title,
       message,
       targetItemName,
+      targetBillId,
+      bill,
       amount,
     } = req.body;
     if (!actionType || !title) {
@@ -1056,6 +1190,8 @@ async function startServer() {
       title,
       message: message || '',
       targetItemName,
+      targetBillId,
+      bill,
       amount,
     });
     broadcastChangeNotification(cleanId, notif);
@@ -1065,7 +1201,7 @@ async function startServer() {
   // Atomic payment status update endpoint with instant WebSocket broadcast
   app.post('/api/household/:id/payment-status', (req, res) => {
     const { id } = req.params;
-    const { billId, status, actor, deviceId, deviceName, paidAt, version, bill } = req.body;
+    const { billId, status, actor, deviceId, deviceName, paidAt, version, bill, canonicalKey, billName } = req.body;
     if (!billId || !status) {
       return res.status(400).json({ error: 'billId e status são obrigatórios' });
     }
@@ -1078,53 +1214,112 @@ async function startServer() {
       household.deletedBillIds = household.deletedBillIds.filter((bid: string) => bid !== billId);
     }
 
+    const cleanTargetName = normalizeBillTitleServer(billName || bill?.name || '');
+    const targetMonth = (bill?.dueDate || '').substring(0, 7);
+    const isWifeActor = Boolean(
+      (actor || '').toLowerCase().includes('paula') ||
+      (actor || '').toLowerCase().includes('esposa') ||
+      (actor || '').toLowerCase().includes('cônjuge') ||
+      (deviceName || '').toLowerCase().includes('paula') ||
+      (deviceName || '').toLowerCase().includes('esposa')
+    );
+    const cleanActor = isWifeActor ? 'Paula' : (actor || 'Carlos');
+    const canonicalDev = isWifeActor ? 'Paula (iPhone)' : resolveCanonicalDeviceName(cleanActor, deviceName);
+    const isPaid = status === 'paid';
+
     let updatedBill: any = null;
     if (Array.isArray(household.bills)) {
-      const idx = household.bills.findIndex((b: any) => b && b.id === billId);
+      const idx = household.bills.findIndex((b: any) => 
+        b && (
+          b.id === billId ||
+          (canonicalKey && (b.id === canonicalKey || b.id.includes(canonicalKey))) ||
+          (cleanTargetName && b.name && normalizeBillTitleServer(b.name) === cleanTargetName && (!targetMonth || (b.dueDate || '').substring(0, 7) === targetMonth))
+        )
+      );
+
       if (idx !== -1) {
         const cur = household.bills[idx];
-        const isPaid = status === 'paid';
         updatedBill = {
           ...cur,
           status,
           paidAt: isPaid ? (paidAt || nowIso) : undefined,
-          paidBy: isPaid ? (actor || 'Morador') : undefined,
+          paidBy: isPaid ? cleanActor : undefined,
           lastEditedAt: nowIso,
-          lastEditedBy: actor || cur.lastEditedBy || 'Morador',
+          lastEditedBy: cleanActor,
           lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+          updatedByDevice: canonicalDev,
           version: Math.max((cur.version || 1) + 1, (version || 1)),
           updatedAt: nowIso,
           isEdited: true,
         };
         household.bills[idx] = updatedBill;
       } else if (bill) {
-        updatedBill = bill;
+        updatedBill = {
+          ...bill,
+          status,
+          paidAt: isPaid ? (paidAt || nowIso) : undefined,
+          paidBy: isPaid ? cleanActor : undefined,
+          lastEditedAt: nowIso,
+          lastEditedBy: cleanActor,
+          lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+          updatedByDevice: canonicalDev,
+          version: Math.max((bill.version || 1), (version || 1)),
+          updatedAt: nowIso,
+          isEdited: true,
+        };
         household.bills.unshift(updatedBill);
       }
     }
 
     if (updatedBill) {
       household.lastUpdated = nowIso;
+      // Deduplicate and clean
+      const dedupResult = deduplicateBillsServer(household.bills, household.deletedBillIds);
+      household.bills = dedupResult.bills;
+      household.deletedBillIds = dedupResult.deletedIds;
       store[cleanId] = household;
       saveHouseholds(store);
 
-      // Record notification
+      // Record notification with full targetBillId and bill data
       const notif = recordChangeNotification(cleanId, {
         sourceDeviceId: deviceId || 'unknown_dev',
-        sourceDeviceName: deviceName || 'Smartphone',
-        sourceUserName: actor || 'Morador',
-        actionType: status === 'paid' ? 'bill_paid' : 'bill_pending',
-        title: status === 'paid' ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄',
-        message: `${actor || 'Morador'} marcou "${updatedBill.name}" como ${status === 'paid' ? 'PAGA' : 'Pendente'}`,
+        sourceDeviceName: canonicalDev,
+        sourceUserName: cleanActor,
+        actionType: isPaid ? 'bill_paid' : 'bill_pending',
+        title: isPaid ? 'Conta Paga! ✅' : 'Conta Reaberta 🔄',
+        message: `${cleanActor} (${canonicalDev}) marcou "${updatedBill.name}" como ${isPaid ? 'PAGA' : 'Pendente'}`,
         targetItemName: updatedBill.name,
+        targetBillId: updatedBill.id,
+        bill: updatedBill,
         amount: updatedBill.amount,
       });
       broadcastChangeNotification(cleanId, notif);
 
+      // Broadcast ultra-fast live status update to all connected WebSocket clients
+      const liveBroadcastPayload = JSON.stringify({
+        type: 'LIVE_STATUS_UPDATE_BROADCAST',
+        householdId: cleanId,
+        billId: updatedBill.id,
+        status,
+        paidAt: updatedBill.paidAt,
+        paidBy: updatedBill.paidBy,
+        actor: cleanActor,
+        sourceDeviceName: canonicalDev,
+        version: updatedBill.version,
+        bill: updatedBill,
+      });
+      wsClients.forEach((client) => {
+        if (client.ws.readyState === WebSocket.OPEN && client.householdId === cleanId) {
+          try {
+            client.ws.send(liveBroadcastPayload);
+          } catch {}
+        }
+      });
+
       // Broadcast full sync to all connected devices
       broadcastHouseholdDataSync(cleanId, household, deviceId);
 
-      return res.json({ success: true, bill: updatedBill, household });
+      return res.json({ success: true, bill: updatedBill, household, notification: notif });
     }
 
     return res.status(404).json({ error: 'Conta não encontrada no servidor' });

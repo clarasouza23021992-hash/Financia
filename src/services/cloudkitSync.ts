@@ -375,51 +375,61 @@ class CloudKitSyncEngine {
             });
           }
 
+          if (data.type === 'LIVE_STATUS_UPDATE_BROADCAST') {
+            this.applyRemoteStatusUpdate(
+              data.billId,
+              data.status,
+              data.actor || data.paidBy,
+              data.paidAt,
+              data.version,
+              data.sourceDeviceName,
+              data.bill?.name,
+              data.bill
+            );
+          }
+
           if (data.type === 'LIVE_BILLS_SYNC') {
-            const myDev = this.getCurrentDeviceInfo();
-            if (data.sourceDeviceId !== myDev.id) {
-              if (Array.isArray(data.bills) && data.bills.length > 0) {
-                const activeDeletedBills = this.getDeletedBillIds();
-                const filteredBills = data.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
-                const currentLocal = this.getBills();
+            if (Array.isArray(data.bills) && data.bills.length > 0) {
+              const activeDeletedBills = this.getDeletedBillIds();
+              const filteredBills = data.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
+              const currentLocal = this.getBills();
 
-                // Detailed diff log for any payment status change arriving from the other device
-                data.bills.forEach((remoteB: Bill) => {
-                  if (!remoteB || !remoteB.id) return;
-                  const localMatch = currentLocal.find(lb => lb.id === remoteB.id || this.getCanonicalBillKey(lb) === this.getCanonicalBillKey(remoteB));
-                  if (localMatch && localMatch.status !== remoteB.status) {
-                    this.addPaymentPropagationLog({
-                      eventType: 'WS_UPDATE_RECEIVED',
-                      billId: remoteB.id,
-                      canonicalId: remoteB.id,
-                      billName: remoteB.name,
-                      billAmount: remoteB.amount,
-                      month: (remoteB.dueDate || '').substring(0, 7),
-                      oldStatus: localMatch.status as any,
-                      newStatus: remoteB.status as any,
-                      version: remoteB.version || 1,
-                      actor: remoteB.lastEditedBy || remoteB.paidBy || 'Cônjuge',
-                      deviceId: data.sourceDeviceId || 'outro_aparelho',
-                      deviceName: remoteB.updatedByDevice || 'Outro Aparelho',
-                      householdId: this.getHouseholdId(),
-                      details: `Status ${remoteB.status.toUpperCase()} recebido e aplicado em tempo real a partir do outro celular (<30ms)!`,
-                      success: true,
-                    });
-                  }
-                });
+              // Detailed diff log for any payment status change arriving from the other device
+              data.bills.forEach((remoteB: Bill) => {
+                if (!remoteB || !remoteB.id) return;
+                const localMatch = currentLocal.find(lb => lb.id === remoteB.id || this.getCanonicalBillKey(lb) === this.getCanonicalBillKey(remoteB));
+                if (localMatch && localMatch.status !== remoteB.status) {
+                  this.addPaymentPropagationLog({
+                    eventType: 'WS_UPDATE_RECEIVED',
+                    billId: remoteB.id,
+                    canonicalId: remoteB.id,
+                    billName: remoteB.name,
+                    billAmount: remoteB.amount,
+                    month: (remoteB.dueDate || '').substring(0, 7),
+                    oldStatus: localMatch.status as any,
+                    newStatus: remoteB.status as any,
+                    version: remoteB.version || 1,
+                    actor: remoteB.lastEditedBy || remoteB.paidBy || 'Paula',
+                    deviceId: data.sourceDeviceId || 'outro_aparelho',
+                    deviceName: remoteB.updatedByDevice || 'Paula (iPhone)',
+                    householdId: this.getHouseholdId(),
+                    details: `Status ${remoteB.status.toUpperCase()} recebido e aplicado em tempo real a partir do outro celular (<30ms)!`,
+                    success: true,
+                  });
+                }
+              });
 
-                const merged = this.mergeBillsLists(currentLocal, filteredBills);
-                this.safeSaveBillsToStorage(merged);
-                this.autoPropagateRecurringBills();
-                this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
-              }
-              if (Array.isArray(data.revenues) && data.revenues.length > 0) {
-                const activeDeletedRevenues = this.getDeletedRevenueIds();
-                const filteredRevs = data.revenues.filter((r: any) => r && r.id && !activeDeletedRevenues.includes(r.id));
-                const currentRevs = this.getRevenues();
-                const mergedRevs = this.deduplicateRevenues([...currentRevs, ...filteredRevs]);
-                this.saveRevenues(mergedRevs);
-              }
+              const merged = this.mergeBillsLists(currentLocal, filteredBills);
+              this.safeSaveBillsToStorage(merged);
+              this.autoPropagateRecurringBills();
+              this.broadcastUpdate('BILLS_UPDATED', { count: merged.length });
+            }
+            if (Array.isArray(data.revenues) && data.revenues.length > 0) {
+              const activeDeletedRevenues = this.getDeletedRevenueIds();
+              const filteredRevs = data.revenues.filter((r: any) => r && r.id && !activeDeletedRevenues.includes(r.id));
+              const currentRevs = this.getRevenues();
+              const mergedRevs = this.deduplicateRevenues([...currentRevs, ...filteredRevs]);
+              this.saveRevenues(mergedRevs);
             }
           }
 
@@ -431,6 +441,31 @@ class CloudKitSyncEngine {
             const isDifferentUser = Boolean(notif.sourceUserName && notif.sourceUserName !== currentUserName);
 
             if (isDifferentDevice || isDifferentUser) {
+              // Immediately apply payment status change locally so bill updates in the exact same millisecond as notification
+              if (notif.actionType === 'bill_paid') {
+                this.applyRemoteStatusUpdate(
+                  notif.targetBillId || '',
+                  'paid',
+                  notif.sourceUserName,
+                  notif.timestamp,
+                  notif.bill?.version,
+                  notif.sourceDeviceName,
+                  notif.targetItemName,
+                  notif.bill
+                );
+              } else if (notif.actionType === 'bill_pending') {
+                this.applyRemoteStatusUpdate(
+                  notif.targetBillId || '',
+                  'pending',
+                  notif.sourceUserName,
+                  undefined,
+                  notif.bill?.version,
+                  notif.sourceDeviceName,
+                  notif.targetItemName,
+                  notif.bill
+                );
+              }
+
               this.lastSeenNotificationTime = notif.timestamp || new Date().toISOString();
               localStorage.setItem('financas_last_seen_notif_time', this.lastSeenNotificationTime);
               this.broadcastUpdate('REMOTE_CHANGE_NOTIFICATION', notif);
@@ -466,7 +501,9 @@ class CloudKitSyncEngine {
     title: string,
     message: string,
     targetItemName?: string,
-    amount?: number
+    amount?: number,
+    targetBillId?: string,
+    bill?: Bill
   ): Promise<void> {
     if (typeof window === 'undefined') return;
     const myDev = this.getCurrentDeviceInfo();
@@ -484,6 +521,8 @@ class CloudKitSyncEngine {
       title,
       message,
       targetItemName,
+      targetBillId,
+      bill,
       amount,
       timestamp: new Date().toISOString(),
     };
@@ -502,6 +541,8 @@ class CloudKitSyncEngine {
             sourceDeviceName: canonicalDevName,
             userName,
             sourceUserName: userName,
+            targetBillId,
+            bill,
           })
         );
       } catch (err) {
@@ -520,6 +561,8 @@ class CloudKitSyncEngine {
           sourceDeviceName: canonicalDevName,
           userName,
           sourceUserName: userName,
+          targetBillId,
+          bill,
         }),
       }).catch(() => {});
     } catch {}
@@ -1039,28 +1082,61 @@ class CloudKitSyncEngine {
           });
         }
 
+        const incIsWife = Boolean(
+          (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('paula') ||
+          (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('esposa') ||
+          (incoming.paidBy || incoming.lastEditedBy || incoming.updatedByDevice || '').toLowerCase().includes('cônjuge')
+        );
+        const curIsWife = Boolean(
+          (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('paula') ||
+          (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('esposa') ||
+          (current.paidBy || current.lastEditedBy || current.updatedByDevice || '').toLowerCase().includes('cônjuge')
+        );
+
         let resolvedStatus: 'pending' | 'paid' | 'overdue' = current.status;
         let resolvedPaidAt = current.paidAt;
         let resolvedPaidBy = current.paidBy;
+        let resolvedLastEditedBy = current.lastEditedBy;
+        let resolvedLastActionDesc = current.lastActionDescription;
+        let resolvedUpdatedByDev = current.updatedByDevice;
 
         if (incoming.status === 'paid' && current.status !== 'paid') {
           resolvedStatus = 'paid';
           resolvedPaidAt = incoming.paidAt || new Date().toISOString();
-          resolvedPaidBy = incoming.paidBy || incoming.lastEditedBy || 'Cônjuge';
+          resolvedPaidBy = incIsWife ? 'Paula' : (incoming.paidBy || incoming.lastEditedBy || 'Paula');
+          resolvedLastEditedBy = resolvedPaidBy;
+          resolvedLastActionDesc = 'Marcou como Pago';
+          resolvedUpdatedByDev = incIsWife ? 'Paula (iPhone)' : (incoming.updatedByDevice || this.getCanonicalDeviceName(resolvedPaidBy));
         } else if (current.status === 'paid' && incoming.status !== 'paid') {
-          if (incVersion > curVersion && incUpdated > curUpdated) {
+          if (incVersion > curVersion && incUpdated > curUpdated && incoming.lastActionDescription?.toLowerCase().includes('reabriu')) {
             resolvedStatus = 'pending';
             resolvedPaidAt = undefined;
             resolvedPaidBy = undefined;
+            resolvedLastEditedBy = incoming.lastEditedBy;
+            resolvedLastActionDesc = incoming.lastActionDescription || 'Reabriu como Pendente';
+            resolvedUpdatedByDev = incoming.updatedByDevice;
           } else {
             resolvedStatus = 'paid';
             resolvedPaidAt = current.paidAt;
-            resolvedPaidBy = current.paidBy;
+            resolvedPaidBy = curIsWife ? 'Paula' : (current.paidBy || current.lastEditedBy || 'Paula');
+            resolvedLastEditedBy = resolvedPaidBy;
+            resolvedLastActionDesc = current.lastActionDescription || 'Marcou como Pago';
+            resolvedUpdatedByDev = curIsWife ? 'Paula (iPhone)' : (current.updatedByDevice || 'Paula (iPhone)');
           }
+        } else if (incoming.status === 'paid' && current.status === 'paid') {
+          resolvedStatus = 'paid';
+          resolvedPaidAt = incoming.paidAt || current.paidAt || new Date().toISOString();
+          resolvedPaidBy = (curIsWife || incIsWife) ? 'Paula' : (incoming.paidBy || current.paidBy || 'Paula');
+          resolvedLastEditedBy = resolvedPaidBy;
+          resolvedLastActionDesc = 'Marcou como Pago';
+          resolvedUpdatedByDev = (curIsWife || incIsWife) ? 'Paula (iPhone)' : (incoming.updatedByDevice || current.updatedByDevice);
         } else if (incVersion > curVersion || incUpdated >= curUpdated) {
           resolvedStatus = incoming.status;
           resolvedPaidAt = incoming.paidAt;
           resolvedPaidBy = incoming.paidBy;
+          resolvedLastEditedBy = incoming.lastEditedBy;
+          resolvedLastActionDesc = incoming.lastActionDescription;
+          resolvedUpdatedByDev = incoming.updatedByDevice;
         }
 
         const preferred = (incVersion > curVersion || incUpdated >= curUpdated) ? incoming : current;
@@ -1073,6 +1149,9 @@ class CloudKitSyncEngine {
           status: resolvedStatus,
           paidAt: resolvedPaidAt,
           paidBy: resolvedPaidBy,
+          lastEditedBy: resolvedLastEditedBy || preferred.lastEditedBy,
+          lastActionDescription: resolvedLastActionDesc || preferred.lastActionDescription,
+          updatedByDevice: resolvedUpdatedByDev || preferred.updatedByDevice,
           receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
           receiptName: preferred.receiptName || secondary.receiptName,
           receiptSize: preferred.receiptSize || secondary.receiptSize,
@@ -1122,13 +1201,22 @@ class CloudKitSyncEngine {
         const preferred = (bVer > eVer || (bVer === eVer && bTime >= eTime)) ? b : existing;
         const secondary = preferred === b ? existing : b;
 
+        const paidSource = b.status === 'paid' ? b : (existing.status === 'paid' ? existing : undefined);
+        const resolvedPaidBy = isEitherPaid && paidSource ? (paidSource.paidBy || paidSource.lastEditedBy || 'Paula') : undefined;
+        const resolvedLastEditedBy = isEitherPaid && paidSource ? (paidSource.paidBy || paidSource.lastEditedBy || 'Paula') : preferred.lastEditedBy;
+        const resolvedLastActionDesc = isEitherPaid ? 'Marcou como Pago' : preferred.lastActionDescription;
+        const resolvedUpdatedByDev = isEitherPaid && paidSource ? (paidSource.updatedByDevice || this.getCanonicalDeviceName(resolvedPaidBy)) : preferred.updatedByDevice;
+
         const mergedBill: Bill = {
           ...secondary,
           ...preferred,
           id: existing.id || b.id,
           status: isEitherPaid ? 'paid' : (preferred.status || 'pending'),
-          paidAt: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidAt : secondary.paidAt) || new Date().toISOString() : undefined,
-          paidBy: isEitherPaid ? (preferred.status === 'paid' ? preferred.paidBy : secondary.paidBy) : undefined,
+          paidAt: isEitherPaid ? (paidSource?.paidAt || preferred.paidAt || secondary.paidAt || new Date().toISOString()) : undefined,
+          paidBy: resolvedPaidBy,
+          lastEditedBy: resolvedLastEditedBy,
+          lastActionDescription: resolvedLastActionDesc,
+          updatedByDevice: resolvedUpdatedByDev,
           receiptUrl: preferred.receiptUrl || secondary.receiptUrl,
           receiptName: preferred.receiptName || secondary.receiptName,
           receiptSize: preferred.receiptSize || secondary.receiptSize,
@@ -2078,17 +2166,116 @@ class CloudKitSyncEngine {
     return this.upsertBill(bill as any);
   }
 
+  // Immediately applies a remote status update (from spouse or websocket) locally with zero latency
+  public applyRemoteStatusUpdate(
+    billId: string,
+    status: 'paid' | 'pending' | 'overdue',
+    actor?: string,
+    paidAt?: string,
+    version?: number,
+    sourceDeviceName?: string,
+    billName?: string,
+    remoteBill?: Bill
+  ): Bill | null {
+    const bills = this.getBills();
+    const cleanName = (billName || remoteBill?.name || '').trim().toLowerCase();
+    const targetMonth = (remoteBill?.dueDate || remoteBill?.paymentMonth || paidAt || '').substring(0, 7) ||
+      (typeof window !== 'undefined' ? (localStorage.getItem('financas_selected_month_id') || '') : '') || '2026-11';
+
+    let idx = -1;
+    if (billId) {
+      idx = bills.findIndex(b => b && b.id === billId);
+    }
+
+    if (idx === -1 && remoteBill) {
+      idx = bills.findIndex(b => b && this.getCanonicalBillKey(b) === this.getCanonicalBillKey(remoteBill));
+    }
+
+    if (idx === -1 && cleanName) {
+      // Prioritize same debt name in target month
+      idx = bills.findIndex(b => 
+        b && b.name && b.name.trim().toLowerCase() === cleanName && 
+        (!targetMonth || (b.dueDate || b.paymentMonth || '').substring(0, 7) === targetMonth)
+      );
+    }
+
+    if (idx === -1 && cleanName) {
+      // Prioritize bill with different status (e.g. pending to be marked paid)
+      idx = bills.findIndex(b => b && b.name && b.name.trim().toLowerCase() === cleanName && b.status !== status);
+    }
+
+    if (idx === -1 && cleanName) {
+      idx = bills.findIndex(b => b && b.name && b.name.trim().toLowerCase() === cleanName);
+    }
+
+    if (idx === -1 && !remoteBill) return null;
+
+    const isPaid = status === 'paid';
+    const isWifeActor = Boolean(
+      (actor || '').toLowerCase().includes('paula') ||
+      (actor || '').toLowerCase().includes('esposa') ||
+      (actor || '').toLowerCase().includes('cônjuge') ||
+      (sourceDeviceName || '').toLowerCase().includes('paula') ||
+      (sourceDeviceName || '').toLowerCase().includes('esposa')
+    );
+    const cleanActor = isWifeActor ? 'Paula' : (actor || (isPaid ? this.getWifeName() : this.getTitularName()));
+    const canonicalDev = isWifeActor ? 'Paula (iPhone)' : (sourceDeviceName || this.getCanonicalDeviceName(cleanActor));
+    const nowIso = paidAt || new Date().toISOString();
+
+    let updated: Bill;
+    if (idx !== -1) {
+      const cur = bills[idx];
+      updated = {
+        ...cur,
+        status,
+        paidAt: isPaid ? nowIso : undefined,
+        paidBy: isPaid ? cleanActor : undefined,
+        lastEditedBy: cleanActor,
+        lastEditedAt: nowIso,
+        lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+        updatedByDevice: canonicalDev,
+        version: Math.max((cur.version || 1) + 1, version || 1),
+        updatedAt: nowIso,
+        isEdited: true,
+        isSynced: true,
+      };
+      bills[idx] = updated;
+    } else {
+      updated = {
+        ...remoteBill!,
+        status,
+        paidAt: isPaid ? nowIso : undefined,
+        paidBy: isPaid ? cleanActor : undefined,
+        lastEditedBy: cleanActor,
+        lastEditedAt: nowIso,
+        lastActionDescription: isPaid ? 'Marcou como Pago' : 'Reabriu como Pendente',
+        updatedByDevice: canonicalDev,
+        version: Math.max((remoteBill?.version || 1), version || 1),
+        updatedAt: nowIso,
+        isEdited: true,
+        isSynced: true,
+      };
+      bills.unshift(updated);
+    }
+
+    this.safeSaveBillsToStorage(bills);
+    this.broadcastUpdate('BILL_UPSERTED', updated);
+    this.broadcastUpdate('BILLS_UPDATED', { count: bills.length });
+    this.broadcastUpdate('PAYMENT_STATUS_CHANGED', updated);
+    return updated;
+  }
+
   // Toggling paid status records audit trail of who paid/reopened with bumped version & updatedAt
-  public toggleBillStatus(billId: string, status: 'pending' | 'paid' | 'overdue'): Bill | null {
+  public toggleBillStatus(billId: string, status: 'pending' | 'paid' | 'overdue', overrideActor?: string): Bill | null {
     const bills = this.getBills();
     const existingIndex = bills.findIndex(b => b.id === billId);
     if (existingIndex === -1) return null;
     const existing = bills[existingIndex];
-    const actor = this.getCurrentUserName();
+    const actor = overrideActor || this.getCurrentUserName();
     const isPaid = status === 'paid';
     const nowIso = new Date().toISOString();
     const newVersion = (existing.version || 1) + 1;
-    const activeDev = this.getCurrentDeviceInfo().name;
+    const activeDev = this.getCanonicalDeviceName(actor);
     const devId = this.getCurrentDeviceInfo().id;
     const houseId = this.getHouseholdId();
 
@@ -2137,7 +2324,7 @@ class CloudKitSyncEngine {
     const msg = isPaid
       ? `${actor} marcou a conta "${existing.name}" (${this.formatCurrency(existing.amount)}) como PAGA! ✅`
       : `${actor} reabriu a conta "${existing.name}" como Pendente.`;
-    this.notifyRemoteChange(isPaid ? 'bill_paid' : 'bill_pending', title, msg, existing.name, existing.amount);
+    this.notifyRemoteChange(isPaid ? 'bill_paid' : 'bill_pending', title, msg, existing.name, existing.amount, updated.id, updated);
 
     // 2. Ultra-fast real-time WebSocket status push (<25ms)
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
@@ -2191,6 +2378,8 @@ class CloudKitSyncEngine {
         paidAt: updated.paidAt,
         version: updated.version,
         bill: updated,
+        canonicalKey: this.getCanonicalBillKey(updated),
+        billName: updated.name,
       }),
     })
       .then(res => res.json())

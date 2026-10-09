@@ -58,7 +58,10 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
 
   let actorName = titularName;
   let isWife = false;
-  if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula')) {
+  const rawDev = (notification.sourceDeviceName || '').trim();
+  const devLow = rawDev.toLowerCase();
+
+  if (lower.includes(wifeLower) || lower.includes('esposa') || lower.includes('cônjuge') || lower.includes('clara') || lower.includes('paula') || devLow.includes('paula') || devLow.includes('esposa')) {
     actorName = wifeName;
     isWife = true;
   } else if (lower.includes('carlos') || lower.includes('você') || lower.includes('titular') || lower.includes('meu')) {
@@ -76,8 +79,6 @@ export const LiveAlterationToast: React.FC<LiveAlterationToastProps> = ({
   let actionVerb = 'alterou a dívida';
 
   // Canonical Device Label: strictly 'Paula (iPhone)' or 'Carlos (iPhone)'
-  const rawDev = (notification.sourceDeviceName || '').trim();
-  const devLow = rawDev.toLowerCase();
   const isDevWife = isWife || devLow.includes('paula') || devLow.includes('esposa') || devLow.includes('clara');
   const canonicalDevice = isDevWife ? 'Paula (iPhone)' : 'Carlos (iPhone)';
 

@@ -56,6 +56,8 @@ interface HouseholdData {
   lastUpdated: string;
   deletedBillIds?: string[];
   deletedRevenueIds?: string[];
+  deletedSeriesSlugs?: string[];
+  deletedMonthInstances?: string[];
   notifications?: ChangeNotification[];
 }
 
@@ -570,6 +572,20 @@ async function startServer() {
     });
   };
 
+  const broadcastWsEvent = (householdId: string, eventObj: any) => {
+    const cleanHouseId = householdId.trim().toLowerCase();
+    const payload = JSON.stringify(eventObj);
+    wsClients.forEach((client) => {
+      if (client.ws.readyState === WebSocket.OPEN && client.householdId === cleanHouseId) {
+        try {
+          client.ws.send(payload);
+        } catch (err) {
+          console.error('Error sending WS event to client:', err);
+        }
+      }
+    });
+  };
+
   const recordChangeNotification = (householdId: string, params: {
     sourceDeviceId: string;
     sourceDeviceName?: string;
@@ -678,6 +694,39 @@ async function startServer() {
             amount: msg.amount,
           });
           broadcastChangeNotification(houseId, notif);
+
+          if (msg.actionType === 'bill_deleted') {
+            const { store, household } = getOrCreateHousehold(houseId);
+            const delId = msg.targetBillId || msg.billId;
+            const delName = normalizeBillTitleServer(msg.targetItemName || msg.bill?.name || '');
+            const delMonth = (msg.bill?.dueDate || '').substring(0, 7);
+            const isSeries = Boolean(msg.message?.includes('todos os meses'));
+
+            if (!household.deletedBillIds) household.deletedBillIds = [];
+            if (delId && !household.deletedBillIds.includes(delId)) {
+              household.deletedBillIds.push(delId);
+            }
+
+            if (isSeries && delName) {
+              if (!household.deletedSeriesSlugs) household.deletedSeriesSlugs = [];
+              household.deletedSeriesSlugs.push(delName);
+            } else if (delMonth && delName) {
+              if (!household.deletedMonthInstances) household.deletedMonthInstances = [];
+              household.deletedMonthInstances.push(`name_${delMonth}_${delName}`);
+              if (delId) household.deletedMonthInstances.push(`id_${delMonth}_${delId}`);
+            }
+
+            household.bills = (household.bills || []).filter((b: any) => {
+              if (!b) return false;
+              if (delId && b.id === delId) return false;
+              const bName = normalizeBillTitleServer(b.name || '');
+              const bMonth = (b.dueDate || '').substring(0, 7);
+              if (isSeries && delName && bName === delName) return false;
+              if (delMonth && delName && bMonth === delMonth && bName === delName) return false;
+              return true;
+            });
+            saveHouseholds(store);
+          }
         } else if (msg.type === 'LIVE_STATUS_UPDATE') {
           const houseId = (msg.householdId || clientState.householdId).trim().toLowerCase();
           const { store, household } = getOrCreateHousehold(houseId);
@@ -958,16 +1007,46 @@ async function startServer() {
     household.isWifeConnected = true;
 
     // Process deleted bills
-    const { deletedBillIds, deletedRevenueIds } = req.body;
-    if (!household.deletedBillIds) {
-      household.deletedBillIds = [];
+    const { deletedBillIds, deletedRevenueIds, deletedSeriesSlugs, deletedMonthInstances } = req.body;
+    if (!household.deletedBillIds) household.deletedBillIds = [];
+    if (!household.deletedSeriesSlugs) household.deletedSeriesSlugs = [];
+    if (!household.deletedMonthInstances) household.deletedMonthInstances = [];
+
+    if (Array.isArray(deletedSeriesSlugs) && deletedSeriesSlugs.length > 0) {
+      household.deletedSeriesSlugs = Array.from(new Set([...household.deletedSeriesSlugs, ...deletedSeriesSlugs]));
+    }
+    if (Array.isArray(deletedMonthInstances) && deletedMonthInstances.length > 0) {
+      household.deletedMonthInstances = Array.from(new Set([...household.deletedMonthInstances, ...deletedMonthInstances]));
     }
     if (Array.isArray(deletedBillIds) && deletedBillIds.length > 0) {
       household.deletedBillIds = Array.from(new Set([...household.deletedBillIds, ...deletedBillIds]));
-      household.bills = (household.bills || []).filter(
-        (b: any) => !household.deletedBillIds?.includes(b.id)
-      );
     }
+
+    const delSet = new Set(household.deletedBillIds);
+    const delSlugs = new Set(household.deletedSeriesSlugs);
+    const delMonths = new Set(household.deletedMonthInstances);
+
+    const isDeletedOnServer = (b: any): boolean => {
+      if (!b || !b.id) return true;
+      if (delSet.has(b.id)) return true;
+      const bMonth = (b.dueDate || '').substring(0, 7) || '2026-10';
+      if (delMonths.has(`id_${bMonth}_${b.id}`) || delMonths.has(`id_${b.id}`)) return true;
+
+      const bBase = normalizeBillTitleServer(b.name || '');
+      const bSlug = bBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      if (bBase && (delSlugs.has(bBase) || delMonths.has(`name_${bMonth}_${bBase}`))) return true;
+      if (bSlug && (delSlugs.has(bSlug) || delMonths.has(`slug_${bMonth}_${bSlug}`))) return true;
+
+      const bBarcode = (b.barcode || '').replace(/\D/g, '');
+      if (bBarcode.length >= 10 && (delSlugs.has(bBarcode) || delMonths.has(`barcode_${bMonth}_${bBarcode}`))) return true;
+
+      if (b.parentRecurringId && (delSlugs.has(b.parentRecurringId) || delMonths.has(`parent_${bMonth}_${b.parentRecurringId}`))) return true;
+      if (b.parentInstallmentId && (delSlugs.has(b.parentInstallmentId) || delMonths.has(`inst_${bMonth}_${b.parentInstallmentId}`))) return true;
+
+      return false;
+    };
+
+    household.bills = (household.bills || []).filter((b: any) => !isDeletedOnServer(b));
 
     // Process deleted revenues
     if (!household.deletedRevenueIds) {
@@ -982,22 +1061,26 @@ async function startServer() {
 
     // Merge Bills (Take incoming or higher version/updatedAt, with payment preservation)
     if (Array.isArray(bills) && bills.length > 0) {
-      // CRITICAL: Un-tombstone any bill actively present in the sync payload so payments & edits are never dropped!
+      // CRITICAL: Un-tombstone any bill actively present in the sync payload only if NOT deleted by series/month!
       const incomingBillIds = new Set(bills.map((b: any) => b && b.id).filter(Boolean));
       if (household.deletedBillIds) {
-        household.deletedBillIds = household.deletedBillIds.filter((id: string) => !incomingBillIds.has(id));
+        household.deletedBillIds = household.deletedBillIds.filter((id: string) => {
+          if (!incomingBillIds.has(id)) return true;
+          // If deleted in month or series, do NOT un-tombstone!
+          const bObj = bills.find((b: any) => b && b.id === id);
+          return bObj ? isDeletedOnServer(bObj) : false;
+        });
       }
 
       const billMap = new Map<string, any>();
       (household.bills || []).forEach((b: any) => {
-        if (b && b.id && !household.deletedBillIds?.includes(b.id)) {
+        if (!isDeletedOnServer(b)) {
           billMap.set(b.id, b);
         }
       });
 
       bills.forEach((incoming: any) => {
-        if (!incoming || !incoming.id) return;
-        if (household.deletedBillIds && household.deletedBillIds.includes(incoming.id)) return;
+        if (!incoming || !incoming.id || isDeletedOnServer(incoming)) return;
         const current = billMap.get(incoming.id);
         if (!current) {
           billMap.set(incoming.id, incoming);
@@ -1195,7 +1278,121 @@ async function startServer() {
       amount,
     });
     broadcastChangeNotification(cleanId, notif);
+
+    if (actionType === 'bill_deleted') {
+      const { store, household } = getOrCreateHousehold(cleanId);
+      const delId = targetBillId;
+      const delName = normalizeBillTitleServer(targetItemName || bill?.name || '');
+      const delMonth = (bill?.dueDate || '').substring(0, 7);
+      const isSeries = Boolean((message || '').includes('todos os meses'));
+
+      if (!household.deletedBillIds) household.deletedBillIds = [];
+      if (delId && !household.deletedBillIds.includes(delId)) {
+        household.deletedBillIds.push(delId);
+      }
+
+      if (isSeries && delName) {
+        if (!household.deletedSeriesSlugs) household.deletedSeriesSlugs = [];
+        household.deletedSeriesSlugs.push(delName);
+      } else if (delMonth && delName) {
+        if (!household.deletedMonthInstances) household.deletedMonthInstances = [];
+        household.deletedMonthInstances.push(`name_${delMonth}_${delName}`);
+        if (delId) household.deletedMonthInstances.push(`id_${delMonth}_${delId}`);
+      }
+
+      household.bills = (household.bills || []).filter((b: any) => {
+        if (!b) return false;
+        if (delId && b.id === delId) return false;
+        const bName = normalizeBillTitleServer(b.name || '');
+        const bMonth = (b.dueDate || '').substring(0, 7);
+        if (isSeries && delName && bName === delName) return false;
+        if (delMonth && delName && bMonth === delMonth && bName === delName) return false;
+        return true;
+      });
+      saveHouseholds(store);
+    }
+
     res.json({ success: true, notification: notif });
+  });
+
+  // Atomic bill deletion endpoint
+  app.post('/api/household/:id/delete-bill', (req, res) => {
+    const { id } = req.params;
+    const {
+      billId,
+      deletedBillIds = [],
+      targetMonth,
+      billName,
+      canonicalKey,
+      isSeries,
+      seriesSlug,
+      deletedSeriesSlugs = [],
+      deletedMonthInstances = [],
+    } = req.body;
+
+    const cleanId = id.trim().toLowerCase();
+    const { store, household } = getOrCreateHousehold(cleanId);
+    const nowIso = new Date().toISOString();
+
+    if (!household.deletedBillIds) household.deletedBillIds = [];
+    if (!household.deletedSeriesSlugs) household.deletedSeriesSlugs = [];
+    if (!household.deletedMonthInstances) household.deletedMonthInstances = [];
+
+    const allDelIds = Array.from(new Set([...household.deletedBillIds, ...(Array.isArray(deletedBillIds) ? deletedBillIds : []), billId].filter(Boolean)));
+    household.deletedBillIds = allDelIds;
+
+    if (Array.isArray(deletedSeriesSlugs) && deletedSeriesSlugs.length > 0) {
+      household.deletedSeriesSlugs = Array.from(new Set([...household.deletedSeriesSlugs, ...deletedSeriesSlugs]));
+    }
+    if (seriesSlug) {
+      household.deletedSeriesSlugs = Array.from(new Set([...household.deletedSeriesSlugs, seriesSlug]));
+    }
+
+    if (Array.isArray(deletedMonthInstances) && deletedMonthInstances.length > 0) {
+      household.deletedMonthInstances = Array.from(new Set([...household.deletedMonthInstances, ...deletedMonthInstances]));
+    }
+
+    const cleanTargetName = normalizeBillTitleServer(billName || '');
+
+    // Purge from household.bills
+    household.bills = (household.bills || []).filter((b: any) => {
+      if (!b || !b.id) return false;
+      if (allDelIds.includes(b.id)) return false;
+
+      const bName = normalizeBillTitleServer(b.name);
+      const bMonth = (b.dueDate || '').substring(0, 7) || '2026-10';
+
+      if (isSeries) {
+        if (cleanTargetName && bName === cleanTargetName) return false;
+        if (seriesSlug && (b.parentRecurringId === seriesSlug || b.parentInstallmentId === seriesSlug)) return false;
+      } else if (targetMonth && targetMonth === bMonth) {
+        if (cleanTargetName && bName === cleanTargetName) return false;
+        if (canonicalKey) {
+          const bBarcode = (b.barcode || '').replace(/\D/g, '');
+          if (bBarcode.length >= 10 && canonicalKey.includes(bBarcode)) return false;
+        }
+      }
+
+      return true;
+    });
+
+    household.lastUpdated = nowIso;
+    saveHouseholds(store);
+
+    // Broadcast deletion in real time to all connected WebSocket clients
+    broadcastWsEvent(cleanId, {
+      type: 'BILL_DELETED_BROADCAST',
+      householdId: cleanId,
+      billId,
+      deletedBillIds: allDelIds,
+      targetMonth,
+      billName,
+      canonicalKey,
+      isSeries: Boolean(isSeries),
+      timestamp: nowIso,
+    });
+
+    res.json({ success: true, household, timestamp: nowIso });
   });
 
   // Atomic payment status update endpoint with instant WebSocket broadcast

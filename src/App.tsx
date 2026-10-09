@@ -867,7 +867,7 @@ export default function App() {
   };
 
   const handleDeleteSingleMonth = (bill: Bill) => {
-    cloudkit.deleteBill(bill.id);
+    cloudkit.deleteBill(bill.id, bill, selectedMonth.id);
     setBills(cloudkit.getBills());
     setBillToDelete(null);
     showTemporaryToast(`Conta "${bill.name}" excluída de ${selectedMonth.label}.`);

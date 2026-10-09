@@ -464,6 +464,44 @@ class CloudKitSyncEngine {
                   notif.targetItemName,
                   notif.bill
                 );
+              } else if (notif.actionType === 'bill_deleted') {
+                const delId = notif.targetBillId;
+                const delName = notif.targetItemName;
+                const delMonth = (notif.bill?.dueDate || '').substring(0, 7);
+                const isSeries = Boolean(notif.message?.includes('todos os meses'));
+
+                if (delId) this.recordDeletedBill(delId);
+                if (isSeries && delName) {
+                  const cleanBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                  const slug = cleanBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+                  this.recordDeletedSeriesSlug(slug);
+                  this.recordDeletedSeriesSlug(cleanBase);
+                } else if (delMonth && delName) {
+                  const cleanBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                  this.recordDeletedMonthInstance(`name_${delMonth}_${cleanBase}`);
+                  if (delId) this.recordDeletedMonthInstance(`id_${delMonth}_${delId}`);
+                }
+
+                const currentBills = this.getBills();
+                const filtered = currentBills.filter(b => {
+                  if (delId && b.id === delId) return false;
+                  if (isSeries && delName) {
+                    const bBase = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    const targetBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                    if (bBase === targetBase) return false;
+                  } else if (delMonth && delName) {
+                    const bM = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7);
+                    if (bM === delMonth) {
+                      const bBase = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                      const targetBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                      if (bBase === targetBase) return false;
+                    }
+                  }
+                  return true;
+                });
+                this.safeSaveBillsToStorage(filtered);
+                this.broadcastUpdate('BILL_DELETED', { id: delId });
+                this.broadcastUpdate('BILLS_UPDATED', { count: filtered.length });
               }
 
               this.lastSeenNotificationTime = notif.timestamp || new Date().toISOString();
@@ -472,6 +510,47 @@ class CloudKitSyncEngine {
               // Trigger auto-sync to refresh local bills and revenues immediately
               this.syncWithServer();
             }
+          }
+
+          if (data.type === 'BILL_DELETED_BROADCAST') {
+            const delId = data.billId;
+            const delIds: string[] = data.deletedBillIds || (delId ? [delId] : []);
+            const delName = data.billName;
+            const delMonth = data.targetMonth;
+            const isSeries = Boolean(data.isSeries);
+
+            delIds.forEach(id => this.recordDeletedBill(id));
+            if (isSeries && delName) {
+              const cleanBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              const slug = cleanBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+              this.recordDeletedSeriesSlug(slug);
+              this.recordDeletedSeriesSlug(cleanBase);
+            } else if (delMonth && delName) {
+              const cleanBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+              this.recordDeletedMonthInstance(`name_${delMonth}_${cleanBase}`);
+              delIds.forEach(id => this.recordDeletedMonthInstance(`id_${delMonth}_${id}`));
+            }
+
+            const currentBills = this.getBills();
+            const filtered = currentBills.filter(b => {
+              if (delIds.includes(b.id)) return false;
+              if (isSeries && delName) {
+                const bBase = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                const targetBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                if (bBase === targetBase) return false;
+              } else if (delMonth && delName) {
+                const bM = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7);
+                if (bM === delMonth) {
+                  const bBase = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                  const targetBase = delName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+                  if (bBase === targetBase) return false;
+                }
+              }
+              return true;
+            });
+            this.safeSaveBillsToStorage(filtered);
+            this.broadcastUpdate('BILL_DELETED', { id: delId, deletedIds: delIds });
+            this.broadcastUpdate('BILLS_UPDATED', { count: filtered.length });
           }
         } catch (e) {
           console.error('Error parsing WS message:', e);
@@ -1031,10 +1110,20 @@ class CloudKitSyncEngine {
   public mergeBillsLists(localBills: Bill[], incomingBills: Bill[]): Bill[] {
     const mapById = new Map<string, Bill>();
     const mapByKey = new Map<string, Bill>();
+    const activeDeletedBills = new Set(this.getDeletedBillIds());
+    const deletedSeriesSlugs = new Set(this.getDeletedSeriesSlugs());
 
-    // 1. Index local bills
+    // 1. Index local bills (filter out deleted tombstones)
     localBills.forEach(b => {
       if (!b || !b.id) return;
+      if (activeDeletedBills.has(b.id)) return;
+      const bMonth = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
+      if (this.isBillDeletedInMonth(b, bMonth)) return;
+
+      const bBase = (b.name || '').replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bSlug = bBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      if (deletedSeriesSlugs.has(bSlug) || deletedSeriesSlugs.has(bBase)) return;
+
       mapById.set(b.id, b);
       const key = this.getCanonicalBillKey(b);
       if (key && !mapByKey.has(key)) {
@@ -1045,6 +1134,14 @@ class CloudKitSyncEngine {
     // 2. Merge incoming bills with canonical matching & payment status preservation
     incomingBills.forEach(incoming => {
       if (!incoming || !incoming.id) return;
+      if (activeDeletedBills.has(incoming.id)) return;
+      const incMonth = getBillEffectiveMonth(incoming) || (incoming.dueDate || '').substring(0, 7) || '2026-10';
+      if (this.isBillDeletedInMonth(incoming, incMonth)) return;
+
+      const incBase = (incoming.name || '').replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const incSlug = incBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      if (deletedSeriesSlugs.has(incSlug) || deletedSeriesSlugs.has(incBase)) return;
+
       const key = this.getCanonicalBillKey(incoming);
       const current = mapById.get(incoming.id) || (key ? mapByKey.get(key) : undefined);
 
@@ -1177,6 +1274,7 @@ class CloudKitSyncEngine {
     if (!Array.isArray(billsList)) return [];
     const deleted = this.getDeletedBillIds();
     const deletedSet = new Set(deleted);
+    const deletedSeriesSlugs = new Set(this.getDeletedSeriesSlugs());
     const map = new Map<string, Bill>();
 
     for (const b of billsList) {
@@ -1185,6 +1283,17 @@ class CloudKitSyncEngine {
           this.recordDeletedBill(b.id);
           deletedSet.add(b.id);
         }
+        continue;
+      }
+
+      const bMonth = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
+      if (this.isBillDeletedInMonth(b, bMonth)) {
+        continue;
+      }
+
+      const bBase = (b.name || '').replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bSlug = bBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      if (deletedSeriesSlugs.has(bSlug) || deletedSeriesSlugs.has(bBase)) {
         continue;
       }
 
@@ -1608,7 +1717,14 @@ class CloudKitSyncEngine {
           const cleanSlug = cleanName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
           const newId = `rec_${cleanSlug}_${targetMonth}`;
 
-          this.unrecordDeletedBill(newId);
+          // Check if this recurring instance was deleted by user for this month
+          if (
+            this.isBillDeletedInMonth(master, targetMonth) ||
+            this.isBillDeletedInMonth({ id: newId, name: cleanName, barcode: cleanBarcode, parentRecurringId: master.id }, targetMonth) ||
+            this.getDeletedBillIds().includes(newId)
+          ) {
+            continue;
+          }
 
           const newBill: Bill = {
             ...master,
@@ -1687,7 +1803,14 @@ class CloudKitSyncEngine {
             const cleanSlug = baseCleanName.replace(/[^a-zA-Z0-9]/g, '-').toLowerCase().substring(0, 20);
             const newId = `bill-inst-${cleanSlug}-${targetMonth}-${targetInst}`;
 
-            this.unrecordDeletedBill(newId);
+            // Check if this installment was deleted by user for this month
+            if (
+              this.isBillDeletedInMonth(master, targetMonth) ||
+              this.isBillDeletedInMonth({ id: newId, name: targetName, parentInstallmentId: master.parentInstallmentId || master.id }, targetMonth) ||
+              this.getDeletedBillIds().includes(newId)
+            ) {
+              continue;
+            }
 
             const newInstBill: Bill = {
               ...master,
@@ -2513,19 +2636,136 @@ class CloudKitSyncEngine {
     return Array.from(map.values());
   }
 
-  // Delete Bill (single month instance)
-  public deleteBill(id: string): void {
-    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
-    const toDelete = this.getBills().find(b => b.id === id);
-    const bName = toDelete?.name || 'Conta';
+  // Slugs/keys of bill instances deleted in specific months (e.g. user chose "Apagar apenas em Outubro de 2026")
+  public getDeletedMonthInstances(): string[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('financas_deleted_month_instances');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  }
 
+  public recordDeletedMonthInstance(key: string): void {
+    if (typeof window === 'undefined' || !key) return;
+    const instances = this.getDeletedMonthInstances();
+    if (!instances.includes(key)) {
+      instances.push(key);
+      localStorage.setItem('financas_deleted_month_instances', JSON.stringify(instances));
+    }
+  }
+
+  public isBillDeletedInMonth(bill: Partial<Bill>, targetMonth: string): boolean {
+    if (!bill || !targetMonth) return false;
+    const deletedInstances = new Set(this.getDeletedMonthInstances());
+    if (bill.id && (deletedInstances.has(`id_${targetMonth}_${bill.id}`) || deletedInstances.has(`id_${bill.id}`))) return true;
+
+    const bName = (bill.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanSlug = bName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+    if (bName && deletedInstances.has(`name_${targetMonth}_${bName}`)) return true;
+    if (cleanSlug && deletedInstances.has(`slug_${targetMonth}_${cleanSlug}`)) return true;
+
+    const bBarcode = (bill.barcode || '').replace(/\D/g, '');
+    if (bBarcode.length >= 10 && deletedInstances.has(`barcode_${targetMonth}_${bBarcode}`)) return true;
+
+    if (bill.parentRecurringId && (deletedInstances.has(`parent_${targetMonth}_${bill.parentRecurringId}`) || deletedInstances.has(`parent_${bill.parentRecurringId}`))) return true;
+    if (bill.parentInstallmentId && (deletedInstances.has(`inst_${targetMonth}_${bill.parentInstallmentId}`) || deletedInstances.has(`inst_${bill.parentInstallmentId}`))) return true;
+
+    try {
+      const canonicalKey = this.getCanonicalBillKey(bill as Bill);
+      if (canonicalKey && (deletedInstances.has(`key_${canonicalKey}`) || deletedInstances.has(canonicalKey))) return true;
+    } catch {}
+
+    return false;
+  }
+
+  // Delete Bill (single month instance)
+  public deleteBill(id: string, fallbackBill?: Bill, targetMonthOverride?: string): void {
+    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
+    const allBills = this.getBills();
+    let toDelete = allBills.find(b => b.id === id);
+    if (!toDelete && fallbackBill) {
+      toDelete = fallbackBill;
+    }
+    const bName = toDelete?.name || fallbackBill?.name || 'Conta';
+    const targetMonth = targetMonthOverride || (toDelete ? (getBillEffectiveMonth(toDelete) || (toDelete.dueDate || '').substring(0, 7)) : '2026-10') || '2026-10';
+
+    const cleanBaseName = bName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanSlug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+    const cleanBarcode = ((toDelete?.barcode || fallbackBill?.barcode) || '').replace(/\D/g, '');
+    const canonicalKey = toDelete ? this.getCanonicalBillKey(toDelete) : (fallbackBill ? this.getCanonicalBillKey(fallbackBill) : '');
+
+    // Record month-specific tombstones
     this.recordDeletedBill(id);
-    const bills = this.getBills().filter(b => b.id !== id);
-    this.safeSaveBillsToStorage(bills);
-    this.broadcastUpdate('BILL_DELETED', { id });
+    if (toDelete?.id) this.recordDeletedBill(toDelete.id);
+    this.recordDeletedMonthInstance(`id_${targetMonth}_${id}`);
+    if (toDelete?.id) this.recordDeletedMonthInstance(`id_${targetMonth}_${toDelete.id}`);
+    if (cleanBaseName) this.recordDeletedMonthInstance(`name_${targetMonth}_${cleanBaseName}`);
+    if (cleanSlug) this.recordDeletedMonthInstance(`slug_${targetMonth}_${cleanSlug}`);
+    if (cleanBarcode.length >= 10) this.recordDeletedMonthInstance(`barcode_${targetMonth}_${cleanBarcode}`);
+    if (toDelete?.parentRecurringId) this.recordDeletedMonthInstance(`parent_${targetMonth}_${toDelete.parentRecurringId}`);
+    if (toDelete?.parentInstallmentId) this.recordDeletedMonthInstance(`inst_${targetMonth}_${toDelete.parentInstallmentId}`);
+    if (canonicalKey) this.recordDeletedMonthInstance(`key_${canonicalKey}`);
+
+    // Collect all matching IDs in this month so that any duplicates/aliases in the same month are completely purged
+    const deletedIds: string[] = [id];
+    if (toDelete?.id && !deletedIds.includes(toDelete.id)) deletedIds.push(toDelete.id);
+
+    const remainingBills: Bill[] = [];
+    for (const b of allBills) {
+      const bMonth = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
+      const bBaseName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bBarcode = (b.barcode || '').replace(/\D/g, '');
+
+      const isExactMatch = b.id === id || (toDelete && b.id === toDelete.id);
+      const isMonthMatch = bMonth === targetMonth && (
+        (cleanBaseName && bBaseName === cleanBaseName) ||
+        (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) ||
+        (canonicalKey && this.getCanonicalBillKey(b) === canonicalKey) ||
+        (toDelete?.parentRecurringId && b.parentRecurringId === toDelete.parentRecurringId) ||
+        (toDelete && b.parentRecurringId === toDelete.id)
+      );
+
+      if (isExactMatch || isMonthMatch) {
+        if (!deletedIds.includes(b.id)) deletedIds.push(b.id);
+        this.recordDeletedBill(b.id);
+        this.recordDeletedMonthInstance(`id_${targetMonth}_${b.id}`);
+      } else {
+        remainingBills.push(b);
+      }
+    }
+
+    this.safeSaveBillsToStorage(remainingBills);
+    this.broadcastUpdate('BILL_DELETED', { id, deletedIds, month: targetMonth });
+    this.broadcastUpdate('BILLS_UPDATED', { count: remainingBills.length });
 
     const actor = this.getCurrentUserName();
-    this.notifyRemoteChange('bill_deleted', 'Conta Excluída 🗑️', `${actor} excluiu a conta "${bName}"`, bName);
+    this.notifyRemoteChange(
+      'bill_deleted',
+      'Conta Excluída 🗑️',
+      `${actor} excluiu a conta "${bName}"`,
+      bName,
+      toDelete?.amount,
+      id,
+      toDelete
+    );
+
+    // Call atomic server deletion endpoint
+    const houseId = this.getHouseholdId();
+    fetch(`/api/household/${encodeURIComponent(houseId)}/delete-bill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        billId: id,
+        deletedBillIds: deletedIds,
+        targetMonth,
+        billName: bName,
+        canonicalKey,
+        isSeries: false,
+        deletedMonthInstances: this.getDeletedMonthInstances(),
+      }),
+    }).catch(() => {});
 
     this.syncWithServer();
   }
@@ -2588,12 +2828,39 @@ class CloudKitSyncEngine {
     if (cleanBarcode.length >= 10) {
       this.recordDeletedSeriesSlug(cleanBarcode);
     }
+    if (masterId) {
+      this.recordDeletedSeriesSlug(masterId);
+    }
 
     this.safeSaveBillsToStorage(remainingBills);
     this.broadcastUpdate('BILLS_SERIES_DELETED', { deletedIds, billName: bill.name });
+    this.broadcastUpdate('BILLS_UPDATED', { count: remainingBills.length });
 
     const actor = this.getCurrentUserName();
-    this.notifyRemoteChange('bill_deleted', 'Conta Excluída 🗑️', `${actor} excluiu a conta "${bill.name}" de todos os meses`, bill.name);
+    this.notifyRemoteChange(
+      'bill_deleted',
+      'Conta Excluída 🗑️',
+      `${actor} excluiu a conta "${bill.name}" de todos os meses`,
+      bill.name,
+      bill.amount,
+      bill.id,
+      bill
+    );
+
+    // Call atomic server deletion endpoint
+    const houseId = this.getHouseholdId();
+    fetch(`/api/household/${encodeURIComponent(houseId)}/delete-bill`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        billId: bill.id,
+        deletedBillIds: deletedIds,
+        billName: bill.name,
+        isSeries: true,
+        seriesSlug: cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24),
+        deletedSeriesSlugs: this.getDeletedSeriesSlugs(),
+      }),
+    }).catch(() => {});
 
     this.syncWithServer();
     return deletedIds;
@@ -4072,6 +4339,8 @@ class CloudKitSyncEngine {
       const localProfiles = this.getProfiles();
       const deletedBillIds = this.getDeletedBillIds();
       const deletedRevenueIds = this.getDeletedRevenueIds();
+      const deletedSeriesSlugs = this.getDeletedSeriesSlugs();
+      const deletedMonthInstances = this.getDeletedMonthInstances();
 
       const resp = await fetch(`/api/household/${encodeURIComponent(houseId)}/sync`, {
         method: 'POST',
@@ -4083,6 +4352,8 @@ class CloudKitSyncEngine {
           device: currentDev,
           deletedBillIds,
           deletedRevenueIds,
+          deletedSeriesSlugs,
+          deletedMonthInstances,
           clientTimestamp: new Date().toISOString(),
         }),
       });
@@ -4107,14 +4378,30 @@ class CloudKitSyncEngine {
             }
           });
         }
+        if (Array.isArray(serverHouse.deletedSeriesSlugs) && serverHouse.deletedSeriesSlugs.length > 0) {
+          serverHouse.deletedSeriesSlugs.forEach((s: string) => this.recordDeletedSeriesSlug(s));
+        }
+        if (Array.isArray(serverHouse.deletedMonthInstances) && serverHouse.deletedMonthInstances.length > 0) {
+          serverHouse.deletedMonthInstances.forEach((m: string) => this.recordDeletedMonthInstance(m));
+        }
         if (Array.isArray(serverHouse.deletedRevenueIds) && serverHouse.deletedRevenueIds.length > 0) {
           serverHouse.deletedRevenueIds.forEach((id: string) => this.recordDeletedRevenue(id));
         }
-        const activeDeletedBills = this.getDeletedBillIds();
+        const activeDeletedBills = new Set(this.getDeletedBillIds());
+        const activeSeriesSlugs = new Set(this.getDeletedSeriesSlugs());
         const activeDeletedRevenues = this.getDeletedRevenueIds();
 
         if (Array.isArray(serverHouse.bills) && serverHouse.bills.length > 0) {
-          const filteredBills = serverHouse.bills.filter((b: any) => b && b.id && !activeDeletedBills.includes(b.id));
+          const filteredBills = serverHouse.bills.filter((b: any) => {
+            if (!b || !b.id) return false;
+            if (activeDeletedBills.has(b.id)) return false;
+            const bM = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
+            if (this.isBillDeletedInMonth(b, bM)) return false;
+            const bBase = (b.name || '').replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+            const bSlug = bBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+            if (activeSeriesSlugs.has(bSlug) || activeSeriesSlugs.has(bBase)) return false;
+            return true;
+          });
           const currentLocal = this.getBills();
           // Safe two-way merge: never drop local bills when merging server updates
           const merged = this.mergeBillsLists(currentLocal, filteredBills);

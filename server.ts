@@ -766,6 +766,115 @@ async function startServer() {
     return notif;
   };
 
+  // Real-time Presence Detection across WebSocket and HTTP
+  const getHouseholdPresence = (householdId: string, customHousehold?: HouseholdData) => {
+    const cleanHouseId = householdId.trim().toLowerCase();
+    const store = loadHouseholds();
+    const household = customHousehold || store[cleanHouseId];
+    if (!household) {
+      return {
+        isWifeConnected: false,
+        isWifeOnline: false,
+        isCarlosOnline: false,
+        totalOnlineCount: 0,
+        wifeDevice: null,
+        carlosDevice: null,
+        devices: [],
+      };
+    }
+
+    const activeSockets = Array.from(wsClients).filter(
+      (c) => c.householdId === cleanHouseId && c.ws.readyState === WebSocket.OPEN
+    );
+
+    const now = Date.now();
+    const rawDevices = (household.devices || []).filter(
+      (d) =>
+        d &&
+        d.id !== 'dev_iphone_paula' &&
+        d.id !== 'dev_iphone_carlos' &&
+        d.id !== 'dev_user_main' &&
+        d.id !== 'dev_esposa_permanente'
+    );
+
+    // Is wife/spouse registered on this household?
+    const wifeDev = rawDevices.find(
+      (d) =>
+        d.owner === 'Esposa' ||
+        d.owner === 'Cônjuge' ||
+        d.name?.toLowerCase().includes('paula') ||
+        d.name?.toLowerCase().includes('esposa')
+    );
+
+    // Paula is truly online if she has an active open WebSocket OR synced via HTTP in last 120s
+    const hasWifeSocket = activeSockets.some(
+      (c) =>
+        (wifeDev && c.deviceId === wifeDev.id) ||
+        c.userName?.toLowerCase().includes('paula') ||
+        c.userName?.toLowerCase().includes('esposa') ||
+        c.deviceName?.toLowerCase().includes('paula') ||
+        c.deviceName?.toLowerCase().includes('esposa')
+    );
+    const isWifeRecentlyActive = Boolean(
+      wifeDev &&
+      wifeDev.lastActive &&
+      now - new Date(wifeDev.lastActive).getTime() < 120000
+    );
+    const isWifeOnline = hasWifeSocket || isWifeRecentlyActive;
+
+    // Carlos device & presence
+    const carlosDev = rawDevices.find((d) => !wifeDev || d.id !== wifeDev.id);
+    const hasCarlosSocket = activeSockets.some(
+      (c) =>
+        (!wifeDev || c.deviceId !== wifeDev.id) &&
+        !c.userName?.toLowerCase().includes('paula') &&
+        !c.userName?.toLowerCase().includes('esposa')
+    );
+    const isCarlosRecentlyActive = Boolean(
+      carlosDev &&
+      carlosDev.lastActive &&
+      now - new Date(carlosDev.lastActive).getTime() < 120000
+    );
+    const isCarlosOnline = hasCarlosSocket || isCarlosRecentlyActive || activeSockets.length > 0;
+
+    const totalOnlineCount = (isCarlosOnline ? 1 : 0) + (isWifeOnline ? 1 : 0);
+
+    return {
+      isWifeConnected: Boolean(wifeDev), // true ONLY if Paula has a real registered device on server!
+      isWifeOnline,
+      isCarlosOnline,
+      totalOnlineCount: totalOnlineCount > 0 ? totalOnlineCount : (activeSockets.length > 0 ? activeSockets.length : 1),
+      wifeDevice: wifeDev
+        ? {
+            ...wifeDev,
+            isOnline: isWifeOnline,
+          }
+        : null,
+      carlosDevice: carlosDev
+        ? {
+            ...carlosDev,
+            isOnline: isCarlosOnline,
+          }
+        : null,
+      devices: rawDevices.map((d) => ({
+        ...d,
+        isOnline: (wifeDev && d.id === wifeDev.id) ? isWifeOnline : isCarlosOnline,
+      })),
+    };
+  };
+
+  const broadcastHouseholdPresence = (householdId: string) => {
+    if (!householdId) return;
+    const cleanHouseId = householdId.trim().toLowerCase();
+    const presence = getHouseholdPresence(cleanHouseId);
+    broadcastWsEvent(cleanHouseId, {
+      type: 'PRESENCE_UPDATE',
+      householdId: cleanHouseId,
+      presence,
+      timestamp: new Date().toISOString(),
+    });
+  };
+
   // WebSocket connection handler
   wss.on('connection', (ws) => {
     const clientState: WebSocketClient = {
@@ -796,6 +905,9 @@ async function startServer() {
             householdId: clientState.householdId,
             timestamp: new Date().toISOString(),
           }));
+
+          // Immediately broadcast real presence to all connected household devices
+          broadcastHouseholdPresence(clientState.householdId);
         } else if (msg.type === 'NOTIFY_CHANGE') {
           const houseId = (msg.householdId || clientState.householdId).trim().toLowerCase();
           const notif = recordChangeNotification(houseId, {
@@ -966,11 +1078,19 @@ async function startServer() {
     });
 
     ws.on('close', () => {
+      const houseId = clientState.householdId;
       wsClients.delete(clientState);
+      if (houseId) {
+        broadcastHouseholdPresence(houseId);
+      }
     });
 
     ws.on('error', () => {
+      const houseId = clientState.householdId;
       wsClients.delete(clientState);
+      if (houseId) {
+        broadcastHouseholdPresence(houseId);
+      }
     });
   });
 
@@ -1249,70 +1369,48 @@ async function startServer() {
     }
   });
 
-  // Helper to deduplicate devices so ghost sessions don't pile up, while permanently keeping wife connected
+  // Helper to manage real devices without inventing fake wife devices
   const deduplicateDevicesServer = (devices: CloudDeviceRecord[] = [], callerDevice?: any): CloudDeviceRecord[] => {
     const list = Array.isArray(devices) ? devices : [];
-    const valid = list.filter(
+    let valid = list.filter(
       (d) =>
         d &&
         d.id !== 'dev_iphone_paula' &&
         d.id !== 'dev_iphone_carlos' &&
-        d.id !== 'dev_user_main'
+        d.id !== 'dev_user_main' &&
+        d.id !== 'dev_esposa_permanente'
     );
 
-    // Wife device (permanent connection)
-    let wifeDev = valid.find(
-      (d) =>
-        d.id === 'dev_esposa_permanente' ||
-        d.owner === 'Esposa' ||
-        d.owner === 'Cônjuge' ||
-        d.name?.toLowerCase().includes('esposa') ||
-        d.name?.toLowerCase().includes('clara') ||
-        d.name?.toLowerCase().includes('paula')
-    );
-    if (!wifeDev) {
-      wifeDev = {
-        id: 'dev_esposa_permanente',
-        name: 'Paula (iPhone)',
-        model: 'iPhone (Tela de Início)',
-        owner: 'Esposa',
-        lastActive: 'Agora mesmo',
-        connectedAt: '2026-09-25T12:00:00.000Z',
-      };
-    }
+    const nowIso = new Date().toISOString();
 
-    // User device: choose caller device or the most recent user device
-    const userDevices = valid.filter((d) => d.id !== wifeDev!.id && d.owner !== 'Esposa' && !d.name?.toLowerCase().includes('esposa'));
-    let activeUserDev: CloudDeviceRecord;
-    if (callerDevice && callerDevice.id) {
-      activeUserDev = {
-        id: callerDevice.id,
-        name: callerDevice.name || 'Carlos (iPhone)',
+    if (callerDevice && callerDevice.id && callerDevice.id !== 'dev_esposa_permanente') {
+      const callerDevId = callerDevice.id;
+      const isCallerWife = callerDevice.owner === 'Esposa' || callerDevice.owner === 'Cônjuge' || callerDevice.name?.toLowerCase().includes('paula') || callerDevice.name?.toLowerCase().includes('esposa');
+      const callerName = callerDevice.name || (isCallerWife ? 'Paula (iPhone)' : 'Carlos (iPhone)');
+      
+      const existingIdx = valid.findIndex((d) => d.id === callerDevId);
+      const activeRecord: CloudDeviceRecord = {
+        id: callerDevId,
+        name: callerName,
         model: callerDevice.model || 'iPhone (Tela de Início)',
-        owner: 'Você',
-        lastActive: 'Agora mesmo',
-        connectedAt: callerDevice.connectedAt || new Date().toISOString(),
+        owner: isCallerWife ? 'Esposa' : 'Você',
+        lastActive: nowIso,
+        connectedAt: callerDevice.connectedAt || (existingIdx >= 0 ? valid[existingIdx].connectedAt : nowIso),
       };
-    } else if (userDevices.length > 0) {
-      activeUserDev = userDevices[userDevices.length - 1];
-    } else {
-      activeUserDev = {
-        id: 'dev_1790686586282_fecb4',
-        name: 'Carlos (iPhone)',
-        model: 'iPhone (Tela de Início)',
-        owner: 'Você',
-        lastActive: 'Agora mesmo',
-        connectedAt: new Date().toISOString(),
-      };
+
+      if (existingIdx >= 0) {
+        valid[existingIdx] = activeRecord;
+      } else {
+        // Keep strictly only genuine distinct devices (one per person role)
+        valid = valid.filter((d) => isCallerWife 
+          ? (!d.name?.toLowerCase().includes('paula') && d.owner !== 'Esposa')
+          : (d.owner === 'Esposa' || d.name?.toLowerCase().includes('paula'))
+        );
+        valid.push(activeRecord);
+      }
     }
 
-    return [activeUserDev, wifeDev];
-  };
-
-  // Helper to ensure wife device is permanently connected on any household
-  const ensureWifeConnectedRecord = (household: HouseholdData) => {
-    household.isWifeConnected = true;
-    household.devices = deduplicateDevicesServer(household.devices);
+    return valid;
   };
 
   // Get Household Data
@@ -1326,12 +1424,31 @@ async function startServer() {
       return res.status(404).json({ error: 'Casa não encontrada' });
     }
 
-    ensureWifeConnectedRecord(household);
+    // Clean any ghost fake device from storage
+    if (Array.isArray(household.devices)) {
+      household.devices = household.devices.filter(d => d && d.id !== 'dev_esposa_permanente');
+    }
+
+    const presence = getHouseholdPresence(cleanId, household);
+    household.isWifeConnected = presence.isWifeConnected;
     saveHouseholds(store);
 
     res.json({
       success: true,
       household,
+      presence,
+      serverTime: new Date().toISOString(),
+    });
+  });
+
+  // Dedicated Real-Time Presence Endpoint
+  app.get('/api/household/:id/presence', (req, res) => {
+    const { id } = req.params;
+    const cleanId = id.trim().toLowerCase();
+    const presence = getHouseholdPresence(cleanId);
+    res.json({
+      success: true,
+      presence,
       serverTime: new Date().toISOString(),
     });
   });
@@ -1371,9 +1488,10 @@ async function startServer() {
       return res.json({ success: true, household, timestamp: nowIso });
     }
 
-    // Deduplicate devices: Keep strictly caller's active phone and permanently preserve wife's phone
+    // Deduplicate devices based on genuine client identity
     household.devices = deduplicateDevicesServer(household.devices, device);
-    household.isWifeConnected = true;
+    const presence = getHouseholdPresence(cleanId, household);
+    household.isWifeConnected = presence.isWifeConnected;
 
     // Process deleted bills
     const { deletedBillIds, deletedRevenueIds, deletedSeriesSlugs, deletedMonthInstances } = req.body;
@@ -1602,16 +1720,20 @@ async function startServer() {
       broadcastChangeNotification(cleanId, notif);
     }
 
+    const presence = getHouseholdPresence(cleanId, household);
+    household.isWifeConnected = presence.isWifeConnected;
     household.lastUpdated = nowIso;
     store[cleanId] = household;
     saveHouseholds(store);
 
     // Broadcast updated bills and data in real-time to all connected devices in this household
     broadcastHouseholdDataSync(cleanId, household, (device && device.id));
+    broadcastHouseholdPresence(cleanId);
 
     res.json({
       success: true,
       household,
+      presence,
       notifications: household.notifications || [],
       serverTime: nowIso,
     });

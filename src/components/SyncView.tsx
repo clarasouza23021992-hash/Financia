@@ -17,6 +17,7 @@ interface SyncViewProps {
   onToggleActiveUser?: () => void;
   isWifeConnected: boolean;
   wifeDevice: CloudDevice | null;
+  isWifeOnline?: boolean;
   onOpenFamilyAuth: () => void;
   authSession: AuthSessionData | null;
   onManualRefresh: () => Promise<void> | void;
@@ -26,6 +27,21 @@ interface SyncViewProps {
   onOpenBackup?: () => void;
 }
 
+function formatLastSeen(dateStr?: string): string {
+  if (!dateStr || dateStr === 'Agora mesmo') return 'Recentemente';
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffSec = Math.floor((now.getTime() - d.getTime()) / 1000);
+    if (diffSec < 60) return 'Há instantes';
+    if (diffSec < 3600) return `Há ${Math.floor(diffSec / 60)} min`;
+    if (diffSec < 86400) return `Hoje às ${d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    return d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return 'Desconhecido';
+  }
+}
+
 export const SyncView: React.FC<SyncViewProps> = ({
   activeDevice,
   devices,
@@ -33,6 +49,7 @@ export const SyncView: React.FC<SyncViewProps> = ({
   onToggleActiveUser,
   isWifeConnected,
   wifeDevice,
+  isWifeOnline: propIsWifeOnline,
   onOpenFamilyAuth,
   authSession,
   onManualRefresh,
@@ -48,6 +65,7 @@ export const SyncView: React.FC<SyncViewProps> = ({
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedInstructions, setCopiedInstructions] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [livePresence, setLivePresence] = useState(() => cloudkit.getPresenceState());
   const [snapshotInfo, setSnapshotInfo] = useState<{
     hasSnapshot: boolean;
     createdAtFormatted: string;
@@ -57,6 +75,18 @@ export const SyncView: React.FC<SyncViewProps> = ({
     filename?: string;
   } | null>(null);
   const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
+
+  useEffect(() => {
+    const unsub = cloudkit.onSync((event) => {
+      if (event.type === 'PRESENCE_UPDATED' || event.type === 'DEVICES_UPDATED') {
+        setLivePresence(cloudkit.getPresenceState());
+      }
+    });
+    return () => unsub();
+  }, []);
+
+  const isPaulaOnlineNow = propIsWifeOnline ?? cloudkit.isWifeOnline();
+  const isPaulaConnected = isWifeConnected && Boolean(wifeDevice);
 
   const activeBills = cloudkit.getBills();
   const activeRevenues = cloudkit.getRevenues();
@@ -208,12 +238,26 @@ export const SyncView: React.FC<SyncViewProps> = ({
                 <h2 className="text-sm sm:text-base font-black tracking-tight text-white">
                   Sincronização Nuvem Ativa
                 </h2>
-                <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
-                  Online
-                </span>
+                {isPaulaOnlineNow ? (
+                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
+                    Carlos e Paula Online
+                  </span>
+                ) : isPaulaConnected ? (
+                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-teal-500/20 text-teal-300 border border-teal-500/30">
+                    Você Online
+                  </span>
+                ) : (
+                  <span className="text-[9px] uppercase font-bold tracking-wider px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300 border border-amber-500/30">
+                    1 Aparelho (Você)
+                  </span>
+                )}
               </div>
               <p className="text-xs text-slate-300 font-medium mt-0.5">
-                Carlos e Paula conectados ao mesmo banco de dados da casa
+                {isPaulaOnlineNow
+                  ? 'Carlos e Paula conectados ao mesmo banco de dados em tempo real'
+                  : isPaulaConnected
+                    ? `Banco de dados ativo • Paula desconectada (visto por último ${formatLastSeen(wifeDevice?.lastActive)})`
+                    : 'Banco de dados sincronizado na nuvem • Aguardando o celular da Paula conectar'}
               </p>
             </div>
           </div>
@@ -297,10 +341,22 @@ export const SyncView: React.FC<SyncViewProps> = ({
               Aparelhos Conectados à Conta
             </h3>
           </div>
-          <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
-            2 iPhones Conectados
-          </span>
+          {isPaulaOnlineNow ? (
+            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+              2 iPhones Conectados Agora (Online)
+            </span>
+          ) : isPaulaConnected ? (
+            <span className="text-[10px] font-bold text-slate-500 dark:text-slate-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-slate-400" />
+              1 Online • 1 Desconectado
+            </span>
+          ) : (
+            <span className="text-[10px] font-bold text-teal-600 dark:text-teal-400 flex items-center gap-1">
+              <span className="w-1.5 h-1.5 rounded-full bg-teal-500" />
+              1 iPhone Conectado (Apenas Você)
+            </span>
+          )}
         </div>
 
         <div className="space-y-2">
@@ -316,7 +372,7 @@ export const SyncView: React.FC<SyncViewProps> = ({
               </div>
             </div>
             <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Conectado
+              <Check className="w-3 h-3" /> Conectado Agora
             </span>
           </div>
 
@@ -327,7 +383,13 @@ export const SyncView: React.FC<SyncViewProps> = ({
               <div>
                 <strong className="text-slate-900 dark:text-white">Paula (iPhone)</strong>
                 <p className="text-[10px] text-slate-500">
-                  Esposa • {isPaula ? 'Ativo neste aparelho' : 'Aguardando 1º acesso no celular dela'}
+                  {isPaula
+                    ? 'Esposa • Ativo neste aparelho'
+                    : isPaulaOnlineNow
+                      ? 'Esposa • Conectada em tempo real agora'
+                      : isPaulaConnected
+                        ? `Esposa • Desconectada • Visto por último: ${formatLastSeen(wifeDevice?.lastActive)}`
+                        : 'Esposa • Aguardando 1º acesso no celular dela'}
                 </p>
               </div>
             </div>
@@ -335,10 +397,18 @@ export const SyncView: React.FC<SyncViewProps> = ({
               <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
                 <Check className="w-3 h-3" /> Ativo
               </span>
+            ) : isPaulaOnlineNow ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-950/40 px-2 py-0.5 rounded-md border border-emerald-200 dark:border-emerald-800/60 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" /> Conectada Agora (Online)
+              </span>
+            ) : isPaulaConnected ? (
+              <span className="text-[10px] font-bold text-slate-600 dark:text-slate-400 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-md border border-slate-200 dark:border-slate-700 flex items-center gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-slate-400" /> Desconectada (Offline)
+              </span>
             ) : (
               <div className="flex items-center gap-1.5">
                 <span className="text-[10px] font-bold text-amber-600 dark:text-amber-400 bg-amber-50 dark:bg-amber-950/40 px-2 py-0.5 rounded-md border border-amber-200 dark:border-amber-800/60 flex items-center gap-1">
-                  <Clock className="w-2.5 h-2.5" /> Pendente de Acesso
+                  <Clock className="w-2.5 h-2.5" /> Não Conectada
                 </span>
                 <button
                   type="button"

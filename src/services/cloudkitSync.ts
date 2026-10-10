@@ -36,19 +36,11 @@ export const DEFAULT_PROFILES: UserProfile[] = [
 export const DEFAULT_DEVICES: CloudDevice[] = [
   {
     id: 'dev_user_main',
-    name: 'Meu Celular',
-    model: 'Smartphone',
+    name: 'Carlos (iPhone)',
+    model: 'iPhone (Tela de Início)',
     owner: 'Você',
     lastActive: 'Agora mesmo',
     isCurrent: true,
-  },
-  {
-    id: 'dev_esposa_permanente',
-    name: 'iPhone da Esposa',
-    model: 'iPhone (Tela de Início)',
-    owner: 'Esposa',
-    lastActive: 'Agora mesmo',
-    isCurrent: false,
   },
 ];
 
@@ -114,6 +106,7 @@ class CloudKitSyncEngine {
   private isSyncingToServer: boolean = false;
   private ws: WebSocket | null = null;
   private wsReconnectTimer: any = null;
+  private remotePresenceState: any = null;
   private lastSeenNotificationTime: string = (typeof window !== 'undefined' ? localStorage.getItem('financas_last_seen_notif_time') : null) || new Date(Date.now() - 300000).toISOString();
 
   constructor() {
@@ -163,6 +156,7 @@ class CloudKitSyncEngine {
       // Initial server sync
       setTimeout(() => {
         this.syncWithServer();
+        this.checkPresence();
       }, 300);
 
       // Connect real-time WebSocket for instant cross-device notifications
@@ -177,15 +171,24 @@ class CloudKitSyncEngine {
         }
       }, 4000);
 
+      // Dedicated real-time presence check every 4 seconds
+      setInterval(() => {
+        if (!document.hidden && navigator.onLine) {
+          this.checkPresence();
+        }
+      }, 4000);
+
       window.addEventListener('online', () => {
         this.connectWebSocket();
         this.syncWithServer();
+        this.checkPresence();
       });
 
       document.addEventListener('visibilitychange', () => {
         if (document.visibilityState === 'visible') {
           this.connectWebSocket();
           this.syncWithServer();
+          this.checkPresence();
         }
       });
     }
@@ -352,6 +355,14 @@ class CloudKitSyncEngine {
       this.ws.onmessage = (event) => {
         try {
           const data = JSON.parse(event.data);
+
+          if (data.type === 'PRESENCE_UPDATE') {
+            if (data.presence) {
+              this.remotePresenceState = data.presence;
+              this.broadcastUpdate('PRESENCE_UPDATED', data.presence);
+              this.broadcastUpdate('DEVICES_UPDATED');
+            }
+          }
 
           if (data.type === 'STATUS_UPDATE_ACK') {
             this.addPaymentPropagationLog({
@@ -4208,19 +4219,9 @@ class CloudKitSyncEngine {
     const raw = localStorage.getItem(STORAGE_KEY_DEVICES);
     const myDevice = this.getCurrentDeviceInfo();
 
-    const permanentWifeDevice: CloudDevice = {
-      id: 'dev_esposa_permanente',
-      name: 'Paula (iPhone)',
-      model: 'iPhone (Tela de Início)',
-      owner: 'Esposa',
-      lastActive: 'Agora mesmo',
-      isCurrent: false,
-    };
-
     if (!raw) {
       const initial = [
         { ...myDevice, isCurrent: true, name: `${myDevice.name} (Este Aparelho)` },
-        permanentWifeDevice
       ];
       localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(initial));
       return initial;
@@ -4232,46 +4233,41 @@ class CloudKitSyncEngine {
         d &&
         d.id !== 'dev_iphone_paula' && 
         d.id !== 'dev_iphone_carlos' && 
-        d.id !== 'dev_user_main'
+        d.id !== 'dev_user_main' &&
+        d.id !== 'dev_esposa_permanente'
       );
 
-      // Find the wife's device (ALWAYS preserve wife device, never disconnect wife!)
-      let wifeDev = parsed.find(d => 
+      // Find real wife's device if registered
+      const wifeDev = parsed.find(d => 
         d.id !== myDevice.id && (
-          d.id === 'dev_esposa_permanente' ||
           d.owner === 'Esposa' ||
           d.owner === 'Cônjuge' ||
-          d.name.toLowerCase().includes('esposa') ||
-          d.name.toLowerCase().includes('paula')
+          d.name?.toLowerCase().includes('esposa') ||
+          d.name?.toLowerCase().includes('paula')
         )
       );
-      if (!wifeDev) {
-        wifeDev = permanentWifeDevice;
-      } else {
-        wifeDev = {
-          ...wifeDev,
-          owner: 'Esposa',
-          isCurrent: false,
-        };
-      }
 
-      // Strictly return 1 user device (Este Aparelho) + 1 wife device (Esposa)
-      // Eliminates all phantom/duplicate session IDs created by browser reloads
       const deduplicated: CloudDevice[] = [
         {
           ...myDevice,
           isCurrent: true,
           name: `${myDevice.name} (Este Aparelho)`,
         },
-        wifeDev,
       ];
+
+      if (wifeDev) {
+        deduplicated.push({
+          ...wifeDev,
+          owner: 'Esposa',
+          isCurrent: false,
+        });
+      }
 
       localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(deduplicated));
       return deduplicated;
     } catch {
       const fallback = [
         { ...myDevice, isCurrent: true, name: `${myDevice.name} (Este Aparelho)` },
-        permanentWifeDevice
       ];
       localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(fallback));
       return fallback;
@@ -4279,22 +4275,59 @@ class CloudKitSyncEngine {
   }
 
   public isWifeConnected(): boolean {
-    return true; // Permanent connection requested by user
+    if (this.remotePresenceState?.isWifeConnected !== undefined) {
+      return Boolean(this.remotePresenceState.isWifeConnected);
+    }
+    const wife = this.getWifeDevice();
+    return Boolean(wife && wife.id && wife.id !== 'dev_esposa_permanente');
   }
 
-  public getWifeDevice(): CloudDevice {
+  public isWifeOnline(): boolean {
+    if (this.remotePresenceState?.isWifeOnline !== undefined) {
+      return Boolean(this.remotePresenceState.isWifeOnline);
+    }
+    const wife = this.getWifeDevice();
+    if (!wife || !wife.lastActive || wife.id === 'dev_esposa_permanente') return false;
+    const diffMs = Date.now() - new Date(wife.lastActive).getTime();
+    return diffMs >= 0 && diffMs < 2.5 * 60 * 1000;
+  }
+
+  public getWifeDevice(): CloudDevice | null {
     const devices = this.getDevices();
     const myDev = this.getCurrentDeviceInfo();
-    const found = devices.find(d => d.id !== myDev.id && !d.isCurrent);
-    if (found) return found;
-    return {
-      id: 'dev_esposa_permanente',
-      name: 'iPhone da Esposa',
-      model: 'iPhone (Tela de Início)',
-      owner: 'Esposa',
-      lastActive: 'Agora mesmo',
-      isCurrent: false,
-    };
+    const found = devices.find(d => 
+      d.id !== myDev.id && 
+      !d.isCurrent && 
+      d.id !== 'dev_esposa_permanente' &&
+      (d.owner === 'Esposa' || d.owner === 'Cônjuge' || d.name?.toLowerCase().includes('paula') || d.name?.toLowerCase().includes('esposa'))
+    );
+    return found || null;
+  }
+
+  public async checkPresence(): Promise<any> {
+    if (typeof window === 'undefined') return null;
+    try {
+      const houseId = this.getHouseholdId();
+      const res = await fetch(`/api/household/${encodeURIComponent(houseId)}/presence`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.presence) {
+          const prevOnline = this.remotePresenceState?.isWifeOnline;
+          const prevConnected = this.remotePresenceState?.isWifeConnected;
+          this.remotePresenceState = data.presence;
+          if (prevOnline !== data.presence.isWifeOnline || prevConnected !== data.presence.isWifeConnected) {
+            this.broadcastUpdate('PRESENCE_UPDATED', data.presence);
+            this.broadcastUpdate('DEVICES_UPDATED');
+          }
+          return data.presence;
+        }
+      }
+    } catch {}
+    return null;
+  }
+
+  public getPresenceState(): any {
+    return this.remotePresenceState;
   }
 
   public saveDevices(devices: CloudDevice[]): void {
@@ -4619,10 +4652,10 @@ class CloudKitSyncEngine {
             d &&
             d.id !== 'dev_iphone_paula' &&
             d.id !== 'dev_iphone_carlos' &&
-            d.id !== 'dev_user_main'
+            d.id !== 'dev_user_main' &&
+            d.id !== 'dev_esposa_permanente'
           );
           const foundWife = rawServerDevices.find((d: any) =>
-            d.id === 'dev_esposa_permanente' ||
             d.owner === 'Esposa' ||
             d.owner === 'Cônjuge' ||
             d.name?.toLowerCase().includes('esposa') ||
@@ -4630,8 +4663,8 @@ class CloudKitSyncEngine {
           );
           if (foundWife) {
             wifeDev = {
-              id: foundWife.id || 'dev_esposa_permanente',
-              name: foundWife.name || 'iPhone da Esposa',
+              id: foundWife.id,
+              name: foundWife.name || 'Paula (iPhone)',
               model: foundWife.model || 'iPhone (Tela de Início)',
               owner: 'Esposa',
               lastActive: foundWife.lastActive || 'Agora mesmo',
@@ -4641,31 +4674,36 @@ class CloudKitSyncEngine {
           }
         }
 
-        if (!wifeDev) {
-          wifeDev = {
-            id: 'dev_esposa_permanente',
-            name: 'iPhone da Esposa',
-            model: 'iPhone (Tela de Início)',
-            owner: 'Esposa',
-            lastActive: 'Agora mesmo',
-            isCurrent: false,
-            iCloudAccount: 'paula@icloud.com',
-          };
+        if (wifeDev) {
+          updatedDevices = [
+            {
+              ...myDev,
+              isCurrent: true,
+              name: `${myDev.name} (Este Aparelho)`,
+            },
+            wifeDev,
+          ];
+        } else {
+          updatedDevices = [
+            {
+              ...myDev,
+              isCurrent: true,
+              name: `${myDev.name} (Este Aparelho)`,
+            },
+          ];
         }
 
-        // Strictly 2 devices: User's phone (Este Aparelho) + Wife's phone (Conectado)
-        updatedDevices = [
-          {
-            ...myDev,
-            isCurrent: true,
-            name: `${myDev.name} (Este Aparelho)`,
-          },
-          wifeDev,
-        ];
         localStorage.setItem(STORAGE_KEY_DEVICES, JSON.stringify(updatedDevices));
-        const isWife = true;
+        const isWife = Boolean(wifeDev);
 
-        const successMessage = `Sincronizado com sucesso! Celular da esposa pareado e ativo (${wifeDev.name} - ${wifeDev.model}).`;
+        if (data.presence) {
+          this.remotePresenceState = data.presence;
+          this.broadcastUpdate('PRESENCE_UPDATED', data.presence);
+        }
+
+        const successMessage = isWife
+          ? `Sincronizado com sucesso! Celular da esposa pareado e ativo (${wifeDev?.name} - ${wifeDev?.model}).`
+          : `Sincronizado com sucesso! Nuvem conectada (Apenas este iPhone conectado).`;
 
         this.addSyncLog({
           status: 'success',

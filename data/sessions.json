@@ -8,5 +8,15 @@
     "titularName": "Carlos",
     "spouseName": "Paula",
     "createdAt": "2026-10-10T14:36:14.951Z"
+  },
+  "tok_5a8ea546d3e52b4c071f01b783e9c7b9bb71d0594dab0348": {
+    "token": "tok_5a8ea546d3e52b4c071f01b783e9c7b9bb71d0594dab0348",
+    "accountId": "acc_carlos_paula_default",
+    "email": "l.carlosramos92@gmail.com",
+    "householdId": "casa-familia",
+    "householdName": "Finanças da Minha Casa",
+    "titularName": "Carlos",
+    "spouseName": "Paula",
+    "createdAt": "2026-10-10T16:24:23.325Z"
   }
 }

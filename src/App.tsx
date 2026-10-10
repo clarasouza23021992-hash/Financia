@@ -29,7 +29,7 @@ import { BillCard } from './components/BillCard';
 import { BillModal } from './components/BillModal';
 import { RevenueModal } from './components/RevenueModal';
 import { CashFlowReport } from './components/CashFlowReport';
-import { CloudKitSyncDrawer } from './components/CloudKitSyncDrawer';
+import { SyncView } from './components/SyncView';
 import { BoletoScannerModal } from './components/BoletoScannerModal';
 import { ProfilesModal } from './components/ProfilesModal';
 import { ReceiptViewerModal } from './components/ReceiptViewerModal';
@@ -47,6 +47,7 @@ import { BackupModal } from './components/BackupModal';
 import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
 import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
 import { FamilyAuthModal } from './components/FamilyAuthModal';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
@@ -91,7 +92,7 @@ export default function App() {
   }, [devices, activeDeviceId]);
 
   // App Navigation, Months & Filters
-  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow'>('bills');
+  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow' | 'sync'>('bills');
   const [selectedMonth, setSelectedMonth] = useState<MonthOption>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('financas_selected_month_id');
@@ -150,7 +151,6 @@ export default function App() {
   const [isRevenueModalOpen, setIsRevenueModalOpen] = useState(false);
   const [editingRevenue, setEditingRevenue] = useState<Revenue | null>(null);
 
-  const [isCloudDrawerOpen, setIsCloudDrawerOpen] = useState(false);
   const [isBoletoScannerOpen, setIsBoletoScannerOpen] = useState(false);
   const [isProfilesModalOpen, setIsProfilesModalOpen] = useState(false);
   const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
@@ -1288,7 +1288,7 @@ export default function App() {
           setEditingRevenue(null);
           setIsRevenueModalOpen(true);
         }}
-        onOpenCloudSync={() => setIsCloudDrawerOpen(true)}
+        onOpenCloudSync={() => setCurrentTab('sync')}
         onOpenCalculator={() => setIsCalculatorOpen(true)}
         onOpenBackup={() => setIsBackupModalOpen(true)}
         onOpenNotifications={() => setIsNotificationCenterOpen(true)}
@@ -1347,7 +1347,7 @@ export default function App() {
         <div className="max-w-xl md:max-w-2xl lg:max-w-3xl w-full mx-auto min-h-full">
           <PullToRefresh onRefresh={handleManualRefresh} isRefreshing={isRefreshing}>
             <AnimatePresence mode="wait" initial={false}>
-              {currentTab === 'bills' ? (
+              {currentTab === 'bills' && (
                 <motion.div
                   key="bills-tab"
                   initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
@@ -1843,7 +1843,9 @@ export default function App() {
               )}
             </div>
                 </motion.div>
-              ) : (
+              )}
+
+              {currentTab === 'cashflow' && (
                 <motion.div
                   key="cashflow-tab"
                   initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
@@ -1852,18 +1854,48 @@ export default function App() {
                   transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
                 >
                   {/* Tab 2: Monthly Cash Flow Report */}
-                  <CashFlowReport
-                    bills={currentMonthBills}
-                    revenues={currentMonthRevenues}
-                    selectedMonth={selectedMonth.label}
-                    onOpenNewRevenue={() => {
-                      setEditingRevenue(null);
-                      setIsRevenueModalOpen(true);
-                    }}
-                    onEditRevenue={handleOpenEditRevenue}
-                    onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
-                    onOpenBudgets={() => setIsBudgetModalOpen(true)}
-                  />
+                  <ErrorBoundary fallbackTitle="Relatório de Fluxo de Caixa">
+                    <CashFlowReport
+                      bills={currentMonthBills}
+                      revenues={currentMonthRevenues}
+                      selectedMonth={selectedMonth.label}
+                      onOpenNewRevenue={() => {
+                        setEditingRevenue(null);
+                        setIsRevenueModalOpen(true);
+                      }}
+                      onEditRevenue={handleOpenEditRevenue}
+                      onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
+                      onOpenBudgets={() => setIsBudgetModalOpen(true)}
+                    />
+                  </ErrorBoundary>
+                </motion.div>
+              )}
+
+              {currentTab === 'sync' && (
+                <motion.div
+                  key="sync-tab"
+                  initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
+                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
+                  exit={{ opacity: 0, y: -8, filter: 'blur(1px)' }}
+                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
+                >
+                  {/* Tab 3: Full Screen Real-Time Sync & Family Hub */}
+                  <ErrorBoundary fallbackTitle="Painel de Sincronia">
+                    <SyncView
+                      activeDevice={activeDevice}
+                      devices={devices}
+                      activeUserName={activeUserName}
+                      onToggleActiveUser={handleToggleActiveUser}
+                      isWifeConnected={isWifeConnected}
+                      wifeDevice={wifeDevice}
+                      onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
+                      authSession={authSession}
+                      onManualRefresh={handleManualRefresh}
+                      isRefreshing={isRefreshing}
+                      onGoToBills={() => setCurrentTab('bills')}
+                      onOpenWifeConnect={() => setIsWifeConnectModalOpen(true)}
+                    />
+                  </ErrorBoundary>
                 </motion.div>
               )}
             </AnimatePresence>
@@ -1909,14 +1941,18 @@ export default function App() {
             <span className="text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
           </motion.button>
 
-          {/* Tab 3: CloudKit Sync Drawer */}
+          {/* Tab 3: Sincronia View (Full Screen, Zero Black Overlay) */}
           <motion.button
             whileTap={{ scale: 0.92 }}
-            onClick={() => setIsCloudDrawerOpen(true)}
-            className="flex flex-col items-center gap-0.5 py-1 px-3 sm:px-5 rounded-xl text-slate-400 hover:text-slate-600 active-press cursor-pointer"
+            onClick={() => setCurrentTab('sync')}
+            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
+              currentTab === 'sync'
+                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
+                : 'text-slate-400 hover:text-slate-600'
+            }`}
           >
             <div className="relative">
-              <Cloud className="w-4.5 h-4.5 text-teal-600 dark:text-teal-400" />
+              <Cloud className="w-4.5 h-4.5" />
               <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
             </div>
             <span className="text-[10px] tracking-tight whitespace-nowrap">Sincronia</span>
@@ -1964,22 +2000,6 @@ export default function App() {
           } as any);
           setIsBillModalOpen(true);
         }}
-      />
-
-      <CloudKitSyncDrawer
-        isOpen={isCloudDrawerOpen}
-        onClose={() => setIsCloudDrawerOpen(false)}
-        devices={devices}
-        activeDevice={activeDevice}
-        onSwitchDevice={handleSwitchDevice}
-        isOffline={isOffline}
-        onToggleOffline={() => setIsOffline(!isOffline)}
-        conflictLogs={conflictLogs}
-        onForceSync={handleForceSync}
-        onUpdateDevice={handleUpdateDevice}
-        onRemoveDevice={handleRemoveDevice}
-        onOpenBackup={() => setIsBackupModalOpen(true)}
-        onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
       />
 
       <BoletoScannerModal

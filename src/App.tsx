@@ -46,6 +46,8 @@ import { CategoriesManagerModal } from './components/CategoriesManagerModal';
 import { BackupModal } from './components/BackupModal';
 import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
 import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
+import { FamilyAuthModal } from './components/FamilyAuthModal';
+import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 
 export default function App() {
@@ -60,6 +62,22 @@ export default function App() {
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const [revenueToDelete, setRevenueToDelete] = useState<Revenue | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+
+  // Shared Family Account (Carlos & Paula same login)
+  const [isFamilyAuthModalOpen, setIsFamilyAuthModalOpen] = useState(false);
+  const [authSession, setAuthSession] = useState<AuthSessionData | null>(() => authService.getSession());
+
+  useEffect(() => {
+    const unsub = authService.subscribe((sess) => {
+      setAuthSession(sess);
+    });
+    authService.checkSession().then((valid) => {
+      if (valid) {
+        setAuthSession(authService.getSession());
+      }
+    });
+    return () => unsub();
+  }, []);
 
   // Wife Connection State
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
@@ -1287,6 +1305,8 @@ export default function App() {
         isWifeConnected={isWifeConnected}
         activeUserName={activeUserName}
         onToggleActiveUser={handleToggleActiveUser}
+        onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
+        isFamilyAuthenticated={Boolean(authSession?.token)}
       />
 
       {/* Intelligent Due Date & Alteration Notification Toast Banner */}
@@ -1912,6 +1932,7 @@ export default function App() {
         onUpdateDevice={handleUpdateDevice}
         onRemoveDevice={handleRemoveDevice}
         onOpenBackup={() => setIsBackupModalOpen(true)}
+        onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
       />
 
       <BoletoScannerModal
@@ -1955,6 +1976,25 @@ export default function App() {
         wifeDevice={wifeDevice}
         onDisconnectWife={handleRemoveDevice}
         onForceSync={handleForceSync}
+        onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
+      />
+
+      <FamilyAuthModal
+        isOpen={isFamilyAuthModalOpen}
+        onClose={() => setIsFamilyAuthModalOpen(false)}
+        onAuthSuccess={(user, deviceOwner) => {
+          setActiveUserName(deviceOwner);
+          setBills(cloudkit.getBills());
+          setRevenues(cloudkit.getRevenues());
+          setDevices(cloudkit.getDevices());
+          showActionToast({
+            id: `auth-success-${Date.now()}`,
+            type: 'save',
+            title: 'Família Conectada! 🏠',
+            message: `Celular de ${deviceOwner} sincronizado com sucesso na conta da casa (${user.email}).`,
+          });
+          showTemporaryToast(`✅ Conectado com sucesso como ${deviceOwner}!`);
+        }}
       />
 
       <ReceiptViewerModal

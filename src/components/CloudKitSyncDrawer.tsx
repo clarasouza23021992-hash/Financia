@@ -2,11 +2,12 @@ import React, { useState, useEffect } from 'react';
 import { 
   X, ArrowLeft, Heart, Smartphone, QrCode, MessageCircle, Copy, Check, 
   RefreshCw, CheckCircle2, ShieldCheck, Wifi, Activity, FileText, CheckCheck,
-  AlertCircle, Trash2, ArrowRight
+  AlertCircle, Trash2, ArrowRight, Users, Sparkles
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { CloudDevice, PaymentPropagationLogEntry } from '../types/finance';
 import { cloudkit } from '../services/cloudkitSync';
+import { authService } from '../services/authService';
 
 interface CloudKitSyncDrawerProps {
   isOpen: boolean;
@@ -21,6 +22,7 @@ interface CloudKitSyncDrawerProps {
   onUpdateDevice?: (deviceId: string, updates: Partial<CloudDevice>) => void;
   onRemoveDevice?: (deviceId: string) => void;
   onOpenBackup?: () => void;
+  onOpenFamilyAuth?: () => void;
 }
 
 export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
@@ -29,6 +31,7 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
   devices,
   activeDevice,
   onForceSync,
+  onOpenFamilyAuth,
 }) => {
   const [activeTab, setActiveTab] = useState<'connect' | 'logs'>('connect');
   const [syncing, setSyncing] = useState(false);
@@ -227,6 +230,37 @@ export const CloudKitSyncDrawer: React.FC<CloudKitSyncDrawerProps> = ({
 
           {activeTab === 'connect' ? (
             <>
+              {/* Family Account (Same Login for Both Phones) Banner */}
+              <div className="p-3.5 bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/20 dark:from-teal-950/50 dark:to-emerald-950/40 rounded-2xl border-2 border-teal-500/40 shadow-xs space-y-2.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Users className="w-4 h-4 text-teal-600 dark:text-[#00E5B5]" />
+                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                      Conta da Família (Mesmo Login)
+                    </span>
+                  </div>
+                  <span className="text-[9.5px] uppercase font-black px-2 py-0.5 rounded-full bg-teal-500 text-slate-900">
+                    {authService.isAuthenticated() ? 'Conectado' : 'Recomendado'}
+                  </span>
+                </div>
+                <p className="text-[11.5px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                  Usar o mesmo e-mail e senha no celular do Carlos e no da Paula unifica 100% o banco de dados e elimina quaisquer erros de sincronização.
+                </p>
+                {onOpenFamilyAuth && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      onOpenFamilyAuth();
+                    }}
+                    className="w-full py-2 px-3 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-black text-xs rounded-xl shadow-xs active-press transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <Users className="w-3.5 h-3.5" />
+                    <span>{authService.isAuthenticated() ? 'Gerenciar Login da Casa' : 'Entrar com o Mesmo Login (Carlos & Paula)'}</span>
+                  </button>
+                )}
+              </div>
+
               {/* Simple Status Banner */}
               <div className="p-3 bg-gradient-to-r from-emerald-500/10 via-teal-500/10 to-emerald-500/15 dark:from-emerald-950/40 dark:to-teal-950/30 rounded-2xl border border-emerald-500/30 flex items-center gap-3">
                 <div className="w-9 h-9 rounded-xl bg-emerald-500/20 text-emerald-600 dark:text-emerald-400 flex items-center justify-center flex-shrink-0 font-bold">

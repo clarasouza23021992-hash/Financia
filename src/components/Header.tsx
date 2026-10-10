@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target, Calendar, Clock, ShieldCheck } from 'lucide-react';
+import { Home, Plus, Cloud, Heart, RefreshCw, Calculator, Bell, Target, Calendar, Clock, ShieldCheck, Users } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -25,6 +25,8 @@ interface HeaderProps {
   isWifeConnected?: boolean;
   activeUserName?: string;
   onToggleActiveUser?: () => void;
+  onOpenFamilyAuth?: () => void;
+  isFamilyAuthenticated?: boolean;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -43,6 +45,8 @@ export const Header: React.FC<HeaderProps> = ({
   isWifeConnected = false,
   activeUserName,
   onToggleActiveUser,
+  onOpenFamilyAuth,
+  isFamilyAuthenticated = false,
 }) => {
   const [currentClock, setCurrentClock] = useState<string>(() => {
     const d = new Date();
@@ -151,6 +155,26 @@ export const Header: React.FC<HeaderProps> = ({
               className="flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-teal-300 hover:text-white active:scale-90 transition-all border border-slate-700/60 cursor-pointer"
             >
               <ShieldCheck className="w-4 h-4 text-[#00C49F]" />
+            </button>
+          )}
+
+          {/* Family Account (Same Login for Both Phones) Button */}
+          {onOpenFamilyAuth && (
+            <button
+              id="btn-header-family-auth"
+              type="button"
+              onClick={onOpenFamilyAuth}
+              title={isFamilyAuthenticated ? "Conta da Família Conectada (Carlos & Paula sincronizados)" : "Entrar na Conta da Família (Mesmo login nos 2 celulares)"}
+              className={`relative flex items-center justify-center w-8 h-8 rounded-xl transition-all border active:scale-90 cursor-pointer ${
+                isFamilyAuthenticated 
+                  ? 'bg-teal-950/70 border-teal-500/50 text-[#00E5B5] hover:bg-teal-900/80 shadow-xs' 
+                  : 'bg-slate-800/90 hover:bg-slate-700 border-slate-700/60 text-slate-300 hover:text-white'
+              }`}
+            >
+              <Users className="w-4 h-4" />
+              {isFamilyAuthenticated && (
+                <span className="absolute -top-1 -right-1 w-2.5 h-2.5 rounded-full bg-emerald-400 border-2 border-[#0A1128] animate-pulse" />
+              )}
             </button>
           )}
 

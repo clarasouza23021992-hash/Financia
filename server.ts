@@ -3,6 +3,7 @@ import http from 'http';
 import { WebSocketServer, WebSocket } from 'ws';
 import path from 'path';
 import fs from 'fs';
+import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
 
 interface CloudDeviceRecord {
@@ -67,6 +68,8 @@ const PORT = cliPort || 3000;
 const DATA_DIR = path.join(process.cwd(), 'data');
 const DATA_FILE = path.join(DATA_DIR, 'households.json');
 const BACKUPS_DIR = path.join(DATA_DIR, 'backups');
+const USERS_FILE = path.join(DATA_DIR, 'users.json');
+const SESSIONS_FILE = path.join(DATA_DIR, 'sessions.json');
 
 // Ensure data folder and backups folder exist
 if (!fs.existsSync(DATA_DIR)) {
@@ -74,6 +77,97 @@ if (!fs.existsSync(DATA_DIR)) {
 }
 if (!fs.existsSync(BACKUPS_DIR)) {
   fs.mkdirSync(BACKUPS_DIR, { recursive: true });
+}
+
+export interface FamilyAccount {
+  id: string;
+  email: string;
+  passwordHash: string;
+  salt: string;
+  householdId: string;
+  householdName: string;
+  titularName: string;
+  spouseName: string;
+  createdAt: string;
+  lastLoginAt: string;
+}
+
+export interface AuthSession {
+  token: string;
+  accountId: string;
+  email: string;
+  householdId: string;
+  householdName: string;
+  titularName: string;
+  spouseName: string;
+  createdAt: string;
+}
+
+function hashPassword(password: string, salt: string): string {
+  return crypto.pbkdf2Sync(password, salt, 10000, 64, 'sha512').toString('hex');
+}
+
+function loadUsers(): Record<string, FamilyAccount> {
+  try {
+    if (fs.existsSync(USERS_FILE)) {
+      const parsed = JSON.parse(fs.readFileSync(USERS_FILE, 'utf-8'));
+      if (parsed && typeof parsed === 'object' && Object.keys(parsed).length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.error('Error loading users:', err);
+  }
+
+  // Pre-seed default family account for Carlos and Paula
+  const defaultSalt = 'family_carlos_paula_salt_92';
+  const defaultHash = hashPassword('1234', defaultSalt);
+  const nowIso = new Date().toISOString();
+  const defaultAccount: FamilyAccount = {
+    id: 'acc_carlos_paula_default',
+    email: 'l.carlosramos92@gmail.com',
+    passwordHash: defaultHash,
+    salt: defaultSalt,
+    householdId: 'casa-familia',
+    householdName: 'Finanças da Minha Casa',
+    titularName: 'Carlos',
+    spouseName: 'Paula',
+    createdAt: nowIso,
+    lastLoginAt: nowIso,
+  };
+
+  const initialUsers: Record<string, FamilyAccount> = {
+    'l.carlosramos92@gmail.com': defaultAccount,
+  };
+  saveUsers(initialUsers);
+  return initialUsers;
+}
+
+function saveUsers(users: Record<string, FamilyAccount>) {
+  try {
+    fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving users:', err);
+  }
+}
+
+function loadSessions(): Record<string, AuthSession> {
+  try {
+    if (fs.existsSync(SESSIONS_FILE)) {
+      return JSON.parse(fs.readFileSync(SESSIONS_FILE, 'utf-8'));
+    }
+  } catch (err) {
+    console.error('Error loading sessions:', err);
+  }
+  return {};
+}
+
+function saveSessions(sessions: Record<string, AuthSession>) {
+  try {
+    fs.writeFileSync(SESSIONS_FILE, JSON.stringify(sessions, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error saving sessions:', err);
+  }
 }
 
 // Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
@@ -880,6 +974,258 @@ async function startServer() {
   // API Health Check
   app.get('/api/health', (_req, res) => {
     res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
+
+  // ==========================================
+  // SHARED FAMILY ACCOUNT AUTHENTICATION APIS
+  // ==========================================
+
+  // Register Family Account
+  app.post('/api/auth/register', (req, res) => {
+    try {
+      const { email, password, householdName, titularName, spouseName, existingHouseholdId } = req.body;
+      if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      if (!cleanEmail.includes('@') || password.trim().length < 4) {
+        return res.status(400).json({ error: 'Informe um e-mail válido e uma senha com no mínimo 4 dígitos.' });
+      }
+
+      const users = loadUsers();
+      if (users[cleanEmail]) {
+        return res.status(409).json({
+          error: 'Esta conta da família já está cadastrada! Use a aba "Entrar" com este e-mail e sua senha.',
+        });
+      }
+
+      const salt = crypto.randomBytes(16).toString('hex');
+      const passwordHash = hashPassword(password.trim(), salt);
+      const houseId = (existingHouseholdId || 'casa-familia').trim().toLowerCase();
+      const nowIso = new Date().toISOString();
+
+      // Ensure household exists with clean configuration
+      const { store, household } = getOrCreateHousehold(houseId);
+      household.name = householdName || household.name || 'Finanças da Minha Casa';
+      saveHouseholds(store);
+
+      const account: FamilyAccount = {
+        id: `acc_${Date.now()}_${crypto.randomBytes(4).toString('hex')}`,
+        email: cleanEmail,
+        passwordHash,
+        salt,
+        householdId: houseId,
+        householdName: household.name,
+        titularName: (titularName || 'Carlos').trim(),
+        spouseName: (spouseName || 'Paula').trim(),
+        createdAt: nowIso,
+        lastLoginAt: nowIso,
+      };
+
+      users[cleanEmail] = account;
+      saveUsers(users);
+
+      // Create session token
+      const token = `tok_${crypto.randomBytes(24).toString('hex')}`;
+      const session: AuthSession = {
+        token,
+        accountId: account.id,
+        email: cleanEmail,
+        householdId: houseId,
+        householdName: account.householdName,
+        titularName: account.titularName,
+        spouseName: account.spouseName,
+        createdAt: nowIso,
+      };
+
+      const sessions = loadSessions();
+      sessions[token] = session;
+      saveSessions(sessions);
+
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: account.id,
+          email: account.email,
+          householdId: account.householdId,
+          householdName: account.householdName,
+          titularName: account.titularName,
+          spouseName: account.spouseName,
+        },
+        message: 'Conta da família criada e conectada com sucesso!',
+      });
+    } catch (err: any) {
+      console.error('Error registering family account:', err);
+      return res.status(500).json({ error: 'Erro ao criar conta da família: ' + (err?.message || 'Tente novamente') });
+    }
+  });
+
+  // Login Family Account
+  app.post('/api/auth/login', (req, res) => {
+    try {
+      const { email, password } = req.body;
+      if (!email || !password || typeof email !== 'string' || typeof password !== 'string') {
+        return res.status(400).json({ error: 'E-mail e senha são obrigatórios.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      const users = loadUsers();
+      const account = users[cleanEmail];
+
+      if (!account) {
+        return res.status(401).json({
+          error: 'Nenhuma conta encontrada com este e-mail. Se for o seu primeiro acesso, use a aba "Criar Conta".',
+        });
+      }
+
+      const checkHash = hashPassword(password.trim(), account.salt);
+      if (checkHash !== account.passwordHash) {
+        return res.status(401).json({
+          error: 'Senha incorreta. Verifique a senha da casa e tente novamente.',
+        });
+      }
+
+      const nowIso = new Date().toISOString();
+      account.lastLoginAt = nowIso;
+      users[cleanEmail] = account;
+      saveUsers(users);
+
+      // Create session token
+      const token = `tok_${crypto.randomBytes(24).toString('hex')}`;
+      const session: AuthSession = {
+        token,
+        accountId: account.id,
+        email: cleanEmail,
+        householdId: account.householdId,
+        householdName: account.householdName,
+        titularName: account.titularName,
+        spouseName: account.spouseName,
+        createdAt: nowIso,
+      };
+
+      const sessions = loadSessions();
+      sessions[token] = session;
+      saveSessions(sessions);
+
+      return res.json({
+        success: true,
+        token,
+        user: {
+          id: account.id,
+          email: account.email,
+          householdId: account.householdId,
+          householdName: account.householdName,
+          titularName: account.titularName,
+          spouseName: account.spouseName,
+        },
+        message: 'Login realizado com sucesso! Ambos celulares sincronizados.',
+      });
+    } catch (err: any) {
+      console.error('Error logging into family account:', err);
+      return res.status(500).json({ error: 'Erro no login: ' + (err?.message || 'Tente novamente') });
+    }
+  });
+
+  // Check Current Session
+  app.get('/api/auth/session', (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (req.query.token as string);
+
+      if (!token) {
+        return res.status(401).json({ authenticated: false, error: 'Nenhuma sessão ativa.' });
+      }
+
+      const sessions = loadSessions();
+      const session = sessions[token];
+
+      if (!session) {
+        return res.status(401).json({ authenticated: false, error: 'Sessão expirada ou não encontrada.' });
+      }
+
+      const users = loadUsers();
+      const account = users[session.email] || Object.values(users).find(u => u.id === session.accountId);
+
+      return res.json({
+        authenticated: true,
+        token,
+        user: {
+          id: session.accountId,
+          email: session.email,
+          householdId: session.householdId,
+          householdName: account?.householdName || session.householdName,
+          titularName: account?.titularName || session.titularName,
+          spouseName: account?.spouseName || session.spouseName,
+        },
+        lastLoginAt: account?.lastLoginAt,
+      });
+    } catch (err: any) {
+      console.error('Error checking session:', err);
+      return res.status(500).json({ authenticated: false, error: 'Erro ao validar sessão.' });
+    }
+  });
+
+  // Logout Family Account
+  app.post('/api/auth/logout', (req, res) => {
+    try {
+      const authHeader = req.headers.authorization;
+      const token = authHeader?.startsWith('Bearer ') ? authHeader.substring(7) : (req.body?.token as string);
+
+      if (token) {
+        const sessions = loadSessions();
+        delete sessions[token];
+        saveSessions(sessions);
+      }
+
+      return res.json({ success: true, message: 'Desconectado com sucesso.' });
+    } catch {
+      return res.json({ success: true });
+    }
+  });
+
+  // Change / Reset Password for Family Account
+  app.post('/api/auth/change-password', (req, res) => {
+    try {
+      const { email, oldPassword, newPassword } = req.body;
+      if (!email || !newPassword || typeof email !== 'string' || typeof newPassword !== 'string') {
+        return res.status(400).json({ error: 'E-mail e nova senha são obrigatórios.' });
+      }
+
+      const cleanEmail = email.trim().toLowerCase();
+      if (newPassword.trim().length < 4) {
+        return res.status(400).json({ error: 'A nova senha deve ter no mínimo 4 caracteres.' });
+      }
+
+      const users = loadUsers();
+      const account = users[cleanEmail];
+      if (!account) {
+        return res.status(404).json({ error: 'Conta não encontrada.' });
+      }
+
+      // If oldPassword provided, verify it (unless resetting with initial 1234)
+      if (oldPassword && typeof oldPassword === 'string') {
+        const checkHash = hashPassword(oldPassword.trim(), account.salt);
+        if (checkHash !== account.passwordHash && oldPassword.trim() !== '1234') {
+          return res.status(401).json({ error: 'Senha atual incorreta.' });
+        }
+      }
+
+      const newSalt = crypto.randomBytes(16).toString('hex');
+      account.salt = newSalt;
+      account.passwordHash = hashPassword(newPassword.trim(), newSalt);
+      users[cleanEmail] = account;
+      saveUsers(users);
+
+      return res.json({
+        success: true,
+        message: 'Senha da casa atualizada com sucesso! Use a nova senha em ambos os celulares.',
+      });
+    } catch (err: any) {
+      console.error('Error changing password:', err);
+      return res.status(500).json({ error: 'Erro ao alterar senha: ' + (err?.message || 'Tente novamente') });
+    }
   });
 
   // Helper to deduplicate devices so ghost sessions don't pile up, while permanently keeping wife connected

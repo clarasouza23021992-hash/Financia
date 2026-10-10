@@ -1,0 +1,14 @@
+{
+  "l.carlosramos92@gmail.com": {
+    "id": "acc_carlos_paula_default",
+    "email": "l.carlosramos92@gmail.com",
+    "passwordHash": "57b6ba68cbc1ee385dff2752667a050555f72e92955ad6de69afde4c7355cd0f5a628a8128282e6932479c746421b90695332e5020cbb81ce61fadaf02061d30",
+    "salt": "ec13c17ff65e773a0ffcaed3362c4071",
+    "householdId": "casa-familia",
+    "householdName": "Finanças da Minha Casa",
+    "titularName": "Carlos",
+    "spouseName": "Paula",
+    "createdAt": "2026-10-10T14:36:14.945Z",
+    "lastLoginAt": "2026-10-10T14:36:14.951Z"
+  }
+}

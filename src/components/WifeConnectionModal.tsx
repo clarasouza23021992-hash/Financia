@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
 import { 
   X, ArrowLeft, Heart, Smartphone, QrCode, MessageCircle, Copy, Check, 
-  RefreshCw, CheckCircle2, AlertCircle, ExternalLink, ShieldCheck, Wifi
+  RefreshCw, CheckCircle2, AlertCircle, ExternalLink, ShieldCheck, Wifi, Users, Sparkles
 } from 'lucide-react';
 import QRCode from 'qrcode';
 import { CloudDevice } from '../types/finance';
 import { cloudkit } from '../services/cloudkitSync';
+import { authService } from '../services/authService';
 
 interface WifeConnectionModalProps {
   isOpen: boolean;
@@ -14,6 +15,7 @@ interface WifeConnectionModalProps {
   wifeDevice: CloudDevice | null;
   onDisconnectWife?: (deviceId: string) => void;
   onForceSync: () => Promise<void>;
+  onOpenFamilyAuth?: () => void;
 }
 
 export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
@@ -23,6 +25,7 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
   wifeDevice,
   onDisconnectWife,
   onForceSync,
+  onOpenFamilyAuth,
 }) => {
   const [qrCodeDataUrl, setQrCodeDataUrl] = useState<string>('');
   const [copiedLink, setCopiedLink] = useState(false);
@@ -204,9 +207,48 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
 
           {/* Como Funciona a Conexão Real */}
           <div className="bg-slate-50 dark:bg-slate-900/60 p-4 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-3">
-            <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider">
-              Escolha como conectar o celular dela:
+            <h3 className="text-xs font-bold text-slate-900 dark:text-white uppercase tracking-wider flex items-center justify-between">
+              <span>Opções de Conexão:</span>
+              <span className="text-[10px] text-teal-600 dark:text-teal-400 font-extrabold flex items-center gap-1">
+                <Sparkles className="w-3 h-3" /> Recomendado
+              </span>
             </h3>
+
+            {/* OPÇÃO RECOMENDADA: MESMO LOGIN EM AMBOS CELULARES */}
+            <div className="p-4 bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/20 dark:from-teal-950/50 dark:to-emerald-950/40 rounded-2xl border-2 border-teal-500/40 shadow-xs space-y-3">
+              <div className="flex items-start gap-3">
+                <div className="w-10 h-10 rounded-2xl bg-teal-500/20 text-[#00E5B5] flex items-center justify-center flex-shrink-0 mt-0.5">
+                  <Users className="w-5 h-5 text-teal-600 dark:text-[#00E5B5]" />
+                </div>
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-black text-slate-900 dark:text-white">
+                      Login Único da Casa (Recomendado)
+                    </span>
+                    <span className="text-[9px] uppercase font-black px-2 py-0.5 rounded-full bg-teal-500 text-slate-900 dark:text-slate-900">
+                      Zero Erros
+                    </span>
+                  </div>
+                  <p className="text-[11.5px] text-slate-700 dark:text-slate-300 leading-relaxed">
+                    Você e a Paula usam o <strong>mesmo login e senha</strong> nos 2 aparelhos. O servidor sincroniza os dados na nuvem e impede perda de contas, duplicidades ou despareamento.
+                  </p>
+                </div>
+              </div>
+
+              {onOpenFamilyAuth && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    onClose();
+                    onOpenFamilyAuth();
+                  }}
+                  className="w-full py-2.5 px-3 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-black text-xs rounded-xl shadow-xs active-press transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Users className="w-4 h-4" />
+                  <span>{authService.isAuthenticated() ? 'Gerenciar Conta da Casa' : 'Entrar na Conta da Família (Carlos & Paula)'}</span>
+                </button>
+              )}
+            </div>
 
             {/* Opção 1: QR Code para a Câmera */}
             <div className="p-3.5 bg-white dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-700 flex flex-col sm:flex-row items-center gap-4">

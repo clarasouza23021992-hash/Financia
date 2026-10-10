@@ -3709,6 +3709,161 @@ class CloudKitSyncEngine {
   }
 
   /**
+   * Gets metadata of the latest verified point-in-time snapshot
+   */
+  public async getLatestSnapshotInfo(): Promise<{
+    hasSnapshot: boolean;
+    createdAtFormatted: string;
+    billsCount: number;
+    revenuesCount: number;
+    totalBillsAmount: number;
+    filename?: string;
+    source: 'cloud_backup' | 'cloud_household' | 'local_vault';
+  }> {
+    try {
+      const backups = await this.getServerBackups();
+      if (backups && backups.length > 0) {
+        const latest = backups[0];
+        const date = new Date(latest.createdAt);
+        return {
+          hasSnapshot: true,
+          createdAtFormatted: `${date.toLocaleDateString('pt-BR')} às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+          billsCount: latest.billsCount || 0,
+          revenuesCount: latest.revenuesCount || 0,
+          totalBillsAmount: latest.totalBillsAmount || 0,
+          filename: latest.filename,
+          source: 'cloud_backup',
+        };
+      }
+
+      // Check household server endpoint
+      const houseId = this.getHouseholdId();
+      const resp = await fetch(`/api/household/${encodeURIComponent(houseId)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.household) {
+          const bills = Array.isArray(data.household.bills) ? data.household.bills.filter((b: any) => !isMockBill(b)) : [];
+          const revs = Array.isArray(data.household.revenues) ? data.household.revenues.filter((r: any) => !isMockRevenue(r)) : [];
+          const date = new Date(data.household.lastUpdated || Date.now());
+          const total = bills.reduce((acc: number, b: any) => acc + (Number(b.amount) || 0), 0);
+          if (bills.length > 0 || revs.length > 0) {
+            return {
+              hasSnapshot: true,
+              createdAtFormatted: `${date.toLocaleDateString('pt-BR')} às ${date.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`,
+              billsCount: bills.length,
+              revenuesCount: revs.length,
+              totalBillsAmount: total,
+              source: 'cloud_household',
+            };
+          }
+        }
+      }
+    } catch {}
+
+    // Fallback: local safety vault
+    const rawVault = typeof window !== 'undefined' ? localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS) : null;
+    let vaultBills: Bill[] = [];
+    if (rawVault) {
+      try {
+        vaultBills = JSON.parse(rawVault).filter((b: any) => !isMockBill(b));
+      } catch {}
+    }
+    const total = vaultBills.reduce((acc, b) => acc + (b.amount || 0), 0);
+    return {
+      hasSnapshot: vaultBills.length > 0,
+      createdAtFormatted: 'Cofre Seguro Local (Automático)',
+      billsCount: vaultBills.length,
+      revenuesCount: this.getRevenues().length,
+      totalBillsAmount: total,
+      source: 'local_vault',
+    };
+  }
+
+  /**
+   * Restores cleanly from the latest verified snapshot WITHOUT scanning random keys or merging obsolete deleted items
+   */
+  public async restoreCleanLastState(filename?: string): Promise<{
+    success: boolean;
+    billsCount: number;
+    revenuesCount: number;
+    message: string;
+  }> {
+    try {
+      // 1. If explicit server backup filename provided
+      if (filename) {
+        const res = await this.restoreServerBackup(filename, 'replace');
+        if (res.success) {
+          return {
+            success: true,
+            billsCount: this.getBills().length,
+            revenuesCount: this.getRevenues().length,
+            message: res.message,
+          };
+        }
+      }
+
+      // 2. Fetch directly from server household (primary cloud source of truth)
+      const houseId = this.getHouseholdId();
+      const resp = await fetch(`/api/household/${encodeURIComponent(houseId)}`);
+      if (resp.ok) {
+        const data = await resp.json();
+        if (data && data.household) {
+          const rawBills = Array.isArray(data.household.bills) ? data.household.bills.filter((b: any) => !isMockBill(b)) : [];
+          const rawRevs = Array.isArray(data.household.revenues) ? data.household.revenues.filter((r: any) => !isMockRevenue(r)) : [];
+
+          if (rawBills.length > 0 || rawRevs.length > 0) {
+            this.safeSaveBillsToStorage(rawBills);
+            this.saveRevenues(rawRevs);
+            // Overwrite safety vault as well
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(rawBills));
+            localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(rawRevs));
+            this.autoPropagateRecurringBills();
+            this.broadcastUpdate('BILLS_UPDATED', { count: rawBills.length });
+            this.broadcastUpdate('REVENUES_UPDATED', { count: rawRevs.length });
+            return {
+              success: true,
+              billsCount: rawBills.length,
+              revenuesCount: rawRevs.length,
+              message: `Ponto seguro restaurado com sucesso: ${rawBills.length} contas e ${rawRevs.length} receitas sincronizadas!`,
+            };
+          }
+        }
+      }
+
+      // 3. Fallback: Local safety vault
+      const rawVault = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS);
+      if (rawVault) {
+        const vaultBills = JSON.parse(rawVault).filter((b: any) => !isMockBill(b));
+        if (vaultBills.length > 0) {
+          this.safeSaveBillsToStorage(vaultBills);
+          this.autoPropagateRecurringBills();
+          this.broadcastUpdate('BILLS_UPDATED', { count: vaultBills.length });
+          return {
+            success: true,
+            billsCount: vaultBills.length,
+            revenuesCount: this.getRevenues().length,
+            message: `Restaurado com sucesso do Cofre Seguro (${vaultBills.length} contas).`,
+          };
+        }
+      }
+
+      return {
+        success: false,
+        billsCount: 0,
+        revenuesCount: 0,
+        message: 'Nenhum ponto de restauração anterior foi localizado.',
+      };
+    } catch (err: any) {
+      return {
+        success: false,
+        billsCount: 0,
+        revenuesCount: 0,
+        message: err?.message || 'Falha ao restaurar ponto seguro.',
+      };
+    }
+  }
+
+  /**
    * Restores a backup from server file
    */
   public async restoreServerBackup(filename: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; message: string }> {

@@ -1906,6 +1906,7 @@ export default function App() {
                       isRefreshing={isRefreshing}
                       onGoToBills={() => setCurrentTab('bills')}
                       onOpenWifeConnect={() => setIsWifeConnectModalOpen(true)}
+                      onOpenBackup={() => setIsBackupModalOpen(true)}
                     />
                   </ErrorBoundary>
                 </motion.div>

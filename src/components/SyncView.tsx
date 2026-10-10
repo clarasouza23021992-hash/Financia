@@ -3,7 +3,8 @@ import {
   Cloud, RefreshCw, CheckCircle2, ShieldCheck, Smartphone, 
   Users, Activity, CheckCheck, Trash2, ArrowLeft,
   Check, AlertCircle, Sparkles, KeyRound, Share2,
-  MessageCircle, Copy, Clock, ExternalLink, X, Heart
+  MessageCircle, Copy, Clock, ExternalLink, X, Heart,
+  Database, AlertTriangle
 } from 'lucide-react';
 import { CloudDevice, PaymentPropagationLogEntry } from '../types/finance';
 import { cloudkit } from '../services/cloudkitSync';
@@ -22,6 +23,7 @@ interface SyncViewProps {
   isRefreshing: boolean;
   onGoToBills: () => void;
   onOpenWifeConnect?: () => void;
+  onOpenBackup?: () => void;
 }
 
 export const SyncView: React.FC<SyncViewProps> = ({
@@ -37,6 +39,7 @@ export const SyncView: React.FC<SyncViewProps> = ({
   isRefreshing,
   onGoToBills,
   onOpenWifeConnect,
+  onOpenBackup,
 }) => {
   const [propagationLogs, setPropagationLogs] = useState<PaymentPropagationLogEntry[]>([]);
   const [feedbackMsg, setFeedbackMsg] = useState<string | null>(null);
@@ -44,6 +47,36 @@ export const SyncView: React.FC<SyncViewProps> = ({
   const [isRecovering, setIsRecovering] = useState(false);
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedInstructions, setCopiedInstructions] = useState(false);
+  const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [snapshotInfo, setSnapshotInfo] = useState<{
+    hasSnapshot: boolean;
+    createdAtFormatted: string;
+    billsCount: number;
+    revenuesCount: number;
+    totalBillsAmount: number;
+    filename?: string;
+  } | null>(null);
+  const [isLoadingSnapshot, setIsLoadingSnapshot] = useState(false);
+
+  const activeBills = cloudkit.getBills();
+  const activeRevenues = cloudkit.getRevenues();
+  const totalBillsAmount = activeBills.reduce((acc, b) => acc + (b.amount || 0), 0);
+
+  const loadSnapshotInfo = async () => {
+    setIsLoadingSnapshot(true);
+    try {
+      const info = await cloudkit.getLatestSnapshotInfo();
+      setSnapshotInfo(info);
+    } catch {
+      // ignore
+    } finally {
+      setIsLoadingSnapshot(false);
+    }
+  };
+
+  useEffect(() => {
+    loadSnapshotInfo();
+  }, []);
 
   const appUrl = typeof window !== 'undefined' ? window.location.origin : 'https://ais-pre-kzu55qqa7itkbn2iowtd4s-5136201558.us-east1.run.app';
   const familyEmail = authSession?.user?.email || 'l.carlosramos92@gmail.com';
@@ -95,12 +128,30 @@ export const SyncView: React.FC<SyncViewProps> = ({
     }
   };
 
-  const handleRecoverData = async () => {
+  const handleExecuteCleanRestore = async () => {
+    setIsRecovering(true);
+    try {
+      const res = await cloudkit.restoreCleanLastState(snapshotInfo?.filename);
+      loadLogs();
+      loadSnapshotInfo();
+      setIsRestoreModalOpen(false);
+      setFeedbackMsg(`✅ Restauração limpa concluída sem erros! ${res.billsCount} contas e ${res.revenuesCount} receitas restabelecidas exatamente como estavam salvas.`);
+      setTimeout(() => setFeedbackMsg(null), 6000);
+    } catch (e: any) {
+      setFeedbackMsg('Erro na restauração: ' + (e?.message || 'Tente novamente'));
+    } finally {
+      setIsRecovering(false);
+    }
+  };
+
+  const handleDeepScanLegacy = async () => {
     setIsRecovering(true);
     try {
       const res = await cloudkit.scanAndRecoverLostData();
       loadLogs();
-      setFeedbackMsg(`✅ Varredura concluída: ${res.billsRecovered} contas/dívidas e ${res.revenuesRecovered} receitas resgatadas e sincronizadas.`);
+      loadSnapshotInfo();
+      setIsRestoreModalOpen(false);
+      setFeedbackMsg(`✅ Varredura profunda concluída: ${res.billsRecovered} contas e ${res.revenuesRecovered} receitas resgatadas.`);
       setTimeout(() => setFeedbackMsg(null), 5000);
     } catch (e: any) {
       setFeedbackMsg('Erro na recuperação: ' + (e?.message || 'Tente novamente'));
@@ -445,18 +496,39 @@ export const SyncView: React.FC<SyncViewProps> = ({
         </div>
       )}
 
-      {/* Card 4: Ferramentas de Proteção & Integridade */}
+      {/* Card 4: Ferramentas de Proteção & Ponto de Restauração */}
       <div className="p-4 bg-white dark:bg-[#0E172F] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">
-        <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-[#00C49F]" />
-          <h3 className="text-xs font-extrabold text-slate-900 dark:text-white">
-            Integridade & Recuperação de Dados
-          </h3>
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-[#00C49F]" />
+            <h3 className="text-xs font-extrabold text-slate-900 dark:text-white">
+              Integridade & Ponto de Restauração
+            </h3>
+          </div>
+          <span className="text-[10px] font-black px-2 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+            {activeBills.length} contas ativas
+          </span>
         </div>
 
         <p className="text-[11.5px] text-slate-600 dark:text-slate-300 leading-relaxed">
-          Garante que os identificadores das contas permaneçam idênticos em ambos os telefones e resgata dados caso algum aparelho fique offline por muito tempo.
+          Garante a consistência entre ambos os iPhones e permite restaurar o último estado salvo das contas com segurança, sem misturar nem duplicar dados caso você troque de telefone ou limpe o app.
         </p>
+
+        {/* Snapshot summary pill */}
+        <div className="p-2.5 bg-slate-50 dark:bg-slate-900/90 rounded-xl border border-slate-200/80 dark:border-slate-800 text-[11px] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 min-w-0">
+            <Clock className="w-3.5 h-3.5 text-teal-500 flex-shrink-0" />
+            <div className="truncate">
+              <span className="text-slate-500 dark:text-slate-400">Último Ponto Salvo: </span>
+              <strong className="text-slate-800 dark:text-slate-200">
+                {snapshotInfo?.createdAtFormatted || 'Nuvem da Família'}
+              </strong>
+            </div>
+          </div>
+          <span className="text-[10.5px] font-bold text-slate-600 dark:text-slate-300 whitespace-nowrap">
+            {snapshotInfo?.billsCount ?? activeBills.length} contas
+          </span>
+        </div>
 
         <div className="flex items-center gap-2 pt-1 flex-wrap">
           <button
@@ -470,13 +542,25 @@ export const SyncView: React.FC<SyncViewProps> = ({
 
           <button
             type="button"
-            onClick={handleRecoverData}
-            disabled={isRecovering}
-            className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs whitespace-nowrap disabled:opacity-50"
+            onClick={() => {
+              loadSnapshotInfo();
+              setIsRestoreModalOpen(true);
+            }}
+            className="flex-1 py-2 px-3 bg-indigo-600 hover:bg-indigo-700 text-white font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs whitespace-nowrap"
           >
-            <RefreshCw className={`w-3.5 h-3.5 ${isRecovering ? 'animate-spin' : ''}`} />
-            <span>{isRecovering ? 'Varrendo...' : 'Recuperar Dívidas'}</span>
+            <Database className="w-3.5 h-3.5" />
+            <span>Ponto de Restauração</span>
           </button>
+
+          {onOpenBackup && (
+            <button
+              type="button"
+              onClick={onOpenBackup}
+              className="py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-extrabold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-all cursor-pointer active:scale-95 shadow-xs whitespace-nowrap"
+            >
+              <span>Backups</span>
+            </button>
+          )}
         </div>
 
         {consistencyReport && consistencyReport.report && (
@@ -489,6 +573,155 @@ export const SyncView: React.FC<SyncViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* Modal de Restauração Limpa e Segura */}
+      {isRestoreModalOpen && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-xs modal-safe-overlay overflow-y-auto"
+          onClick={() => {
+            if (!isRecovering) setIsRestoreModalOpen(false);
+          }}
+        >
+          <div 
+            onClick={(e) => e.stopPropagation()}
+            className="bg-white dark:bg-[#0E172F] w-full max-w-md rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-200 dark:border-slate-800 overflow-hidden my-auto max-h-[calc(100dvh-2rem)] flex flex-col animate-in fade-in zoom-in-95 duration-200"
+          >
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-indigo-700 text-white px-5 py-4 flex items-center justify-between">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-2xl bg-white/20 flex items-center justify-center text-white flex-shrink-0 shadow-inner">
+                  <Database className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-sm font-black tracking-tight">
+                    Ponto de Restauração Seguro
+                  </h3>
+                  <p className="text-[11px] text-indigo-100 font-medium">
+                    Recuperação sem misturas nem duplicações
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                disabled={isRecovering}
+                onClick={() => setIsRestoreModalOpen(false)}
+                className="w-8 h-8 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center text-indigo-100 hover:text-white transition-colors cursor-pointer"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div className="p-4 sm:p-5 space-y-3.5 text-xs overflow-y-auto">
+              {/* Snapshot Cards */}
+              <div className="grid grid-cols-2 gap-2.5">
+                <div className="p-3 bg-slate-50 dark:bg-slate-900/80 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">
+                    No App Agora
+                  </span>
+                  <p className="text-base font-black text-slate-900 dark:text-white">
+                    {activeBills.length} contas
+                  </p>
+                  <p className="text-[11px] font-semibold text-slate-500">
+                    R$ {totalBillsAmount.toFixed(2).replace('.', ',')}
+                  </p>
+                </div>
+
+                <div className="p-3 bg-indigo-50 dark:bg-indigo-950/40 rounded-2xl border border-indigo-200 dark:border-indigo-900/60 space-y-1">
+                  <span className="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 uppercase tracking-wider block">
+                    Ponto Gravado
+                  </span>
+                  <p className="text-base font-black text-indigo-700 dark:text-indigo-300">
+                    {snapshotInfo?.billsCount ?? activeBills.length} contas
+                  </p>
+                  <p className="text-[10px] font-medium text-indigo-600/80 dark:text-indigo-400/80 truncate">
+                    {snapshotInfo?.createdAtFormatted || 'Última gravação segura'}
+                  </p>
+                </div>
+              </div>
+
+              {/* Status Notice */}
+              {activeBills.length > 0 ? (
+                <div className="p-3 bg-amber-50 dark:bg-amber-950/40 border border-amber-300 dark:border-amber-800/60 rounded-2xl flex items-start gap-2.5 text-amber-800 dark:text-amber-200">
+                  <AlertTriangle className="w-4 h-4 text-amber-500 flex-shrink-0 mt-0.5" />
+                  <div className="text-[11.5px] leading-relaxed space-y-1">
+                    <p className="font-extrabold">
+                      Suas contas estão ativas e funcionando normalmente.
+                    </p>
+                    <p className="text-[11px] text-amber-700 dark:text-amber-300 font-medium">
+                      Você só precisa restaurar se tiver perdido dados ou o app tiver zerado. Se restaurar agora sem ter perdido nada, os dados atuais serão substituídos pelo ponto gravado.
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-3 bg-emerald-50 dark:bg-emerald-950/40 border border-emerald-300 dark:border-emerald-800/60 rounded-2xl flex items-start gap-2.5 text-emerald-800 dark:text-emerald-200">
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 flex-shrink-0 mt-0.5" />
+                  <div className="text-[11.5px] leading-relaxed">
+                    <p className="font-bold">
+                      Pronto para restaurar!
+                    </p>
+                    <p className="text-[11px] text-emerald-700 dark:text-emerald-300">
+                      O aplicativo irá restabelecer exatamente as suas contas e receitas salvas antes da perda, sem misturar nada.
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Guarantee Explanation */}
+              <div className="p-3 bg-slate-50 dark:bg-slate-900/60 rounded-2xl border border-slate-200 dark:border-slate-800 space-y-1.5 text-[11px] text-slate-600 dark:text-slate-300 leading-snug">
+                <div className="flex items-center gap-1.5 font-bold text-slate-800 dark:text-slate-200">
+                  <ShieldCheck className="w-3.5 h-3.5 text-teal-500" />
+                  <span>Garantia de Restauração Sem Erro:</span>
+                </div>
+                <p>
+                  • <strong>Sem misturar</strong>: Não recupera rascunhos velhos nem ressuscita dívidas apagadas no passado.
+                </p>
+                <p>
+                  • <strong>Ponto exato</strong>: Traz o estado fiel que estava gravado na nuvem familiar da casa antes de qualquer perda.
+                </p>
+              </div>
+
+              {/* Actions */}
+              <div className="pt-2 space-y-2">
+                <button
+                  type="button"
+                  disabled={isRecovering}
+                  onClick={handleExecuteCleanRestore}
+                  className="w-full py-2.5 px-4 bg-indigo-600 hover:bg-indigo-700 text-white font-black rounded-xl text-xs flex items-center justify-center gap-2 shadow-md transition-all cursor-pointer disabled:opacity-50 active-press"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRecovering ? 'animate-spin' : ''}`} />
+                  <span>
+                    {isRecovering ? 'Restaurando ponto seguro...' : 'Restaurar Último Ponto Salvo (Sem Misturar)'}
+                  </span>
+                </button>
+
+                {onOpenBackup && (
+                  <button
+                    type="button"
+                    disabled={isRecovering}
+                    onClick={() => {
+                      setIsRestoreModalOpen(false);
+                      onOpenBackup();
+                    }}
+                    className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 font-bold rounded-xl text-xs flex items-center justify-center gap-1.5 transition-colors cursor-pointer"
+                  >
+                    <span>Ver Histórico Completo de Backups / Enviar para E-mail</span>
+                  </button>
+                )}
+
+                <button
+                  type="button"
+                  disabled={isRecovering}
+                  onClick={() => setIsRestoreModalOpen(false)}
+                  className="w-full py-2 text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 font-semibold text-xs cursor-pointer text-center"
+                >
+                  Cancelar e Manter Como Está
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Card 5: Histórico de Alterações em Tempo Real */}
       <div className="p-4 bg-white dark:bg-[#0E172F] rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs space-y-3">

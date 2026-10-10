@@ -102,7 +102,7 @@ export const Header: React.FC<HeaderProps> = ({
                     className="inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md bg-slate-800/90 hover:bg-slate-700 text-slate-200 text-[10px] font-bold border border-slate-700/60 active-press transition-colors cursor-pointer"
                     title={`Perfil ativo: ${activeUserName}. Clique para alternar entre Carlos e Paula.`}
                   >
-                    <span>{activeUserName.toLowerCase().includes('paula') ? '👩🏻' : '👤'}</span>
+                    <span>{(activeUserName || '').toLowerCase().includes('paula') ? '👩🏻' : '👤'}</span>
                     <span>{activeUserName}</span>
                     <span className="text-[9px] text-slate-400">▾</span>
                   </button>

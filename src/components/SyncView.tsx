@@ -303,13 +303,27 @@ export const SyncView: React.FC<SyncViewProps> = ({
             <div className="flex items-center gap-2.5">
               <span className="text-base">👩🏻</span>
               <div>
-                <strong className="text-slate-900 dark:text-white">Paula (iPhone)</strong>
-                <p className="text-[10px] text-slate-500">Esposa</p>
+                <strong className="text-slate-900 dark:text-white">
+                  {wifeDevice?.name || 'Paula (iPhone)'}
+                </strong>
+                <p className="text-[10px] text-slate-500">
+                  {isWifeConnected ? (wifeDevice?.model || 'Esposa Conectada') : 'Esposa (Toque para Parear)'}
+                </p>
               </div>
             </div>
-            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
-              <Check className="w-3 h-3" /> Ativa
-            </span>
+            {isWifeConnected ? (
+              <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 flex items-center gap-1">
+                <Check className="w-3 h-3" /> Conectada
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={onOpenWifeConnect}
+                className="px-2 py-0.5 text-[10px] font-bold text-pink-600 dark:text-pink-400 bg-pink-50 dark:bg-pink-950/40 border border-pink-200 dark:border-pink-800 rounded-lg hover:underline cursor-pointer flex items-center gap-1"
+              >
+                <Heart className="w-2.5 h-2.5" /> Parear
+              </button>
+            )}
           </div>
         </div>
 

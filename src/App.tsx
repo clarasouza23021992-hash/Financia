@@ -1370,6 +1370,53 @@ export default function App() {
               bills={allValidBills}
             />
 
+            {/* Family Account Sync Banner */}
+            {!authSession?.token ? (
+              <div className="mx-4 my-1.5 p-3 bg-gradient-to-r from-teal-500/15 via-emerald-500/10 to-teal-500/20 dark:from-teal-950/50 dark:to-emerald-950/40 rounded-2xl border-2 border-teal-500/40 flex items-center justify-between gap-3 shadow-xs animate-in fade-in">
+                <div className="flex items-center gap-2.5 min-w-0">
+                  <div className="w-9 h-9 rounded-xl bg-teal-500/20 text-[#00E5B5] flex items-center justify-center flex-shrink-0">
+                    <Users className="w-5 h-5 text-teal-600 dark:text-[#00E5B5]" />
+                  </div>
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-1.5">
+                      <span className="text-xs font-black text-slate-900 dark:text-white">
+                        Conta da Casa (Carlos & Paula)
+                      </span>
+                      <span className="text-[9px] uppercase font-bold px-1.5 py-0.2 bg-teal-500/20 text-teal-700 dark:text-teal-300 rounded-md">
+                        Zero Erros
+                      </span>
+                    </div>
+                    <p className="text-[11px] text-slate-600 dark:text-slate-300 truncate">
+                      Mesmo login nos 2 celulares para nunca mais perder contas.
+                    </p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFamilyAuthModalOpen(true)}
+                  className="flex-shrink-0 px-3 py-1.5 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-black text-xs rounded-xl shadow-xs active-press transition-all cursor-pointer"
+                >
+                  Entrar
+                </button>
+              </div>
+            ) : (
+              <div className="mx-4 my-1 px-3 py-1.5 bg-emerald-50/70 dark:bg-emerald-950/25 border border-emerald-300/60 dark:border-emerald-800/50 rounded-xl flex items-center justify-between text-xs shadow-2xs">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse flex-shrink-0" />
+                  <span className="text-[11px] font-bold text-emerald-900 dark:text-emerald-200 truncate">
+                    Conta do Casal Conectada • Celular de {activeUserName}
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setIsFamilyAuthModalOpen(true)}
+                  className="text-[10px] font-extrabold text-teal-700 dark:text-teal-300 hover:underline flex-shrink-0 cursor-pointer"
+                >
+                  Gerenciar
+                </button>
+              </div>
+            )}
+
             {/* Quick Pull / Manual Refresh Toolbar Bar */}
             <div className="mx-4 my-1 px-3 py-1.5 bg-white dark:bg-[#131D38] border border-slate-200 dark:border-slate-800 rounded-2xl flex items-center justify-between text-xs shadow-xs">
               <div className="flex items-center gap-1.5 text-slate-600 dark:text-slate-300 font-medium text-[11px] truncate">

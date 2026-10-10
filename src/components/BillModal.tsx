@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useMemo, useRef } from 'react';
+import { motion } from 'framer-motion';
 import { 
   X, Barcode, QrCode, Upload, FileText, Trash2, Camera, Sparkles, 
   ClipboardPaste, CheckCircle2, Building2, Calendar, History, 
@@ -222,6 +223,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [barcodeDetectedNotice, setBarcodeDetectedNotice] = useState<string | null>(null);
   const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
   const [applyToFutureMonths, setApplyToFutureMonths] = useState<boolean>(true);
+  const [isSavingSuccess, setIsSavingSuccess] = useState<boolean>(false);
 
   // Installment Tracking State (Parcelada)
   const [totalInstallments, setTotalInstallments] = useState<number>(10);
@@ -717,48 +719,53 @@ export const BillModal: React.FC<BillModalProps> = ({
       : undefined;
 
     try {
-      onSave(
-        {
-          id: initialBill?.id,
-          name: cleanName || 'Conta sem nome',
-          amount: parsedAmount,
-          dueDate,
-          originalDueDate: initialBill?.originalDueDate || dueDate,
-          paymentMonth: effectivePaymentMonth,
-          category,
-          favored: favored.trim() || 'Não especificado',
-          barcode: barcode.trim(),
-          pixKey: pixKey.trim(),
-          pixType,
-          recurrence,
-          fixedValueType: recurrence === 'Mensal Fixa' ? fixedValueType : undefined,
-          splitHousehold: false,
-          splitDetails: [],
-          notes: notes.trim(),
-          lastEditedBy: cloudkit.getCurrentUserName(),
-          paidBy: initialBill?.paidBy,
-          paidAt: initialBill?.paidAt,
-          receiptName: receiptName || undefined,
-          receiptUrl: receiptUrl || undefined,
-          receiptSize: receiptSize || undefined,
-          status: initialBill?.status || 'pending',
-          installmentNumber: isParcelada ? summary.validCurrent : undefined,
-          totalInstallments: isParcelada ? summary.validTotal : undefined,
-          endMonth: isParcelada ? summary.shortEnd : undefined,
-          applyToFutureMonths,
-          previousName: initialBill?.name,
-        },
-        isParcelada
-          ? {
-              totalInstallments: summary.validTotal,
-              currentInstallment: summary.validCurrent,
-              valueIsPerInstallment,
-            }
-          : undefined
-      );
-      onClose();
+      setIsSavingSuccess(true);
+      setTimeout(() => {
+        onSave(
+          {
+            id: initialBill?.id,
+            name: cleanName || 'Conta sem nome',
+            amount: parsedAmount,
+            dueDate,
+            originalDueDate: initialBill?.originalDueDate || dueDate,
+            paymentMonth: effectivePaymentMonth,
+            category,
+            favored: favored.trim() || 'Não especificado',
+            barcode: barcode.trim(),
+            pixKey: pixKey.trim(),
+            pixType,
+            recurrence,
+            fixedValueType: recurrence === 'Mensal Fixa' ? fixedValueType : undefined,
+            splitHousehold: false,
+            splitDetails: [],
+            notes: notes.trim(),
+            lastEditedBy: cloudkit.getCurrentUserName(),
+            paidBy: initialBill?.paidBy,
+            paidAt: initialBill?.paidAt,
+            receiptName: receiptName || undefined,
+            receiptUrl: receiptUrl || undefined,
+            receiptSize: receiptSize || undefined,
+            status: initialBill?.status || 'pending',
+            installmentNumber: isParcelada ? summary.validCurrent : undefined,
+            totalInstallments: isParcelada ? summary.validTotal : undefined,
+            endMonth: isParcelada ? summary.shortEnd : undefined,
+            applyToFutureMonths,
+            previousName: initialBill?.name,
+          },
+          isParcelada
+            ? {
+                totalInstallments: summary.validTotal,
+                currentInstallment: summary.validCurrent,
+                valueIsPerInstallment,
+              }
+            : undefined
+        );
+        setIsSavingSuccess(false);
+        onClose();
+      }, 300);
     } catch (err) {
       console.error('Error saving bill:', err);
+      setIsSavingSuccess(false);
       onClose();
     }
   };
@@ -2043,16 +2050,27 @@ export const BillModal: React.FC<BillModalProps> = ({
               </button>
               <button
                 type="submit"
-                disabled={isProcessingReceipt}
+                disabled={isProcessingReceipt || isSavingSuccess}
                 className={`px-5 py-2.5 font-black text-xs sm:text-sm rounded-xl active-press shadow-md flex items-center gap-2 transition-all cursor-pointer ${
-                  isProcessingReceipt
-                    ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-wait shadow-none'
-                    : receiptName
-                      ? 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] ring-2 ring-emerald-400/80 shadow-emerald-500/25 active:scale-95'
-                      : 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] shadow-teal-500/20 active:scale-95'
+                  isSavingSuccess
+                    ? 'bg-emerald-500 text-slate-950 scale-105 shadow-emerald-500/40 ring-2 ring-emerald-300'
+                    : isProcessingReceipt
+                      ? 'bg-slate-300 dark:bg-slate-800 text-slate-500 cursor-wait shadow-none'
+                      : receiptName
+                        ? 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] ring-2 ring-emerald-400/80 shadow-emerald-500/25 active:scale-95'
+                        : 'bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] shadow-teal-500/20 active:scale-95'
                 }`}
               >
-                {isProcessingReceipt ? (
+                {isSavingSuccess ? (
+                  <motion.div 
+                    initial={{ scale: 0.8 }} 
+                    animate={{ scale: [0.8, 1.15, 1] }} 
+                    className="flex items-center gap-1.5"
+                  >
+                    <CheckCircle2 className="w-4 h-4 text-slate-950 stroke-[3] animate-bounce" />
+                    <span>Salvo com sucesso! 🎉</span>
+                  </motion.div>
+                ) : isProcessingReceipt ? (
                   <>
                     <Sparkles className="w-4 h-4 text-teal-600 animate-spin" />
                     <span>Processando ({receiptUploadProgress}%)...</span>

@@ -43,6 +43,60 @@ export function playNotificationChime() {
   }
 }
 
+// Play pleasant crisp chime when an item is saved (100% offline Web Audio)
+export function playSaveChime() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    // Ascending arpeggio (C5 -> E5 -> G5)
+    const notes = [523.25, 659.25, 783.99];
+    notes.forEach((freq, idx) => {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(freq, now + idx * 0.07);
+      gain.gain.setValueAtTime(0.12, now + idx * 0.07);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.28);
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.start(now + idx * 0.07);
+      osc.stop(now + idx * 0.07 + 0.3);
+    });
+  } catch {
+    // Silently ignore audio restrictions
+  }
+}
+
+// Play gentle soft pop when an item is deleted (100% offline Web Audio)
+export function playDeletePop() {
+  try {
+    const AudioContextClass = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    if (!AudioContextClass) return;
+
+    const ctx = new AudioContextClass();
+    const now = ctx.currentTime;
+
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = 'triangle';
+    // Gentle downward pitch sweep
+    osc.frequency.setValueAtTime(320, now);
+    osc.frequency.exponentialRampToValueAtTime(80, now + 0.18);
+    gain.gain.setValueAtTime(0.18, now);
+    gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
+    osc.connect(gain);
+    gain.connect(ctx.destination);
+    osc.start(now);
+    osc.stop(now + 0.22);
+  } catch {
+    // Silently ignore audio restrictions
+  }
+}
+
 export function isNotificationSupported(): boolean {
   return typeof window !== 'undefined' && 'Notification' in window;
 }

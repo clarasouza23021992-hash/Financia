@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { X, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Check } from 'lucide-react';
+import { motion } from 'framer-motion';
+import { X, DollarSign, TrendingUp, AlertTriangle, ArrowRight, Check, CheckCircle2 } from 'lucide-react';
 import { Revenue, UserProfile } from '../types/finance';
 
 interface RevenueModalProps {
@@ -60,12 +61,14 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
 
   const prevIsOpenRef = React.useRef(false);
   const prevRevIdRef = React.useRef<string | undefined>(undefined);
+  const [isSavingSuccess, setIsSavingSuccess] = useState<boolean>(false);
 
   useEffect(() => {
     const justOpened = isOpen && !prevIsOpenRef.current;
     const revChanged = isOpen && initialRevenue?.id !== prevRevIdRef.current;
 
     if (justOpened || revChanged) {
+      setIsSavingSuccess(false);
       if (initialRevenue) {
         setName(initialRevenue.name || '');
         setAmount(initialRevenue.amount ? initialRevenue.amount.toString().replace('.', ',') : '');
@@ -98,18 +101,22 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
     const cleaned = amount.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
     const parsed = parseFloat(cleaned) || 0;
 
-    onSave({
-      id: initialRevenue?.id,
-      name: name.trim() || 'Receita',
-      amount: parsed,
-      date: date || (defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0]),
-      category,
-      recurrence,
-      profileName: profileName.trim() || defaultProfName,
-      notes: notes.trim(),
-      applyToFutureMonths,
-    });
-    onClose();
+    setIsSavingSuccess(true);
+    setTimeout(() => {
+      onSave({
+        id: initialRevenue?.id,
+        name: name.trim() || 'Receita',
+        amount: parsed,
+        date: date || (defaultMonth ? `${defaultMonth}-05` : new Date().toISOString().split('T')[0]),
+        category,
+        recurrence,
+        profileName: profileName.trim() || defaultProfName,
+        notes: notes.trim(),
+        applyToFutureMonths,
+      });
+      setIsSavingSuccess(false);
+      onClose();
+    }, 280);
   };
 
   return (
@@ -424,11 +431,29 @@ export const RevenueModal: React.FC<RevenueModalProps> = ({
             <button
               type="submit"
               form="revenue-form"
+              disabled={isSavingSuccess}
               onClick={handleSubmit}
-              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white font-extrabold text-xs sm:text-sm rounded-xl shadow-md shadow-emerald-600/25 active-press flex items-center gap-1.5 transition-all"
+              className={`px-5 py-2.5 font-extrabold text-xs sm:text-sm rounded-xl shadow-md active-press flex items-center gap-1.5 transition-all ${
+                isSavingSuccess
+                  ? 'bg-emerald-500 text-slate-950 scale-105 shadow-emerald-500/40 ring-2 ring-emerald-300'
+                  : 'bg-emerald-600 hover:bg-emerald-500 active:bg-emerald-700 text-white shadow-emerald-600/25'
+              }`}
             >
-              <Check className="w-4 h-4" />
-              <span>Salvar Receita</span>
+              {isSavingSuccess ? (
+                <motion.div 
+                  initial={{ scale: 0.8 }} 
+                  animate={{ scale: [0.8, 1.15, 1] }} 
+                  className="flex items-center gap-1.5"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-slate-950 stroke-[3] animate-bounce" />
+                  <span>Salvo com sucesso! 🎉</span>
+                </motion.div>
+              ) : (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>Salvar Receita</span>
+                </>
+              )}
             </button>
           </div>
         </div>

@@ -1828,23 +1828,39 @@ export default function App() {
                   </div>
                 )
               ) : (
-                filteredBills.map(bill => (
-                  <BillCard
-                    key={bill.id}
-                    bill={bill}
-                    onEdit={(b) => {
-                      setEditingBill(b);
-                      setIsBillModalOpen(true);
-                    }}
-                    onDelete={handleDeleteBill}
-                    onTogglePaid={handleTogglePaid}
-                    onViewReceipt={handleViewReceipt}
-                    onAttachReceipt={handleAttachReceipt}
-                    onMoveMonth={handleMoveBillMonth}
-                    onRestoreDueMonth={handleRestoreDueMonth}
-                    onReassignActor={handleReassignActor}
-                  />
-                ))
+                <AnimatePresence mode="popLayout" initial={false}>
+                  {filteredBills.map(bill => (
+                    <motion.div
+                      key={bill.id}
+                      layout
+                      initial={{ opacity: 0, y: 16, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{
+                        opacity: 0,
+                        scale: 0.88,
+                        x: -36,
+                        filter: 'blur(3px)',
+                        transition: { duration: 0.26, ease: 'easeOut' },
+                      }}
+                      transition={{ duration: 0.2 }}
+                    >
+                      <BillCard
+                        bill={bill}
+                        onEdit={(b) => {
+                          setEditingBill(b);
+                          setIsBillModalOpen(true);
+                        }}
+                        onDelete={handleDeleteBill}
+                        onTogglePaid={handleTogglePaid}
+                        onViewReceipt={handleViewReceipt}
+                        onAttachReceipt={handleAttachReceipt}
+                        onMoveMonth={handleMoveBillMonth}
+                        onRestoreDueMonth={handleRestoreDueMonth}
+                        onReassignActor={handleReassignActor}
+                      />
+                    </motion.div>
+                  ))}
+                </AnimatePresence>
               )}
             </div>
                 </motion.div>

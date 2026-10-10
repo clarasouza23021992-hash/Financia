@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Search, Filter, Plus, FileText, TrendingUp, 
@@ -176,6 +176,7 @@ export default function App() {
 
   // In-App Due Date Notification Alert Banner
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const hasShownInitialDueAlertRef = useRef(false);
 
   const handleSimulateSpouseAlteration = () => {
     const wifeName = cloudkit.getWifeName();
@@ -508,14 +509,12 @@ export default function App() {
     const dueToday = monthBills.find(b => b.dueDate === todayStr && b.status !== 'paid');
     const overdue = monthBills.find(b => b.status === 'overdue');
 
-    if (dueToday) {
-      setToastNotification(`🔔 Vence Hoje: ${dueToday.name} (R$ ${Number(dueToday.amount || 0).toFixed(2).replace('.', ',')})`);
-    } else if (overdue) {
-      setToastNotification(`⚠️ Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2).replace('.', ',')})`);
-    } else {
-      const dueSoon = monthBills.find(b => b.status === 'pending' && (b.dueDate || '') >= todayStr);
-      if (dueSoon) {
-        setToastNotification(`⏰ Próximo Vencimento: ${dueSoon.name} vence em breve (R$ ${Number(dueSoon.amount || 0).toFixed(2).replace('.', ',')})`);
+    if (!hasShownInitialDueAlertRef.current) {
+      hasShownInitialDueAlertRef.current = true;
+      if (dueToday) {
+        showTemporaryToast(`🔔 Vence Hoje: ${dueToday.name} (R$ ${Number(dueToday.amount || 0).toFixed(2).replace('.', ',')})`);
+      } else if (overdue) {
+        showTemporaryToast(`⚠️ Conta Atrasada: ${overdue.name} (R$ ${Number(overdue.amount || 0).toFixed(2).replace('.', ',')})`);
       }
     }
   }, [bills, selectedMonth.id, notifications]);
@@ -552,12 +551,16 @@ export default function App() {
     setActionToast(toast);
   }, []);
 
-  const showTemporaryToast = (msg: string) => {
+  const handleDismissActionToast = useCallback(() => {
+    setActionToast(null);
+  }, []);
+
+  const showTemporaryToast = useCallback((msg: string) => {
     setToastNotification(msg);
     setTimeout(() => {
-      setToastNotification(null);
-    }, 4500);
-  };
+      setToastNotification(prev => (prev === msg ? null : prev));
+    }, 2200);
+  }, []);
 
   // Manual refresh / pull to refresh handler (pull-down gesture and button)
   const handleManualRefresh = async () => {
@@ -933,7 +936,6 @@ export default function App() {
         title: 'Dívida Parcelada Salva! 💾',
         message: `A despesa "${finalBillData.name}" foi dividida em ${installmentConfig.totalInstallments} parcelas e salva com sucesso!`,
       });
-      showTemporaryToast(`✅ Dívida parcelada em ${installmentConfig.totalInstallments}x salva e lançada nos próximos meses!`);
     } else if (billMonth && billMonth !== selectedMonth.id) {
       const targetMonthOption = INITIAL_SUBSEQUENT_MONTHS.find(m => m.id === billMonth) || {
         id: billMonth,
@@ -947,7 +949,6 @@ export default function App() {
         title: finalBillData.isEdited ? 'Conta Editada com Sucesso! ✏️' : 'Conta Salva com Sucesso! 💾',
         message: `A despesa "${finalBillData.name}" foi salva com vencimento em ${targetLabel}.`,
       });
-      showTemporaryToast(`✅ Conta salva com vencimento em ${targetLabel}!`);
     } else if (finalBillData.isEdited || targetId) {
       showActionToast({
         id: `edit-bill-${Date.now()}`,
@@ -955,7 +956,6 @@ export default function App() {
         title: 'Conta Editada com Sucesso! ✏️',
         message: `As alterações da conta "${finalBillData.name}" foram salvas por ${activeUserName}.`,
       });
-      showTemporaryToast(`Conta atualizada por ${activeUserName}!`);
     } else {
       showActionToast({
         id: `save-bill-${Date.now()}`,
@@ -963,7 +963,6 @@ export default function App() {
         title: 'Conta Salva com Sucesso! 💾',
         message: `A nova conta "${finalBillData.name}" foi cadastrada com sucesso por ${activeUserName}!`,
       });
-      showTemporaryToast(`Nova conta cadastrada por ${activeUserName}!`);
     }
   };
 
@@ -1038,7 +1037,6 @@ export default function App() {
       title: 'Conta Excluída com Sucesso! 🗑️',
       message: `A dívida "${bill.name}" foi apagada de ${selectedMonth.label}.`,
     });
-    showTemporaryToast(`Conta "${bill.name}" excluída de ${selectedMonth.label}.`);
   };
 
   const handleDeleteAllMonths = (bill: Bill) => {
@@ -1051,7 +1049,6 @@ export default function App() {
       title: 'Conta Excluída de Todos os Meses! 🗑️',
       message: `A dívida "${bill.name}" foi removida de todos os meses (${deletedIds.length} ocorrências)!`,
     });
-    showTemporaryToast(`🗑️ Dívida "${bill.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
   const handleTogglePaid = (bill: Bill) => {
@@ -1059,7 +1056,6 @@ export default function App() {
     const actor = activeUserName || cloudkit.getCurrentUserName();
     cloudkit.toggleBillStatus(bill.id, newStatus, actor);
     setBills(cloudkit.getBills());
-    const actorLabel = newStatus === 'paid' ? ` por ${actor}` : '';
     if (newStatus === 'paid') {
       showActionToast({
         id: `paid-bill-${Date.now()}`,
@@ -1075,7 +1071,6 @@ export default function App() {
         message: `A conta "${bill.name}" retornou para pendente.`,
       });
     }
-    showTemporaryToast(newStatus === 'paid' ? `Conta "${bill.name}" marcada como Paga${actorLabel}! ✅` : 'Status revertido para Pendente.');
   };
 
   const handleReassignActor = (bill: Bill, newActor: string) => {
@@ -1096,7 +1091,6 @@ export default function App() {
       title: 'Autor Atualizado com Sucesso! 👤',
       message: `Alteração na conta "${bill.name}" atribuída a ${cleanActor}.`,
     });
-    showTemporaryToast(`✅ Alteração da dívida "${bill.name}" atribuída a ${cleanActor}!`);
     cloudkit.notifyRemoteChange(
       'bill_updated',
       'Autor da Alteração Atualizado 👤',
@@ -1126,7 +1120,6 @@ export default function App() {
         message: `A receita "${revData.name}" foi cadastrada com sucesso!`,
       });
     }
-    showTemporaryToast(`Receita "${revData.name}" salva com sucesso!`);
   };
 
   const handleDeleteRevenueSingleMonth = (rev: Revenue) => {
@@ -1139,7 +1132,6 @@ export default function App() {
       title: 'Receita Excluída com Sucesso! 🗑️',
       message: `A receita "${rev.name}" foi removida deste mês.`,
     });
-    showTemporaryToast(`🗑️ Receita "${rev.name}" removida deste mês.`);
   };
 
   const handleDeleteRevenueAllMonths = (rev: Revenue) => {
@@ -1152,7 +1144,6 @@ export default function App() {
       title: 'Receita Excluída de Todos os Meses! 🗑️',
       message: `A receita "${rev.name}" foi removida de todos os meses (${deletedIds.length} ocorrências)!`,
     });
-    showTemporaryToast(`🗑️ Receita "${rev.name}" removida de todos os meses (${deletedIds.length} ocorrências)!`);
   };
 
   // Handlers for Receipt viewing & attaching
@@ -2202,7 +2193,7 @@ export default function App() {
       {/* Visual Feedback Confirmation Toast (Salvo, Editado, Excluído) */}
       <ActionFeedbackToast
         toast={actionToast}
-        onDismiss={() => setActionToast(null)}
+        onDismiss={handleDismissActionToast}
       />
     </div>
   );

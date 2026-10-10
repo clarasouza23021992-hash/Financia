@@ -85,8 +85,8 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
           </div>
         </div>
 
-        {/* 3 Main Highlights */}
-        <div className="grid grid-cols-3 gap-2.5 pt-2 border-t border-slate-100 dark:border-slate-800">
+        {/* 4 Main Financial Highlights */}
+        <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-2 border-t border-slate-100 dark:border-slate-800">
           <div className="bg-emerald-50/70 dark:bg-emerald-950/30 p-2.5 rounded-xl border border-emerald-200/80 dark:border-emerald-900/40">
             <div className="flex items-center gap-1 text-[10px] font-bold text-emerald-700 dark:text-emerald-400 uppercase">
               <ArrowUpRight className="w-3 h-3" />
@@ -97,27 +97,37 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
             </div>
           </div>
 
-          <div className="bg-rose-50/70 dark:bg-rose-950/30 p-2.5 rounded-xl border border-rose-200/80 dark:border-rose-900/40">
-            <div className="flex items-center gap-1 text-[10px] font-bold text-rose-700 dark:text-rose-400 uppercase">
-              <ArrowDownRight className="w-3 h-3" />
-              <span>Dívidas</span>
+          <div className="bg-teal-50/70 dark:bg-teal-950/30 p-2.5 rounded-xl border border-teal-200/80 dark:border-teal-900/40">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-400 uppercase">
+              <CheckCircle2 className="w-3 h-3" />
+              <span>Já Pago</span>
             </div>
-            <div className="text-sm font-extrabold text-rose-800 dark:text-rose-300 mt-0.5">
-              R$ {totalBills.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            <div className="text-sm font-extrabold text-teal-800 dark:text-teal-300 mt-0.5">
+              R$ {totalPaid.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+            </div>
+          </div>
+
+          <div className="bg-amber-50/70 dark:bg-amber-950/30 p-2.5 rounded-xl border border-amber-200/80 dark:border-amber-900/40">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-amber-700 dark:text-amber-400 uppercase">
+              <Clock className="w-3 h-3" />
+              <span>A Pagar (Pendente)</span>
+            </div>
+            <div className="text-sm font-extrabold text-amber-800 dark:text-amber-300 mt-0.5">
+              R$ {(totalPending + totalOverdue).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>
           </div>
 
           <div className={`p-2.5 rounded-xl border ${
             netBalance >= 0 
-              ? 'bg-teal-50/70 dark:bg-teal-950/30 border-teal-200/80 dark:border-teal-900/40' 
-              : 'bg-amber-50/70 dark:bg-amber-950/30 border-amber-200/80 dark:border-amber-900/40'
+              ? 'bg-emerald-50/70 dark:bg-emerald-950/30 border-emerald-200/80 dark:border-emerald-900/40' 
+              : 'bg-rose-50/70 dark:bg-rose-950/30 border-rose-200/80 dark:border-rose-900/40'
           }`}>
-            <div className="flex items-center gap-1 text-[10px] font-bold text-teal-700 dark:text-teal-400 uppercase">
+            <div className="flex items-center gap-1 text-[10px] font-bold text-slate-700 dark:text-slate-300 uppercase">
               <Wallet className="w-3 h-3" />
-              <span>Saldo Livre</span>
+              <span>{netBalance >= 0 ? 'Sobra Final' : 'Falta Final'}</span>
             </div>
             <div className={`text-sm font-extrabold mt-0.5 ${
-              netBalance >= 0 ? 'text-teal-900 dark:text-teal-200' : 'text-amber-800 dark:text-amber-300'
+              netBalance >= 0 ? 'text-emerald-700 dark:text-emerald-300' : 'text-rose-700 dark:text-rose-300'
             }`}>
               R$ {netBalance.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
             </div>

@@ -151,7 +151,7 @@ export const CoffeeFinanceBanner: React.FC<CoffeeFinanceBannerProps> = ({
             </span>
             <span className="text-slate-400">•</span>
             <span className={projectedSurplus >= 0 ? 'text-emerald-600 dark:text-emerald-400 font-bold' : 'text-rose-600 dark:text-rose-400 font-bold'}>
-              Sobra: {projectedSurplus >= 0 ? '+' : ''}{formatBRL(projectedSurplus)}
+              {projectedSurplus >= 0 ? 'Sobra:' : 'Falta:'} {projectedSurplus >= 0 ? '+' : '−'}{formatBRL(Math.abs(projectedSurplus))}
             </span>
           </div>
         </div>

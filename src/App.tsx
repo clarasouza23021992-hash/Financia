@@ -624,7 +624,12 @@ export default function App() {
 
   // Month-aware Bills: returns actual saved bills for the selected month based on effective payment month
   const currentMonthBills = useMemo(() => {
-    return allValidBills.filter(b => getBillEffectiveMonth(b) === selectedMonth.id);
+    return allValidBills.filter(b => {
+      const bMonth = getBillEffectiveMonth(b);
+      if (bMonth !== selectedMonth.id) return false;
+      if (cloudkit.isBillDeletedInMonth(b, bMonth)) return false;
+      return true;
+    });
   }, [allValidBills, selectedMonth.id]);
 
   // Month-aware Revenues: returns actual saved revenues for the selected month

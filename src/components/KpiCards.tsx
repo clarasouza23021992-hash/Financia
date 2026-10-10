@@ -26,6 +26,9 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
   const paidAmount = paidBills.reduce((acc, b) => acc + b.amount, 0);
   const paidPercentage = totalAmount > 0 ? Math.round((paidAmount / totalAmount) * 100) : 0;
 
+  const pendingBills = validBills.filter(b => b.status !== 'paid');
+  const pendingAmount = totalAmount - paidAmount;
+
   const formatCurrency = (val: number) => {
     return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
@@ -50,8 +53,18 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
           <div className="text-[17px] font-extrabold text-slate-900 dark:text-white tracking-tight">
             {formatCurrency(totalAmount)}
           </div>
-          <div className="text-[11px] font-bold text-slate-500 dark:text-slate-400 mt-0.5">
-            {totalCount} {totalCount === 1 ? 'dívida deste mês' : 'dívidas deste mês'}
+          <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
+            {paidBills.length > 0 && pendingBills.length > 0 ? (
+              <span className="text-amber-600 dark:text-amber-400 font-bold">
+                Falta {formatCurrency(pendingAmount)}
+              </span>
+            ) : paidBills.length > 0 && pendingBills.length === 0 && totalCount > 0 ? (
+              <span className="text-emerald-600 dark:text-emerald-400 font-bold">
+                100% quitadas! ✅
+              </span>
+            ) : (
+              <span>{totalCount} {totalCount === 1 ? 'dívida deste mês' : 'dívidas deste mês'}</span>
+            )}
           </div>
         </div>
       </div>

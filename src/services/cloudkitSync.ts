@@ -2673,13 +2673,18 @@ class CloudKitSyncEngine {
     const deletedInstances = new Set(this.getDeletedMonthInstances());
     if (bill.id && (deletedInstances.has(`id_${targetMonth}_${bill.id}`) || deletedInstances.has(`id_${bill.id}`))) return true;
 
-    const bName = (bill.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const cleanSlug = bName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
-    if (bName && deletedInstances.has(`name_${targetMonth}_${bName}`)) return true;
-    if (cleanSlug && deletedInstances.has(`slug_${targetMonth}_${cleanSlug}`)) return true;
+    const rawName = (bill.name || '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanBaseName = rawName.replace(/\s*\(\d+(?:\/\d+)?\)/, '').replace(/\s*\(\d+\s*de\s*\d+\)/, '').trim();
+    const cleanSlug = rawName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+    const baseSlug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+
+    if (rawName && (deletedInstances.has(`name_${targetMonth}_${rawName}`) || deletedInstances.has(`name_${rawName}`))) return true;
+    if (cleanBaseName && (deletedInstances.has(`name_${targetMonth}_${cleanBaseName}`) || deletedInstances.has(`name_${cleanBaseName}`))) return true;
+    if (cleanSlug && (deletedInstances.has(`slug_${targetMonth}_${cleanSlug}`) || deletedInstances.has(`slug_${cleanSlug}`))) return true;
+    if (baseSlug && (deletedInstances.has(`slug_${targetMonth}_${baseSlug}`) || deletedInstances.has(`slug_${baseSlug}`))) return true;
 
     const bBarcode = (bill.barcode || '').replace(/\D/g, '');
-    if (bBarcode.length >= 10 && deletedInstances.has(`barcode_${targetMonth}_${bBarcode}`)) return true;
+    if (bBarcode.length >= 10 && (deletedInstances.has(`barcode_${targetMonth}_${bBarcode}`) || deletedInstances.has(`barcode_${bBarcode}`))) return true;
 
     if (bill.parentRecurringId && (deletedInstances.has(`parent_${targetMonth}_${bill.parentRecurringId}`) || deletedInstances.has(`parent_${bill.parentRecurringId}`))) return true;
     if (bill.parentInstallmentId && (deletedInstances.has(`inst_${targetMonth}_${bill.parentInstallmentId}`) || deletedInstances.has(`inst_${bill.parentInstallmentId}`))) return true;
@@ -2703,8 +2708,10 @@ class CloudKitSyncEngine {
     const bName = toDelete?.name || fallbackBill?.name || 'Conta';
     const targetMonth = targetMonthOverride || (toDelete ? (getBillEffectiveMonth(toDelete) || (toDelete.dueDate || '').substring(0, 7)) : '2026-10') || '2026-10';
 
-    const cleanBaseName = bName.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
-    const cleanSlug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+    const rawCleanName = bName.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+    const cleanBaseName = rawCleanName.replace(/\s*\(\d+(?:\/\d+)?\)/, '').replace(/\s*\(\d+\s*de\s*\d+\)/, '').trim();
+    const cleanSlug = rawCleanName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+    const baseSlug = cleanBaseName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
     const cleanBarcode = ((toDelete?.barcode || fallbackBill?.barcode) || '').replace(/\D/g, '');
     const canonicalKey = toDelete ? this.getCanonicalBillKey(toDelete) : (fallbackBill ? this.getCanonicalBillKey(fallbackBill) : '');
 
@@ -2713,8 +2720,10 @@ class CloudKitSyncEngine {
     if (toDelete?.id) this.recordDeletedBill(toDelete.id);
     this.recordDeletedMonthInstance(`id_${targetMonth}_${id}`);
     if (toDelete?.id) this.recordDeletedMonthInstance(`id_${targetMonth}_${toDelete.id}`);
+    if (rawCleanName) this.recordDeletedMonthInstance(`name_${targetMonth}_${rawCleanName}`);
     if (cleanBaseName) this.recordDeletedMonthInstance(`name_${targetMonth}_${cleanBaseName}`);
     if (cleanSlug) this.recordDeletedMonthInstance(`slug_${targetMonth}_${cleanSlug}`);
+    if (baseSlug) this.recordDeletedMonthInstance(`slug_${targetMonth}_${baseSlug}`);
     if (cleanBarcode.length >= 10) this.recordDeletedMonthInstance(`barcode_${targetMonth}_${cleanBarcode}`);
     if (toDelete?.parentRecurringId) this.recordDeletedMonthInstance(`parent_${targetMonth}_${toDelete.parentRecurringId}`);
     if (toDelete?.parentInstallmentId) this.recordDeletedMonthInstance(`inst_${targetMonth}_${toDelete.parentInstallmentId}`);
@@ -2727,12 +2736,14 @@ class CloudKitSyncEngine {
     const remainingBills: Bill[] = [];
     for (const b of allBills) {
       const bMonth = getBillEffectiveMonth(b) || (b.dueDate || '').substring(0, 7) || '2026-10';
-      const bBaseName = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bRawName = b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+      const bBaseName = bRawName.replace(/\s*\(\d+(?:\/\d+)?\)/, '').replace(/\s*\(\d+\s*de\s*\d+\)/, '').trim();
       const bBarcode = (b.barcode || '').replace(/\D/g, '');
 
       const isExactMatch = b.id === id || (toDelete && b.id === toDelete.id);
       const isMonthMatch = bMonth === targetMonth && (
         (cleanBaseName && bBaseName === cleanBaseName) ||
+        (rawCleanName && bRawName === rawCleanName) ||
         (cleanBarcode.length >= 10 && bBarcode === cleanBarcode) ||
         (canonicalKey && this.getCanonicalBillKey(b) === canonicalKey) ||
         (toDelete?.parentRecurringId && b.parentRecurringId === toDelete.parentRecurringId) ||

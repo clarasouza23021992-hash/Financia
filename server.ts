@@ -292,6 +292,27 @@ function normalizeBillTitleServer(name: string): string {
     .trim();
 }
 
+function getBillEffectiveMonthServer(bill: any): string {
+  if (!bill) return '2026-10';
+  const dueMonth = (bill.dueDate || '').substring(0, 7) || '2026-10';
+  const isInstallment = bill.recurrence === 'Parcelada' || 
+                        Boolean(bill.installmentNumber && bill.installmentNumber > 0) ||
+                        (bill.name && /\b(?:\d+\/\d+|\d+\s*de\s*\d+|parcela\s*\d+)\b/i.test(bill.name));
+  if (isInstallment) {
+    return dueMonth;
+  }
+  if (bill.paymentMonth && typeof bill.paymentMonth === 'string' && bill.paymentMonth.trim().length === 7) {
+    const payMonth = bill.paymentMonth.trim();
+    if (payMonth === dueMonth) return dueMonth;
+    const isPropagatedRecurring = Boolean(bill.parentRecurringId || (bill.id && String(bill.id).startsWith('rec_')));
+    if (isPropagatedRecurring && !bill.isEdited) {
+      return dueMonth;
+    }
+    return payMonth;
+  }
+  return dueMonth;
+}
+
 function parseInstallmentDetailsServer(name: string, b?: any): { baseName: string; instNum?: number; totalInst?: number } {
   const norm = normalizeBillTitleServer(name);
 
@@ -1377,13 +1398,18 @@ async function startServer() {
     const isDeletedOnServer = (b: any): boolean => {
       if (!b || !b.id) return true;
       if (delSet.has(b.id)) return true;
-      const bMonth = (b.dueDate || '').substring(0, 7) || '2026-10';
+      const bMonth = getBillEffectiveMonthServer(b);
       if (delMonths.has(`id_${bMonth}_${b.id}`) || delMonths.has(`id_${b.id}`)) return true;
 
-      const bBase = normalizeBillTitleServer(b.name || '');
+      const rawName = normalizeBillTitleServer(b.name || '');
+      const bBase = rawName.replace(/\s*\(\d+\/\d+\)/, '').trim();
       const bSlug = bBase.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+      const rawSlug = rawName.replace(/[^a-z0-9]/g, '-').substring(0, 24);
+
+      if (rawName && (delSlugs.has(rawName) || delMonths.has(`name_${bMonth}_${rawName}`))) return true;
       if (bBase && (delSlugs.has(bBase) || delMonths.has(`name_${bMonth}_${bBase}`))) return true;
       if (bSlug && (delSlugs.has(bSlug) || delMonths.has(`slug_${bMonth}_${bSlug}`))) return true;
+      if (rawSlug && (delSlugs.has(rawSlug) || delMonths.has(`slug_${bMonth}_${rawSlug}`))) return true;
 
       const bBarcode = (b.barcode || '').replace(/\D/g, '');
       if (bBarcode.length >= 10 && (delSlugs.has(bBarcode) || delMonths.has(`barcode_${bMonth}_${bBarcode}`))) return true;
@@ -1631,7 +1657,8 @@ async function startServer() {
       const { store, household } = getOrCreateHousehold(cleanId);
       const delId = targetBillId;
       const delName = normalizeBillTitleServer(targetItemName || bill?.name || '');
-      const delMonth = (bill?.dueDate || '').substring(0, 7);
+      const delBaseName = delName.replace(/\s*\(\d+\/\d+\)/, '').trim();
+      const delMonth = getBillEffectiveMonthServer(bill);
       const isSeries = Boolean((message || '').includes('todos os meses'));
 
       if (!household.deletedBillIds) household.deletedBillIds = [];
@@ -1642,9 +1669,11 @@ async function startServer() {
       if (isSeries && delName) {
         if (!household.deletedSeriesSlugs) household.deletedSeriesSlugs = [];
         household.deletedSeriesSlugs.push(delName);
+        if (delBaseName) household.deletedSeriesSlugs.push(delBaseName);
       } else if (delMonth && delName) {
         if (!household.deletedMonthInstances) household.deletedMonthInstances = [];
         household.deletedMonthInstances.push(`name_${delMonth}_${delName}`);
+        if (delBaseName) household.deletedMonthInstances.push(`name_${delMonth}_${delBaseName}`);
         if (delId) household.deletedMonthInstances.push(`id_${delMonth}_${delId}`);
       }
 
@@ -1652,9 +1681,10 @@ async function startServer() {
         if (!b) return false;
         if (delId && b.id === delId) return false;
         const bName = normalizeBillTitleServer(b.name || '');
-        const bMonth = (b.dueDate || '').substring(0, 7);
-        if (isSeries && delName && bName === delName) return false;
-        if (delMonth && delName && bMonth === delMonth && bName === delName) return false;
+        const bBase = bName.replace(/\s*\(\d+\/\d+\)/, '').trim();
+        const bMonth = getBillEffectiveMonthServer(b);
+        if (isSeries && (bName === delName || bBase === delBaseName)) return false;
+        if (delMonth && bMonth === delMonth && (bName === delName || bBase === delBaseName)) return false;
         return true;
       });
       saveHouseholds(store);
@@ -1701,20 +1731,22 @@ async function startServer() {
     }
 
     const cleanTargetName = normalizeBillTitleServer(billName || '');
+    const cleanBaseTarget = cleanTargetName.replace(/\s*\(\d+\/\d+\)/, '').trim();
 
     // Purge from household.bills
     household.bills = (household.bills || []).filter((b: any) => {
       if (!b || !b.id) return false;
       if (allDelIds.includes(b.id)) return false;
 
-      const bName = normalizeBillTitleServer(b.name);
-      const bMonth = (b.dueDate || '').substring(0, 7) || '2026-10';
+      const rawBName = normalizeBillTitleServer(b.name || '');
+      const bBase = rawBName.replace(/\s*\(\d+\/\d+\)/, '').trim();
+      const bMonth = getBillEffectiveMonthServer(b);
 
       if (isSeries) {
-        if (cleanTargetName && bName === cleanTargetName) return false;
+        if (cleanTargetName && (rawBName === cleanTargetName || bBase === cleanBaseTarget)) return false;
         if (seriesSlug && (b.parentRecurringId === seriesSlug || b.parentInstallmentId === seriesSlug)) return false;
       } else if (targetMonth && targetMonth === bMonth) {
-        if (cleanTargetName && bName === cleanTargetName) return false;
+        if (cleanTargetName && (rawBName === cleanTargetName || bBase === cleanBaseTarget)) return false;
         if (canonicalKey) {
           const bBarcode = (b.barcode || '').replace(/\D/g, '');
           if (bBarcode.length >= 10 && canonicalKey.includes(bBarcode)) return false;

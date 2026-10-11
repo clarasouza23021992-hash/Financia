@@ -70,14 +70,16 @@ export const BillCard: React.FC<BillCardProps> = ({
   const formattedDueDate = bill.dueDate ? bill.dueDate.split('-').reverse().join('/') : '';
   const dueDayMonth = bill.dueDate ? bill.dueDate.split('-').reverse().slice(0, 2).join('/') : '';
 
+  const isPaid = bill.status === 'paid';
+
   return (
-    <div className={`bg-white dark:bg-[#131D38] rounded-2xl border ${
+    <div className={`rounded-2xl border transition-all duration-300 w-full max-w-full min-w-0 overflow-hidden relative ${
       bill.status === 'overdue' 
-        ? 'border-rose-200 dark:border-rose-900/60 shadow-xs' 
-        : bill.status === 'paid'
-        ? 'border-emerald-200/80 dark:border-emerald-900/40 opacity-90'
-        : 'border-slate-200/80 dark:border-slate-800 shadow-xs'
-    } p-4 transition-all w-full max-w-full min-w-0 overflow-hidden`}>
+        ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 shadow-xs' 
+        : isPaid
+        ? 'bg-slate-50/80 dark:bg-[#0B132B]/65 border-emerald-300/60 dark:border-emerald-800/40 border-l-4 border-l-emerald-500 opacity-60 dark:opacity-55 hover:opacity-100 shadow-none'
+        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800 shadow-xs'
+    } p-4`}>
       {/* Top Header: Category Tag & Status Tag */}
       <div className="flex items-start justify-between gap-2 mb-2 w-full min-w-0">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
@@ -166,10 +168,10 @@ export const BillCard: React.FC<BillCardProps> = ({
                   onTogglePaid(bill);
                 }}
                 title="Conta marcada como paga. Toque para desfazer e voltar para pendente."
-                className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1 shadow-xs shrink-0 hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer active-press transition-colors"
+                className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1 shadow-xs shrink-0 hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer active-press transition-colors"
               >
                 <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
-                <span>Pago (Desfazer)</span>
+                <span>Paga ✓</span>
               </motion.button>
             )}
           </AnimatePresence>
@@ -177,24 +179,34 @@ export const BillCard: React.FC<BillCardProps> = ({
 
         {/* Amount & Copy Amount Button */}
         <div className="text-right flex-shrink-0">
-          <div className="text-[19px] font-black text-slate-900 dark:text-white tracking-tight leading-none">
+          <div className={`text-[19px] font-black tracking-tight leading-none ${
+            isPaid 
+              ? 'text-emerald-700 dark:text-emerald-400' 
+              : 'text-slate-900 dark:text-white'
+          }`}>
             R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
-          <button
-            onClick={(e) => copyToClipboard(`R$ ${bill.amount.toFixed(2)}`, 'amount', e)}
-            className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 mt-1"
-            title="Copiar valor exato"
-          >
-            {copiedField === 'amount' ? (
-              <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
-                <Check className="w-3 h-3" /> Copiado!
-              </span>
-            ) : (
-              <span className="flex items-center gap-0.5">
-                <Copy className="w-3 h-3" /> Copiar
-              </span>
-            )}
-          </button>
+          {isPaid ? (
+            <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">
+              <Check className="w-3 h-3 stroke-[2.5]" /> Liquidada
+            </span>
+          ) : (
+            <button
+              onClick={(e) => copyToClipboard(`R$ ${bill.amount.toFixed(2)}`, 'amount', e)}
+              className="inline-flex items-center gap-1 text-[11px] text-slate-500 hover:text-slate-800 dark:text-slate-400 dark:hover:text-slate-200 mt-1 cursor-pointer"
+              title="Copiar valor exato"
+            >
+              {copiedField === 'amount' ? (
+                <span className="text-emerald-600 dark:text-emerald-400 font-bold flex items-center gap-0.5">
+                  <Check className="w-3 h-3" /> Copiado!
+                </span>
+              ) : (
+                <span className="flex items-center gap-0.5">
+                  <Copy className="w-3 h-3" /> Copiar
+                </span>
+              )}
+            </button>
+          )}
         </div>
       </div>
 
@@ -235,16 +247,28 @@ export const BillCard: React.FC<BillCardProps> = ({
       )}
 
       {/* Bill Name & Favored */}
-      <h3 className="text-base font-bold text-slate-900 dark:text-white mb-0.5">
-        {bill.name}
-      </h3>
+      <div className="flex items-center gap-2 mb-0.5 min-w-0">
+        <h3 className={`text-base font-bold transition-all truncate ${
+          isPaid 
+            ? 'text-slate-500 dark:text-slate-400 line-through decoration-emerald-500/60 decoration-2' 
+            : 'text-slate-900 dark:text-white'
+        }`}>
+          {bill.name}
+        </h3>
+        {isPaid && (
+          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
+            <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
+            <span>Paga</span>
+          </span>
+        )}
+      </div>
       <div className="text-xs text-slate-500 dark:text-slate-400 mb-2.5">
         Favorecido: <span className="font-medium text-slate-700 dark:text-slate-300">{bill.favored}</span>
       </div>
 
       {/* Tip / Reminder Callout (Light Bulb Box) */}
       {bill.notes && (
-        <div className="bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 rounded-xl p-2.5 text-xs text-amber-900 dark:text-amber-300 flex items-start gap-2 mb-3">
+        <div className={`bg-amber-50/70 dark:bg-amber-950/30 border border-amber-200/80 dark:border-amber-900/40 rounded-xl p-2.5 text-xs text-amber-900 dark:text-amber-300 flex items-start gap-2 mb-3 ${isPaid ? 'opacity-70' : ''}`}>
           <span className="text-sm">💡</span>
           <span className="leading-snug">{bill.notes}</span>
         </div>
@@ -252,7 +276,9 @@ export const BillCard: React.FC<BillCardProps> = ({
 
       {/* CÓDIGO DE BARRAS / BOLETO BOX */}
       {bill.barcode && (
-        <div className="bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 mb-2 flex items-center justify-between gap-2">
+        <div className={`bg-slate-50 dark:bg-slate-900/70 border border-slate-200 dark:border-slate-800 rounded-xl p-2.5 mb-2 flex items-center justify-between gap-2 transition-all ${
+          isPaid ? 'opacity-55 saturate-50 hover:opacity-90' : ''
+        }`}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-slate-600 dark:text-slate-400 tracking-wider">
               <Barcode className="w-3.5 h-3.5" />
@@ -264,7 +290,7 @@ export const BillCard: React.FC<BillCardProps> = ({
           </div>
           <button
             onClick={(e) => copyToClipboard(bill.barcode, 'barcode', e)}
-            className="flex-shrink-0 px-3 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-black text-white text-xs font-semibold rounded-lg active-press flex items-center gap-1 shadow-xs"
+            className="flex-shrink-0 px-3 py-1.5 bg-slate-900 dark:bg-slate-700 hover:bg-black text-white text-xs font-semibold rounded-lg active-press flex items-center gap-1 shadow-xs cursor-pointer"
           >
             {copiedField === 'barcode' ? (
               <>
@@ -283,7 +309,9 @@ export const BillCard: React.FC<BillCardProps> = ({
 
       {/* CHAVE PIX BOX */}
       {bill.pixKey && (
-        <div className="bg-teal-50/50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-900/50 rounded-xl p-2.5 mb-3 flex items-center justify-between gap-2">
+        <div className={`bg-teal-50/50 dark:bg-teal-950/20 border border-teal-200 dark:border-teal-900/50 rounded-xl p-2.5 mb-3 flex items-center justify-between gap-2 transition-all ${
+          isPaid ? 'opacity-55 saturate-50 hover:opacity-90' : ''
+        }`}>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 text-[10px] font-bold text-teal-700 dark:text-teal-400 tracking-wider">
               <QrCode className="w-3.5 h-3.5" />
@@ -295,7 +323,7 @@ export const BillCard: React.FC<BillCardProps> = ({
           </div>
           <button
             onClick={(e) => copyToClipboard(bill.pixKey, 'pix', e)}
-            className="flex-shrink-0 px-3 py-1.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] text-xs font-bold rounded-lg active-press flex items-center gap-1 shadow-xs"
+            className="flex-shrink-0 px-3 py-1.5 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] text-xs font-bold rounded-lg active-press flex items-center gap-1 shadow-xs cursor-pointer"
           >
             {copiedField === 'pix' ? (
               <>

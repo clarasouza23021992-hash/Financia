@@ -82,14 +82,29 @@ export default function App() {
 
   // Wife Connection State
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
+  const [presenceTick, setPresenceTick] = useState(0);
+
+  useEffect(() => {
+    const unsub = cloudkit.onSync((event) => {
+      if (event.type === 'PRESENCE_UPDATED' || event.type === 'DEVICES_UPDATED') {
+        setPresenceTick((t) => t + 1);
+        setDevices(cloudkit.getDevices());
+      }
+    });
+    return () => unsub();
+  }, []);
 
   const isWifeConnected = useMemo(() => {
     return cloudkit.isWifeConnected();
-  }, [devices, activeDeviceId]);
+  }, [devices, activeDeviceId, presenceTick]);
+
+  const isWifeOnline = useMemo(() => {
+    return cloudkit.isWifeOnline();
+  }, [devices, activeDeviceId, presenceTick]);
 
   const wifeDevice = useMemo(() => {
     return cloudkit.getWifeDevice();
-  }, [devices, activeDeviceId]);
+  }, [devices, activeDeviceId, presenceTick]);
 
   // App Navigation, Months & Filters
   const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow' | 'sync'>('bills');
@@ -1899,6 +1914,7 @@ export default function App() {
                       activeUserName={activeUserName}
                       onToggleActiveUser={handleToggleActiveUser}
                       isWifeConnected={isWifeConnected}
+                      isWifeOnline={isWifeOnline}
                       wifeDevice={wifeDevice}
                       onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
                       authSession={authSession}

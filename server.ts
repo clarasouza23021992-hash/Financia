@@ -1703,8 +1703,6 @@ async function startServer() {
       household.profiles = profiles;
     }
 
-    ensureWifeConnectedRecord(household);
-
     if (req.body.changeEvent) {
       const ce = req.body.changeEvent;
       const notif = recordChangeNotification(cleanId, {
@@ -1720,8 +1718,8 @@ async function startServer() {
       broadcastChangeNotification(cleanId, notif);
     }
 
-    const presence = getHouseholdPresence(cleanId, household);
-    household.isWifeConnected = presence.isWifeConnected;
+    const latestPresence = getHouseholdPresence(cleanId, household);
+    household.isWifeConnected = latestPresence.isWifeConnected;
     household.lastUpdated = nowIso;
     store[cleanId] = household;
     saveHouseholds(store);
@@ -1733,7 +1731,7 @@ async function startServer() {
     res.json({
       success: true,
       household,
-      presence,
+      presence: latestPresence,
       notifications: household.notifications || [],
       serverTime: nowIso,
     });

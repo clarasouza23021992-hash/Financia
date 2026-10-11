@@ -285,7 +285,11 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
               return (
                 <div 
                   key={bill.id}
-                  className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800"
+                  className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
+                    isPaid
+                      ? 'bg-slate-100/70 dark:bg-slate-900/50 border-emerald-300/60 dark:border-emerald-800/40 border-l-4 border-l-emerald-500 opacity-60 hover:opacity-100'
+                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
+                  }`}
                 >
                   <div className="min-w-0 pr-2">
                     <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">

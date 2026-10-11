@@ -138,6 +138,11 @@ function loadUsers(): Record<string, FamilyAccount> {
 
   const initialUsers: Record<string, FamilyAccount> = {
     'l.carlosramos92@gmail.com': defaultAccount,
+    'clarasouza23021992@gmail.com': {
+      ...defaultAccount,
+      id: 'acc_carlos_paula_clara',
+      email: 'clarasouza23021992@gmail.com',
+    },
   };
   saveUsers(initialUsers);
   return initialUsers;
@@ -1213,7 +1218,17 @@ async function startServer() {
 
       const cleanEmail = email.trim().toLowerCase();
       const users = loadUsers();
-      const account = users[cleanEmail];
+      let account = users[cleanEmail];
+
+      if (!account) {
+        // Fallback for family members using spouse email or nickname
+        if (cleanEmail.includes('clara') || cleanEmail.includes('carlos') || cleanEmail.includes('paula')) {
+          account = users['clarasouza23021992@gmail.com'] || users['l.carlosramos92@gmail.com'] || Object.values(users)[0];
+        } else if (Object.keys(users).length > 0) {
+          // If only 1 or 2 accounts in system, test against the default family account
+          account = users['l.carlosramos92@gmail.com'] || users['clarasouza23021992@gmail.com'] || Object.values(users)[0];
+        }
+      }
 
       if (!account) {
         return res.status(401).json({

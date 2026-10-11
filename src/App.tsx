@@ -47,6 +47,7 @@ import { BackupModal } from './components/BackupModal';
 import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
 import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
 import { FamilyAuthModal } from './components/FamilyAuthModal';
+import { FamilyLoginGate } from './components/FamilyLoginGate';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
@@ -67,6 +68,18 @@ export default function App() {
   // Shared Family Account (Carlos & Paula same login)
   const [isFamilyAuthModalOpen, setIsFamilyAuthModalOpen] = useState(false);
   const [authSession, setAuthSession] = useState<AuthSessionData | null>(() => authService.getSession());
+  const [isGuestMode, setIsGuestMode] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      try {
+        const p = new URLSearchParams(window.location.search);
+        // If url has invite query params, ALWAYS require login!
+        if (p.has('role') || p.has('esposa') || p.has('paula') || p.has('convite')) {
+          return false;
+        }
+      } catch {}
+    }
+    return false;
+  });
 
   useEffect(() => {
     const unsub = authService.subscribe((sess) => {
@@ -83,12 +96,26 @@ export default function App() {
   // Wife Connection State
   const [isWifeConnectModalOpen, setIsWifeConnectModalOpen] = useState(false);
   const [presenceTick, setPresenceTick] = useState(0);
+  const prevWifeOnlineRef = useRef<boolean>(false);
 
   useEffect(() => {
     const unsub = cloudkit.onSync((event) => {
       if (event.type === 'PRESENCE_UPDATED' || event.type === 'DEVICES_UPDATED') {
         setPresenceTick((t) => t + 1);
         setDevices(cloudkit.getDevices());
+        const isNowOnline = cloudkit.isWifeOnline();
+        if (isNowOnline && !prevWifeOnlineRef.current) {
+          const isMeCarlos = !cloudkit.getCurrentUserName().toLowerCase().includes('paula');
+          if (isMeCarlos) {
+            showActionToast({
+              id: `wife-online-${Date.now()}`,
+              type: 'save',
+              title: 'Esposa Conectada Agora! 🟢',
+              message: 'O iPhone da Paula acabou de se conectar à conta da família em tempo real!',
+            });
+          }
+        }
+        prevWifeOnlineRef.current = isNowOnline;
       }
     });
     return () => unsub();
@@ -1273,6 +1300,28 @@ export default function App() {
       `✨ Boleto/Pix processado: Favorecido "${billToEdit.favored || billToEdit.name}" e Vencimento (${dueDateDisplay}) preenchidos automaticamente!`
     );
   };
+
+  if (!authSession?.token && !isGuestMode) {
+    return (
+      <FamilyLoginGate
+        onLoginSuccess={(session, owner) => {
+          setAuthSession(session);
+          setActiveUserName(owner);
+          cloudkit.setActiveUserName(owner);
+          setBills(cloudkit.getBills());
+          setRevenues(cloudkit.getRevenues());
+          setDevices(cloudkit.getDevices());
+          showActionToast({
+            id: `auth-success-${Date.now()}`,
+            type: 'save',
+            title: 'Família Conectada! 🏠',
+            message: `Celular de ${owner} conectado com sucesso na conta da casa!`,
+          });
+        }}
+        onContinueAsGuest={() => setIsGuestMode(true)}
+      />
+    );
+  }
 
   return (
     <div className={`h-full min-h-0 flex flex-col font-sans transition-colors duration-300 w-full overflow-hidden ${

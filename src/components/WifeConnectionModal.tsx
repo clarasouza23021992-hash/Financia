@@ -53,7 +53,7 @@ export const WifeConnectionModal: React.FC<WifeConnectionModalProps> = ({
   if (!isOpen) return null;
 
   const handleShareWhatsApp = () => {
-    const text = `Oi amor! ❤️ Aqui está o link para conectar o seu celular às finanças e contas da nossa casa:\n\n${wifeShareUrl}\n\nÉ só abrir no seu celular (pode adicionar na tela de início). Assim que você abrir, nossos celulares ficam sincronizados na hora!`;
+    const text = `Oi amor! ❤️ Aqui está o link para conectar o seu celular às finanças e contas da nossa casa:\n\n${wifeShareUrl}\n\nÉ só abrir no seu celular e confirmar seu acesso como Paula (senha da casa: 1234). Assim que você entrar, o seu iPhone conecta ao meu em tempo real!`;
     const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
     try {
       const a = document.createElement('a');

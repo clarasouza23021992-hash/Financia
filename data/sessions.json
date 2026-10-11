@@ -18,5 +18,25 @@
     "titularName": "Carlos",
     "spouseName": "Paula",
     "createdAt": "2026-10-10T16:24:23.325Z"
+  },
+  "tok_ba9f2436500a1499a2adb5baa636142a43f9ae2025e98293": {
+    "token": "tok_ba9f2436500a1499a2adb5baa636142a43f9ae2025e98293",
+    "accountId": "acc_carlos_paula_default",
+    "email": "l.carlosramos92@gmail.com",
+    "householdId": "casa-familia",
+    "householdName": "Finanças da Minha Casa",
+    "titularName": "Carlos",
+    "spouseName": "Paula",
+    "createdAt": "2026-10-11T11:57:49.213Z"
+  },
+  "tok_0de09123f9af30c194275a685c513cdc5294347b447abae3": {
+    "token": "tok_0de09123f9af30c194275a685c513cdc5294347b447abae3",
+    "accountId": "acc_carlos_paula_clara",
+    "email": "clarasouza23021992@gmail.com",
+    "householdId": "casa-familia",
+    "householdName": "Finanças da Minha Casa",
+    "titularName": "Carlos",
+    "spouseName": "Paula",
+    "createdAt": "2026-10-11T11:58:04.628Z"
   }
 }

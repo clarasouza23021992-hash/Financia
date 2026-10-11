@@ -77,9 +77,19 @@ export const BillCard: React.FC<BillCardProps> = ({
       bill.status === 'overdue' 
         ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 shadow-xs' 
         : isPaid
-        ? 'bg-slate-50/80 dark:bg-[#0B132B]/65 border-emerald-300/60 dark:border-emerald-800/40 border-l-4 border-l-emerald-500 opacity-60 dark:opacity-55 hover:opacity-100 shadow-none'
+        ? 'bg-slate-50/75 dark:bg-[#091024]/60 border-emerald-300/50 dark:border-emerald-800/40 border-l-[6px] border-l-emerald-500 opacity-60 dark:opacity-50 hover:opacity-90 shadow-none'
         : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800 shadow-xs'
     } p-4`}>
+      {/* Background Watermark Stamp for Paid Bills */}
+      {isPaid && (
+        <div 
+          aria-hidden="true"
+          className="absolute -right-3 -bottom-2 pointer-events-none select-none opacity-[0.08] dark:opacity-[0.14] text-emerald-600 dark:text-emerald-400 font-black text-6xl tracking-tight rotate-[-12deg]"
+        >
+          PAGO ✓
+        </div>
+      )}
+
       {/* Top Header: Category Tag & Status Tag */}
       <div className="flex items-start justify-between gap-2 mb-2 w-full min-w-0">
         <div className="flex flex-wrap items-center gap-1.5 min-w-0 flex-1">
@@ -496,10 +506,11 @@ export const BillCard: React.FC<BillCardProps> = ({
         {bill.status === 'paid' ? (
           <button
             onClick={() => onTogglePaid(bill)}
-            className="flex-1 py-2 px-3 bg-emerald-50 dark:bg-emerald-950/50 hover:bg-emerald-100 border border-emerald-300 dark:border-emerald-800 text-emerald-800 dark:text-emerald-300 text-xs font-bold rounded-xl active-press flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 px-3 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-200/90 dark:hover:bg-emerald-900/80 border border-emerald-400/80 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 text-xs font-black rounded-xl active-press flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
+            title="Dívida marcada como PAGA. Toque se desejar desfazer e voltar para pendente."
           >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-            <span>Conta Paga (Desfazer)</span>
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+            <span>✓ Conta Paga (Toque p/ Desfazer)</span>
           </button>
         ) : (
           <button

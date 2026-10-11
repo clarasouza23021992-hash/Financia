@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
 import { 
   Copy, Check, Share2, Edit2, Trash2, CheckCircle2, 
-  QrCode, Barcode, FileText, Paperclip, Undo2, Eye, Calendar
+  QrCode, Barcode, FileText, Paperclip, Undo2, Eye, Calendar, Sparkles
 } from 'lucide-react';
+import confetti from 'canvas-confetti';
 import { motion, AnimatePresence } from 'motion/react';
 import { Bill, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { getCategoryInfo } from '../utils/categories';
@@ -33,6 +34,61 @@ export const BillCard: React.FC<BillCardProps> = ({
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
+  const [isCelebrating, setIsCelebrating] = useState(false);
+
+  const handleMarkAsPaid = (e: React.MouseEvent<HTMLButtonElement>) => {
+    e.stopPropagation();
+
+    // Trigger subtle, gratifying celebratory confetti
+    try {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const originX = Math.min(Math.max((rect.left + rect.width / 2) / window.innerWidth, 0.1), 0.9);
+      const originY = Math.min(Math.max((rect.top + rect.height / 2) / window.innerHeight, 0.1), 0.9);
+
+      // Primary crisp confetti burst
+      confetti({
+        particleCount: 42,
+        spread: 60,
+        origin: { x: originX, y: originY },
+        colors: ['#00C49F', '#10B981', '#34D399', '#FBBF24', '#38BDF8', '#A7F3D0'],
+        startVelocity: 22,
+        ticks: 160,
+        gravity: 0.95,
+        scalar: 0.85,
+        disableForReducedMotion: true,
+      });
+
+      // Subtle second pop with sparkles
+      setTimeout(() => {
+        confetti({
+          particleCount: 20,
+          spread: 75,
+          origin: { x: originX, y: originY },
+          colors: ['#F59E0B', '#10B981', '#00C49F', '#FDE047'],
+          shapes: ['circle'],
+          startVelocity: 16,
+          ticks: 120,
+          gravity: 1,
+          scalar: 0.65,
+          disableForReducedMotion: true,
+        });
+      }, 120);
+
+      // Subtle haptic feedback on supported mobile devices
+      if ('vibrate' in navigator) {
+        try {
+          navigator.vibrate([35, 25, 45]);
+        } catch (_) {}
+      }
+    } catch (err) {
+      console.warn('Confetti animation error:', err);
+    }
+
+    setIsCelebrating(true);
+    setTimeout(() => setIsCelebrating(false), 1400);
+
+    onTogglePaid(bill);
+  };
 
   const copyToClipboard = (text: string, fieldName: string, e: React.MouseEvent) => {
     e.stopPropagation();
@@ -74,12 +130,32 @@ export const BillCard: React.FC<BillCardProps> = ({
 
   return (
     <div className={`rounded-2xl border transition-all duration-300 w-full max-w-full min-w-0 overflow-hidden relative ${
+      isCelebrating 
+        ? 'ring-2 ring-emerald-400 dark:ring-emerald-400 scale-[1.01] shadow-lg shadow-emerald-500/20' 
+        : ''
+    } ${
       bill.status === 'overdue' 
         ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 shadow-xs' 
         : isPaid
         ? 'bg-slate-50/75 dark:bg-[#091024]/60 border-emerald-300/50 dark:border-emerald-800/40 border-l-[6px] border-l-emerald-500 opacity-60 dark:opacity-50 hover:opacity-90 shadow-none'
         : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800 shadow-xs'
     } p-4`}>
+      {/* Celebration micro notification on mark as paid */}
+      <AnimatePresence>
+        {isCelebrating && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.8, y: -6 }}
+            animate={{ opacity: 1, scale: 1, y: 0 }}
+            exit={{ opacity: 0, scale: 0.8, y: -6 }}
+            transition={{ duration: 0.2 }}
+            className="absolute top-2.5 right-2.5 z-20 bg-emerald-600 text-white text-[11px] font-black px-2.5 py-1 rounded-full shadow-md flex items-center gap-1.5 pointer-events-none"
+          >
+            <Sparkles className="w-3.5 h-3.5 text-amber-300 animate-pulse" />
+            <span>Quitada com Sucesso! 🎉</span>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
       {/* Background Watermark Stamp for Paid Bills */}
       {isPaid && (
         <div 
@@ -514,11 +590,22 @@ export const BillCard: React.FC<BillCardProps> = ({
           </button>
         ) : (
           <button
-            onClick={() => onTogglePaid(bill)}
-            className="flex-1 py-2.5 px-3 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 shadow-sm shadow-teal-500/20"
+            onClick={handleMarkAsPaid}
+            className={`flex-1 py-2.5 px-3 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 shadow-sm shadow-teal-500/20 transition-all ${
+              isCelebrating ? 'scale-[0.98] ring-2 ring-emerald-300' : ''
+            }`}
           >
-            <Check className="w-4 h-4 stroke-[3]" />
-            <span>Marcar como Pago</span>
+            {isCelebrating ? (
+              <>
+                <Sparkles className="w-4 h-4 text-[#0A1128] animate-spin" />
+                <span>Quitando... 🎉</span>
+              </>
+            ) : (
+              <>
+                <Check className="w-4 h-4 stroke-[3]" />
+                <span>Marcar como Pago</span>
+              </>
+            )}
           </button>
         )}
 

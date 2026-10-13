@@ -1290,9 +1290,14 @@ export default function App() {
   };
 
   return (
-    <div className={`h-full min-h-0 flex flex-col font-sans transition-colors duration-300 w-full overflow-hidden ${
-      isDarkMode ? 'dark bg-[#080D1E] text-white' : 'bg-[#F4F6F9] text-slate-900'
-    }`}>
+    <div 
+      style={{
+        backgroundColor: isDarkMode ? currentAccentTheme.appBgDark : currentAccentTheme.appBgLight
+      }}
+      className={`h-full min-h-0 flex flex-col font-sans transition-colors duration-300 w-full overflow-hidden ${
+        isDarkMode ? 'dark text-white' : 'text-slate-900'
+      }`}
+    >
       {/* Real-time Alteration Toast Notification Banner */}
       <LiveAlterationToast
         notification={liveAlterationNotif}
@@ -1463,9 +1468,14 @@ export default function App() {
                     <button
                       key={f.id}
                       onClick={() => setStatusFilter(f.id)}
+                      style={isSelected ? { 
+                        backgroundColor: currentAccentTheme.primary, 
+                        color: currentAccentTheme.textOnPrimary,
+                        boxShadow: `0 2px 10px -2px ${currentAccentTheme.glow}`
+                      } : undefined}
                       className={`px-3 py-1.5 rounded-full text-xs font-bold whitespace-nowrap transition-all active-press flex items-center gap-1.5 ${
                         isSelected
-                          ? 'bg-[#0A1128] dark:bg-teal-500 text-white dark:text-[#0A1128] shadow-xs'
+                          ? 'shadow-xs font-black'
                           : f.urgent
                           ? 'bg-rose-50 dark:bg-rose-950/40 text-rose-700 dark:text-rose-300 border border-rose-300 dark:border-rose-800 animate-pulse'
                           : f.warning
@@ -1474,13 +1484,16 @@ export default function App() {
                       }`}
                     >
                       <span>{f.label}</span>
-                      <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
-                        isSelected
-                          ? 'bg-white/20 dark:bg-black/20 text-white dark:text-[#0A1128]'
-                          : f.urgent
-                          ? 'bg-rose-500 text-white'
-                          : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
-                      }`}>
+                      <span 
+                        style={isSelected ? { backgroundColor: 'rgba(0,0,0,0.2)', color: 'inherit' } : undefined}
+                        className={`px-1.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                          isSelected
+                            ? ''
+                            : f.urgent
+                            ? 'bg-rose-500 text-white'
+                            : 'bg-slate-200 dark:bg-slate-700 text-slate-700 dark:text-slate-300'
+                        }`}
+                      >
                         {f.count}
                       </span>
                     </button>

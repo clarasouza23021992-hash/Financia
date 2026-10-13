@@ -249,12 +249,9 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter, onSha
 
             {/* Filled Progress Bar with smooth transition and shimmer sheen */}
             <div 
-              className={`h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden ${
-                motivation.isComplete
-                  ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-[#00C49F] shadow-sm shadow-emerald-500/40'
-                  : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-[#00C49F]'
-              }`}
+              className="h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden shadow-xs"
               style={{ 
+                background: 'var(--progress-gradient)',
                 width: `${totalCount === 0 ? 0 : Math.min(100, Math.max(paidCountPercentage, paidCount > 0 ? 5 : 0))}%` 
               }}
             >

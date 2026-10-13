@@ -127,7 +127,10 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
         {/* Header navigation bar */}
         <div className="flex items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2 min-w-0">
-            <div className="w-7 h-7 rounded-xl bg-teal-500/15 text-teal-600 dark:text-teal-400 flex items-center justify-center font-bold flex-shrink-0">
+            <div 
+              className="w-7 h-7 rounded-xl flex items-center justify-center font-bold flex-shrink-0 transition-colors"
+              style={{ backgroundColor: 'var(--color-brand-subtle)', color: 'var(--color-brand-primary)' }}
+            >
               <Calendar className="w-4 h-4" />
             </div>
             <div className="min-w-0">
@@ -136,15 +139,19 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
                   Navegação de Meses
                 </span>
                 {isViewingCurrentMonth ? (
-                  <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-md bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800 flex items-center gap-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  <span 
+                    className="text-[9px] font-bold px-1.5 py-0.5 rounded-md flex items-center gap-1"
+                    style={{ backgroundColor: 'var(--color-brand-subtle)', color: 'var(--color-brand-primary)', borderColor: 'var(--color-brand-border)' }}
+                  >
+                    <span className="w-1.5 h-1.5 rounded-full animate-pulse" style={{ backgroundColor: 'var(--color-brand-primary)' }} />
                     <span>Mês Atual</span>
                   </span>
                 ) : (
                   <button
                     onClick={() => onSelectMonth(currentCalendarMonth)}
-                    className="text-[9.5px] font-bold px-2 py-0.5 rounded-md bg-teal-50 dark:bg-teal-950/60 text-teal-700 dark:text-teal-300 border border-teal-200 dark:border-teal-800 hover:bg-teal-100 transition-colors flex items-center gap-1 active-press"
-                    title="Ir para o mês atual (Novembro)"
+                    className="text-[9.5px] font-bold px-2 py-0.5 rounded-md transition-colors flex items-center gap-1 active-press"
+                    style={{ backgroundColor: 'var(--color-brand-subtle)', color: 'var(--color-brand-primary)', borderColor: 'var(--color-brand-border)' }}
+                    title="Ir para o mês atual"
                   >
                     <Clock className="w-2.5 h-2.5" />
                     <span>Ir p/ Mês Atual</span>
@@ -178,7 +185,8 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
             </button>
             <button
               onClick={handleCreateNextMonth}
-              className="ml-0.5 sm:ml-1 px-2 py-1 bg-teal-50 dark:bg-teal-950/60 hover:bg-teal-100 text-teal-700 dark:text-teal-300 text-[10.5px] font-extrabold rounded-lg border border-teal-200 dark:border-teal-800 flex items-center gap-1 active-press"
+              className="ml-0.5 sm:ml-1 px-2 py-1 text-[10.5px] font-extrabold rounded-lg border flex items-center gap-1 active-press transition-colors"
+              style={{ backgroundColor: 'var(--color-brand-subtle)', borderColor: 'var(--color-brand-border)', color: 'var(--color-brand-primary)' }}
               title="Adicionar mais um mês subsequente ao calendário"
             >
               <Plus className="w-3 h-3" />
@@ -199,25 +207,34 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
               <button
                 key={month.id}
                 onClick={() => onSelectMonth(month)}
+                style={isSelected ? {
+                  backgroundColor: 'var(--color-brand-primary)',
+                  color: 'var(--color-brand-text)',
+                  boxShadow: '0 2px 10px -2px var(--color-brand-glow)'
+                } : undefined}
                 className={`flex-shrink-0 px-3 py-1.5 rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 active-press relative ${
                   isSelected
-                    ? 'bg-[#0A1128] dark:bg-teal-500 text-white dark:text-[#0A1128] shadow-sm ring-2 ring-teal-500/30'
+                    ? 'shadow-xs font-black'
                     : isMonthCurrent
-                    ? 'bg-emerald-50 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-800/80 hover:bg-emerald-100'
+                    ? 'bg-slate-100 dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-300/80 dark:border-slate-700 hover:bg-slate-200'
                     : 'bg-slate-100 dark:bg-slate-800/80 text-slate-600 dark:text-slate-300 hover:bg-slate-200/70 dark:hover:bg-slate-700'
                 }`}
               >
                 {isMonthCurrent && (
-                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 flex-shrink-0" title="Mês Atual do Calendário" />
+                  <span 
+                    className="w-1.5 h-1.5 rounded-full flex-shrink-0" 
+                    style={{ backgroundColor: isSelected ? 'currentColor' : 'var(--color-brand-primary)' }}
+                    title="Mês Atual do Calendário" 
+                  />
                 )}
                 <span>{month.shortLabel}</span>
                 <span
                   className={`text-[9px] px-1.5 py-0.2 rounded-full font-extrabold ${
                     isSelected
-                      ? 'bg-white/20 text-white dark:bg-[#0A1128]/30 dark:text-[#0A1128]'
+                      ? 'bg-black/20 text-current'
                       : count > 0
-                      ? 'bg-teal-500/20 text-teal-700 dark:text-teal-300'
-                      : 'bg-slate-200 dark:bg-slate-700 text-slate-400'
+                      ? 'bg-slate-200/80 dark:bg-slate-700 text-slate-600 dark:text-slate-300'
+                      : 'bg-slate-200/50 dark:bg-slate-700/50 text-slate-400'
                   }`}
                 >
                   {count} {count === 1 ? 'conta' : 'contas'}

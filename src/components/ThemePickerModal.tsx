@@ -43,13 +43,13 @@ export const ThemePickerModal: React.FC<ThemePickerModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-base text-slate-900 dark:text-white tracking-tight flex items-center gap-2">
-                <span>Personalizar Tema</span>
+                <span>Personalizar Paleta Global</span>
                 <span className="text-[10px] px-2 py-0.5 rounded-full font-bold uppercase tracking-wider bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300">
-                  Visual
+                  Tudo em Conjunto
                 </span>
               </h3>
               <p className="text-xs text-slate-500 dark:text-slate-400">
-                Escolha a cor de destaque principal do app
+                Mude a cor de tudo em conjunto (cabeçalho, cartões, botões e barras)
               </p>
             </div>
           </div>
@@ -165,30 +165,64 @@ export const ThemePickerModal: React.FC<ThemePickerModalProps> = ({
             </div>
           </div>
 
-          {/* Interactive Preview of the Chosen Theme */}
-          <div className="p-3.5 rounded-2xl bg-slate-900 text-white space-y-2 border border-slate-800 shadow-inner">
+          {/* Interactive Preview of the Chosen Theme Changing Everything Together */}
+          <div className="p-3.5 rounded-2xl bg-slate-900 text-white space-y-3 border border-slate-800 shadow-inner">
             <div className="flex items-center justify-between text-[11px] text-slate-400">
               <span className="font-bold flex items-center gap-1.5">
                 <Sparkles className="w-3.5 h-3.5" style={{ color: currentTheme.primary }} />
-                <span>Prévia em Tempo Real</span>
+                <span>Prévia: Tudo Muda em Conjunto</span>
               </span>
-              <span className="text-[10px] font-mono text-slate-500">{currentTheme.primary}</span>
+              <span className="text-[10px] font-mono text-slate-400 font-bold">{currentTheme.name}</span>
             </div>
 
-            <div className="flex items-center justify-between gap-2 pt-1">
+            {/* Mini Header Simulation */}
+            <div 
+              className="p-2 rounded-xl flex items-center justify-between border transition-all"
+              style={{ background: currentTheme.headerGradient, borderColor: currentTheme.headerBorder }}
+            >
+              <div className="flex items-center gap-2">
+                <div 
+                  className="w-5 h-5 rounded-md flex items-center justify-center font-black text-[10px]"
+                  style={{ backgroundColor: currentTheme.primary, color: currentTheme.textOnPrimary }}
+                >
+                  🏠
+                </div>
+                <span className="text-[10px] font-bold text-white">Finanças da Casa</span>
+              </div>
+              <span className="text-[9px] font-extrabold px-1.5 py-0.5 rounded-md" style={{ backgroundColor: currentTheme.subtleBg, color: currentTheme.primary }}>
+                Cabeçalho
+              </span>
+            </div>
+
+            {/* Mini Progress Bar Simulation */}
+            <div className="space-y-1">
+              <div className="flex justify-between text-[10px] text-slate-300 font-semibold">
+                <span>Progresso de Quitação</span>
+                <span style={{ color: currentTheme.primary }} className="font-bold">75% Pago</span>
+              </div>
+              <div className="w-full bg-slate-800 h-2.5 rounded-full overflow-hidden p-0.5">
+                <div 
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ background: currentTheme.progressGradient, width: '75%' }}
+                />
+              </div>
+            </div>
+
+            {/* Action Buttons & Status Badges */}
+            <div className="flex items-center justify-between gap-2 pt-0.5">
               <div 
-                className="px-3 py-1.5 rounded-xl font-extrabold text-xs flex items-center gap-1.5 shadow-md"
+                className="px-3 py-1.5 rounded-xl font-black text-xs flex items-center gap-1.5 shadow-md flex-1 justify-center transition-all"
                 style={{ backgroundColor: currentTheme.primary, color: currentTheme.textOnPrimary }}
               >
-                <span>Botão Principal</span>
+                <span>Marcar como Pago</span>
               </div>
 
               <div 
-                className="px-2.5 py-1 rounded-lg text-[11px] font-bold border flex items-center gap-1"
+                className="px-2.5 py-1.5 rounded-xl text-[11px] font-bold border flex items-center gap-1 shrink-0 transition-all"
                 style={{ backgroundColor: currentTheme.subtleBg, borderColor: currentTheme.borderSubtle, color: currentTheme.primary }}
               >
                 <Check className="w-3 h-3" />
-                <span>Status & Badge</span>
+                <span>Aba Ativa</span>
               </div>
             </div>
           </div>

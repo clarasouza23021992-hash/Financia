@@ -7,10 +7,19 @@
     --color-brand-primary: #00C49F;
     --color-brand-hover: #00B290;
     --color-brand-active: #009E7E;
-    --color-brand-glow: rgba(0, 196, 159, 0.35);
+    --color-brand-glow: rgba(0, 196, 159, 0.40);
     --color-brand-text: #0A1128;
-    --color-brand-subtle: rgba(0, 196, 159, 0.12);
-    --color-brand-border: rgba(0, 196, 159, 0.35);
+    --color-brand-subtle: rgba(0, 196, 159, 0.14);
+    --color-brand-border: rgba(0, 196, 159, 0.38);
+    --color-accent-rgb: 0, 196, 159;
+    --header-gradient: linear-gradient(135deg, #071526 0%, #0A2033 50%, #061322 100%);
+    --header-border: rgba(0, 196, 159, 0.25);
+    --app-bg-dark: #060F1A;
+    --app-bg-light: #F3F8F8;
+    --card-bg-dark: #0B1B2C;
+    --card-border-dark: rgba(0, 196, 159, 0.22);
+    --progress-gradient: linear-gradient(90deg, #00C49F 0%, #10B981 50%, #34D399 100%);
+    --titanium-gradient: radial-gradient(120% 120% at 90% 10%, rgba(0, 196, 159, 0.12) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 80%), linear-gradient(135deg, #0F2332 0%, #0A1924 45%, #050E16 100%);
   }
 
   html, body, #root {
@@ -87,7 +96,7 @@
   transition: transform 0.1s ease-out;
 }
 
-/* Dynamic Brand Accent Utilities */
+/* Dynamic Brand Accent Utilities ("Mudar a cor de tudo em conjunto") */
 .bg-brand {
   background-color: var(--color-brand-primary, #00C49F);
 }
@@ -108,10 +117,18 @@
   box-shadow: 0 0 20px -3px var(--color-brand-glow, rgba(0, 196, 159, 0.35));
 }
 
-/* Physical Black / Platinum Titanium Card Finish */
+.theme-header {
+  background: var(--header-gradient);
+  border-color: var(--header-border);
+}
+
+.theme-progress-bar {
+  background: var(--progress-gradient);
+}
+
+/* Physical Black / Platinum Titanium Card Finish with Adaptive Theme Tone */
 .titanium-card {
-  background: radial-gradient(120% 120% at 90% 10%, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 40%, transparent 80%),
-              linear-gradient(135deg, #151B2E 0%, #0F1626 40%, #0A0E1A 100%);
+  background: var(--titanium-gradient);
   position: relative;
   box-shadow: 0 14px 34px -10px rgba(0, 0, 0, 0.65), 0 2px 8px rgba(0, 0, 0, 0.4), inset 0 1px 1px rgba(255, 255, 255, 0.15), inset 0 -1px 1px rgba(0, 0, 0, 0.6);
 }
@@ -122,10 +139,9 @@
   inset: 0;
   border-radius: inherit;
   padding: 1px;
-  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(212, 175, 55, 0.25) 30%, rgba(255, 255, 255, 0.05) 70%, rgba(212, 175, 55, 0.35) 100%);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.28) 0%, rgba(var(--color-accent-rgb), 0.45) 30%, rgba(255, 255, 255, 0.05) 70%, rgba(var(--color-accent-rgb), 0.5) 100%);
   -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
   -webkit-mask-composite: xor;
   mask-composite: exclude;
   pointer-events: none;
 }
-

@@ -138,7 +138,7 @@ export const BillCard: React.FC<BillCardProps> = ({
         ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-300/60 dark:border-emerald-800/40 border-l-[5px] border-l-emerald-500 premium-card'
         : bill.status === 'overdue'
         ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 border-l-[5px] border-l-rose-500 premium-card'
-        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-teal-500/80 premium-card hover:border-slate-300 dark:hover:border-slate-700'
+        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-[var(--color-brand-primary)] premium-card hover:border-slate-300 dark:hover:border-slate-700'
     } p-4 transition-all duration-200`}>
       {/* Celebration micro notification on mark as paid */}
       <AnimatePresence>
@@ -592,13 +592,18 @@ export const BillCard: React.FC<BillCardProps> = ({
         ) : (
           <button
             onClick={handleMarkAsPaid}
-            className={`flex-1 py-2.5 px-3 bg-[#00C49F] hover:bg-[#00b290] text-[#0A1128] text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 shadow-sm shadow-teal-500/20 transition-all ${
-              isCelebrating ? 'scale-[0.98] ring-2 ring-emerald-300' : ''
+            style={{
+              backgroundColor: 'var(--color-brand-primary)',
+              color: 'var(--color-brand-text)',
+              boxShadow: '0 2px 10px -2px var(--color-brand-glow)'
+            }}
+            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 transition-all ${
+              isCelebrating ? 'scale-[0.98] ring-2 ring-white/60' : ''
             }`}
           >
             {isCelebrating ? (
               <>
-                <Sparkles className="w-4 h-4 text-[#0A1128] animate-spin" />
+                <Sparkles className="w-4 h-4 animate-spin" />
                 <span>Quitando... 🎉</span>
               </>
             ) : (

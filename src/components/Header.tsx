@@ -68,15 +68,18 @@ export const Header: React.FC<HeaderProps> = ({
   }, []);
 
   return (
-    <header className="bg-[#0A1128] text-white header-safe-top pb-1.5 px-3 sm:px-4 sticky top-0 z-30 shadow-sm border-b border-slate-800/80 w-full flex-shrink-0">
+    <header className="theme-header text-white header-safe-top pb-1.5 px-3 sm:px-4 sticky top-0 z-30 shadow-sm border-b w-full flex-shrink-0 transition-all duration-300">
       <div className="flex items-center justify-between max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full gap-2">
         {/* Brand & Month */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
           <div 
             className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shadow-xs flex-shrink-0 transition-colors"
-            style={{ backgroundColor: activeThemeColor || 'var(--color-brand-primary, #00C49F)' }}
+            style={{ 
+              backgroundColor: activeThemeColor || 'var(--color-brand-primary, #00C49F)',
+              color: 'var(--color-brand-text, #0A1128)'
+            }}
           >
-            <Home className="w-4 h-4 sm:w-5 sm:h-5 text-[#0A1128]" />
+            <Home className="w-4 h-4 sm:w-5 sm:h-5" />
           </div>
           <div className="min-w-0">
             <div className="flex items-center gap-1.5 sm:gap-2">
@@ -87,18 +90,18 @@ export const Header: React.FC<HeaderProps> = ({
                 type="button"
                 onClick={onOpenCloudSync}
                 title={isOffline ? 'Modo Offline' : 'Sincronizado com Nuvem'}
-                className="flex items-center gap-1 text-[11px] text-teal-300/80 hover:text-teal-200 flex-shrink-0"
+                className="flex items-center gap-1 text-[11px] text-white/80 hover:text-white flex-shrink-0"
               >
                 <span className={`w-1.5 h-1.5 rounded-full ${isOffline ? 'bg-amber-400' : 'bg-emerald-400 animate-pulse'}`} />
-                <Cloud className="w-3.5 h-3.5 text-teal-400" />
+                <Cloud className="w-3.5 h-3.5" style={{ color: activeThemeColor || 'var(--color-brand-primary)' }} />
               </button>
             </div>
             <div className="flex items-center gap-1.5 text-[10px] sm:text-[11px] text-slate-300 font-medium truncate mt-0.5">
-              <Calendar className="w-3 h-3 text-[#00C49F] flex-shrink-0" />
+              <Calendar className="w-3 h-3 flex-shrink-0" style={{ color: activeThemeColor || 'var(--color-brand-primary)' }} />
               <span className="font-bold text-white truncate">{selectedMonth}</span>
               <span className="text-slate-500">•</span>
-              <span className="text-teal-300 font-semibold flex items-center gap-1 flex-shrink-0" title="Horário do aparelho sincronizado">
-                <Clock className="w-2.5 h-2.5 text-teal-400" />
+              <span className="font-semibold flex items-center gap-1 flex-shrink-0" style={{ color: activeThemeColor || 'var(--color-brand-primary)' }} title="Horário do aparelho sincronizado">
+                <Clock className="w-2.5 h-2.5" />
                 <span>{currentClock}</span>
               </span>
               {activeUserName && (

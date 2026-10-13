@@ -5,7 +5,7 @@ import {
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Images, X, RotateCcw, MessageCircle, Palette, PiggyBank
+  Images, X, RotateCcw, MessageCircle, Palette
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -53,7 +53,6 @@ import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 import { ThemePickerModal } from './components/ThemePickerModal';
 import { getStoredTheme, applyTheme, AccentTheme } from './utils/theme';
-import { VaultsGoalsView } from './components/VaultsGoalsView';
 
 export default function App() {
   // Core State backed by CloudKit Sync Engine
@@ -125,7 +124,7 @@ export default function App() {
   }, [devices, activeDeviceId, presenceTick]);
 
   // App Navigation, Months & Filters
-  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow' | 'goals' | 'sync'>('bills');
+  const [currentTab, setCurrentTab] = useState<'bills' | 'cashflow' | 'sync'>('bills');
   const [selectedMonth, setSelectedMonth] = useState<MonthOption>(() => {
     if (typeof window !== 'undefined') {
       const saved = localStorage.getItem('financas_selected_month_id');
@@ -1312,7 +1311,6 @@ export default function App() {
       {/* Native App Header */}
       <Header
         activeDevice={activeDevice}
-        selectedMonth={selectedMonth.label}
         onOpenNewBill={() => {
           setEditingBill(null);
           setIsBillModalOpen(true);
@@ -1879,27 +1877,6 @@ export default function App() {
                 </motion.div>
               )}
 
-              {currentTab === 'goals' && (
-                <motion.div
-                  key="goals-tab"
-                  initial={{ opacity: 0, y: 8, filter: 'blur(1px)' }}
-                  animate={{ opacity: 1, y: 0, filter: 'blur(0px)' }}
-                  exit={{ opacity: 0, y: -8, filter: 'blur(1px)' }}
-                  transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
-                >
-                  {/* Tab 3: Cofres & Metas do Casal */}
-                  <ErrorBoundary fallbackTitle="Cofres & Metas do Casal">
-                    <VaultsGoalsView
-                      bills={currentMonthBills}
-                      revenues={currentMonthRevenues}
-                      selectedMonthLabel={selectedMonth?.label || 'Novembro de 2026'}
-                      activeThemeColor={currentAccentTheme?.primary}
-                      onOpenBudgetsModal={() => setIsBudgetModalOpen(true)}
-                    />
-                  </ErrorBoundary>
-                </motion.div>
-              )}
-
               {currentTab === 'sync' && (
                 <motion.div
                   key="sync-tab"
@@ -1978,26 +1955,6 @@ export default function App() {
           >
             <TrendingUp className="w-5 h-5 stroke-[2.2]" />
             <span className="text-[10.5px] tracking-tight whitespace-nowrap">Fluxo</span>
-          </motion.button>
-
-          {/* Tab 3: Cofres & Metas */}
-          <motion.button
-            whileTap={{ scale: 0.94 }}
-            onClick={() => setCurrentTab('goals')}
-            style={currentTab === 'goals' ? {
-              backgroundColor: currentAccentTheme.subtleBg,
-              color: currentAccentTheme.primary,
-            } : undefined}
-            className={`relative flex flex-col items-center gap-1 py-1.5 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer ${
-              currentTab === 'goals'
-                ? 'font-extrabold shadow-2xs'
-                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
-            }`}
-          >
-            <div className="relative">
-              <PiggyBank className="w-5 h-5 stroke-[2.2]" />
-            </div>
-            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Cofres & Metas</span>
           </motion.button>
 
           {/* Tab 3: Sincronia View */}

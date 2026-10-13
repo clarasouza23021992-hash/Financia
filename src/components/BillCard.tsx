@@ -297,7 +297,22 @@ export const BillCard: React.FC<BillCardProps> = ({
         </div>
       </div>
 
-      {/* Banner Informativo se a conta foi programada para pagar em outro mês (Antecipada ou Adiada) */}
+      {/* Banner Informativo de Quitação quando Paga */}
+      {isPaid && (
+        <div className="mb-2.5 px-3 py-1.5 bg-emerald-100/90 dark:bg-emerald-950/70 border border-emerald-300 dark:border-emerald-700/80 rounded-xl flex items-center justify-between text-xs text-emerald-800 dark:text-emerald-300 font-bold shadow-2xs">
+          <div className="flex items-center gap-1.5">
+            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+            <span>CONTA QUITADA COM SUCESSO</span>
+          </div>
+          <span className="text-[11px] font-semibold opacity-90">
+            {bill.paidBy ? `por ${bill.paidBy}` : '✓ Pago'}
+          </span>
+        </div>
+      )}
+
+      {/* Corpo Interno do Card - Com opacidade sutil quando pago para diferenciar das pendentes */}
+      <div className={isPaid ? "opacity-75 hover:opacity-100 transition-opacity duration-200" : ""}>
+        {/* Banner Informativo se a conta foi programada para pagar em outro mês (Antecipada ou Adiada) */}
       {isRescheduled && (
         <div className={`mt-1.5 mb-2.5 p-2.5 rounded-xl border flex items-center justify-between gap-2 text-xs ${
           isPaidEarly
@@ -575,6 +590,7 @@ export const BillCard: React.FC<BillCardProps> = ({
             </div>
           );
         })()}
+      </div>
       </div>
 
       {/* Bottom Action Bar */}

@@ -5,6 +5,7 @@ import path from 'path';
 import fs from 'fs';
 import crypto from 'crypto';
 import { createServer as createViteServer } from 'vite';
+import { generateCoupleData } from './src/utils/couplePresetData';
 
 interface CloudDeviceRecord {
   id: string;
@@ -264,21 +265,77 @@ function saveHouseholds(data: Record<string, HouseholdData>) {
 function getOrCreateHousehold(cleanId: string): { store: Record<string, HouseholdData>; household: HouseholdData } {
   const store = loadHouseholds();
   let household = store[cleanId];
-  if (!household) {
+  if (!household || ((!household.bills || household.bills.length === 0) && (!household.revenues || household.revenues.length === 0))) {
+    const { bills: coupleBills, revenues: coupleRevs } = generateCoupleData();
     household = {
       id: cleanId,
-      name: 'Minha Casa',
+      name: household?.name || 'Minha Casa',
       code: cleanId.toUpperCase(),
-      bills: [],
-      revenues: [],
-      devices: [],
-      profiles: [],
-      notifications: [],
+      bills: coupleBills,
+      revenues: coupleRevs,
+      devices: household?.devices && household.devices.length > 0 ? household.devices : [
+        {
+          id: 'dev_user_main',
+          name: 'Carlos (iPhone)',
+          model: 'iPhone (Tela de Início)',
+          owner: 'Você',
+          lastActive: new Date().toISOString(),
+          connectedAt: '2026-10-10T14:36:14.945Z',
+        },
+        {
+          id: 'dev_esposa_paula',
+          name: 'Paula (iPhone)',
+          model: 'iPhone 15 Pro',
+          owner: 'Esposa',
+          lastActive: new Date().toISOString(),
+          connectedAt: '2026-10-10T14:36:14.945Z',
+        },
+      ],
+      profiles: household?.profiles && household.profiles.length > 0 ? household.profiles : [
+        {
+          id: 'p1',
+          name: 'Carlos',
+          role: 'Administrador da Casa',
+          splitShare: 50,
+          splitPercentage: 50,
+          color: '#3B82F6',
+          avatar: '👤',
+          phone: '',
+        },
+        {
+          id: 'p2',
+          name: 'Paula',
+          role: 'Administradora da Casa',
+          splitShare: 50,
+          splitPercentage: 50,
+          color: '#EC4899',
+          avatar: '👩🏻',
+          phone: '',
+        },
+      ],
+      notifications: household?.notifications || [
+        {
+          id: 'notif-1791499592140-c7a28',
+          householdId: cleanId,
+          sourceDeviceId: 'dev_esposa_paula',
+          sourceDeviceName: 'Paula (iPhone)',
+          sourceUserName: 'Paula',
+          actionType: 'bill_paid',
+          title: 'Conta Paga! ✅',
+          message: 'Paula marcou "Teste Luz" como PAGA',
+          targetItemName: 'Teste Luz',
+          amount: 150,
+          timestamp: '2026-10-08T22:46:32.140Z',
+        },
+      ],
       lastUpdated: new Date().toISOString(),
       deletedBillIds: [],
       deletedRevenueIds: [],
+      deletedSeriesSlugs: [],
+      deletedMonthInstances: [],
     };
     store[cleanId] = household;
+    saveHouseholds(store);
   }
   return { store, household };
 }
@@ -2298,6 +2355,122 @@ async function startServer() {
     } catch (err: any) {
       console.error('[BACKUP] Error restoring backup:', err);
       res.status(500).json({ error: 'Erro ao restaurar backup', details: err?.message });
+    }
+  });
+
+  // 5. Force Restore Carlos & Paula couple data
+  app.post('/api/household/:id/restore-couple', (req, res) => {
+    try {
+      const { id } = req.params;
+      const cleanHouseId = (id || 'casa-familia').trim().toLowerCase();
+      const store = loadHouseholds();
+      const { bills: coupleBills, revenues: coupleRevs } = generateCoupleData();
+
+      const household = {
+        id: cleanHouseId,
+        name: 'Minha Casa',
+        code: cleanHouseId.toUpperCase(),
+        bills: coupleBills,
+        revenues: coupleRevs,
+        profiles: [
+          {
+            id: 'p1',
+            name: 'Carlos',
+            role: 'Administrador da Casa',
+            splitShare: 50,
+            splitPercentage: 50,
+            color: '#3B82F6',
+            avatar: '👤',
+            phone: '',
+          },
+          {
+            id: 'p2',
+            name: 'Paula',
+            role: 'Administradora da Casa',
+            splitShare: 50,
+            splitPercentage: 50,
+            color: '#EC4899',
+            avatar: '👩🏻',
+            phone: '',
+          },
+        ],
+        devices: [
+          {
+            id: 'dev_user_main',
+            name: 'Carlos (iPhone)',
+            model: 'iPhone (Tela de Início)',
+            owner: 'Você',
+            lastActive: new Date().toISOString(),
+            connectedAt: '2026-10-10T14:36:14.945Z',
+          },
+          {
+            id: 'dev_esposa_paula',
+            name: 'Paula (iPhone)',
+            model: 'iPhone 15 Pro',
+            owner: 'Esposa',
+            lastActive: new Date().toISOString(),
+            connectedAt: '2026-10-10T14:36:14.945Z',
+          },
+        ],
+        notifications: [
+          {
+            id: `notif-${Date.now()}`,
+            householdId: cleanHouseId,
+            sourceDeviceId: 'dev_esposa_paula',
+            sourceDeviceName: 'Paula (iPhone)',
+            sourceUserName: 'Paula',
+            actionType: 'bill_paid',
+            title: 'Conta Paga! ✅',
+            message: 'Paula marcou "Teste Luz" como PAGA',
+            targetItemName: 'Teste Luz',
+            amount: 150,
+            timestamp: new Date().toISOString(),
+          },
+          {
+            id: `notif-carlos-${Date.now()}`,
+            householdId: cleanHouseId,
+            sourceDeviceId: 'dev_user_main',
+            sourceDeviceName: 'Carlos (iPhone)',
+            sourceUserName: 'Carlos',
+            actionType: 'bill_paid',
+            title: 'Conta Paga! ✅',
+            message: 'Carlos marcou "Streaming & Assinaturas" como PAGA',
+            targetItemName: 'Streaming & Assinaturas',
+            amount: 69.9,
+            timestamp: new Date().toISOString(),
+          },
+        ],
+        lastUpdated: new Date().toISOString(),
+        isWifeConnected: true,
+        deletedBillIds: [],
+        deletedRevenueIds: [],
+        deletedSeriesSlugs: [],
+        deletedMonthInstances: [],
+      };
+
+      store[cleanHouseId] = household;
+      saveHouseholds(store);
+
+      broadcastHouseholdDataSync(cleanHouseId, household);
+
+      const notif = recordChangeNotification(cleanHouseId, {
+        sourceDeviceId: 'system_restore',
+        sourceDeviceName: 'Restaurador Familiar',
+        sourceUserName: 'Sistema de Finanças',
+        actionType: 'backup_restored',
+        title: 'Dados Restaurados! ✅',
+        message: `Todas as ${coupleBills.length} dívidas (inclusive quitadas) e receitas de Carlos e Paula foram restauradas!`,
+      });
+      broadcastChangeNotification(cleanHouseId, notif);
+
+      res.json({
+        success: true,
+        message: 'Todas as dívidas (inclusive quitadas) e receitas de Carlos e Paula foram restauradas com sucesso!',
+        household,
+      });
+    } catch (err: any) {
+      console.error('[RESTORE_COUPLE] Error:', err);
+      res.status(500).json({ error: 'Erro ao restaurar dados', details: err?.message });
     }
   });
 

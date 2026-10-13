@@ -13,6 +13,7 @@ import {
   parseInstallmentDetails,
 } from '../types/finance';
 import { inferCategoryFromName, getStoredCategories, saveStoredCategories } from '../utils/categories';
+import { generateCoupleData } from '../utils/couplePresetData';
 
 const STORAGE_KEY_BILLS = 'financas_cloudkit_bills_v3';
 const STORAGE_KEY_REVENUES = 'financas_cloudkit_revenues_v3';
@@ -1037,6 +1038,14 @@ class CloudKitSyncEngine {
             return this.deduplicateBills(cleaned);
           }
         } catch {}
+      }
+      if (typeof window !== 'undefined') {
+        const { bills } = generateCoupleData();
+        try {
+          localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(bills));
+          localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(bills));
+        } catch {}
+        return bills;
       }
       return [];
     }
@@ -2987,6 +2996,14 @@ class CloudKitSyncEngine {
           }
         } catch {}
       }
+      if (typeof window !== 'undefined') {
+        const { revenues } = generateCoupleData();
+        try {
+          localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(revenues));
+          localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(revenues));
+        } catch {}
+        return revenues;
+      }
       return [];
     }
 
@@ -4050,6 +4067,12 @@ class CloudKitSyncEngine {
       localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(cleanRevs));
     }
 
+    // CRITICAL: If storage has 0 bills and 0 revenues, automatically restore Carlos & Paula's data!
+    if (cleanBills.length === 0 && cleanRevs.length === 0) {
+      this.restoreCouplePresetData('2026-11');
+      return true;
+    }
+
     return false;
   }
 
@@ -5053,234 +5076,33 @@ class CloudKitSyncEngine {
     };
   }
 
-  // Restore complete household preset (Carlos & Paula) with realistic household bills
+  // Restore complete household preset (Carlos & Paula) with realistic household bills and revenues
   public restoreCouplePresetData(targetMonthId: string = '2026-11'): { bills: Bill[]; revenues: Revenue[] } {
-    const month = targetMonthId || '2026-11';
-    const activeDev = this.getActiveDevice().name || 'iPhone Carlos';
-    const nowIso = new Date().toISOString();
+    const { bills: coupleBills, revenues: coupleRevs } = generateCoupleData();
 
-    const presetBills: Bill[] = [
-      {
-        id: `bill-preset-condominio-${month}`,
-        name: 'Taxa de Condomínio',
-        amount: 580.00,
-        dueDate: `${month}-10`,
-        category: 'Moradia & Condomínio',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Administradora do Condomínio',
-        notes: 'Boleto mensal do condomínio.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 290.00 },
-          { name: 'Paula', percentage: 50, amount: 290.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-luz-${month}`,
-        name: 'Energia Elétrica (Enel)',
-        amount: 245.60,
-        dueDate: `${month}-15`,
-        category: 'Energia Elétrica (Luz)',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Enel Distribuição',
-        notes: 'Consumo de energia da residência.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 122.80 },
-          { name: 'Paula', percentage: 50, amount: 122.80 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-gas-${month}`,
-        name: 'Gás Encanado (Comgás)',
-        amount: 85.40,
-        dueDate: `${month}-18`,
-        category: 'Gás (Encanado / Botijão)',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Comgás',
-        notes: 'Consumo de gás encanado.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 42.70 },
-          { name: 'Paula', percentage: 50, amount: 42.70 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-internet-${month}`,
-        name: 'Internet Fibra Óptica',
-        amount: 139.90,
-        dueDate: `${month}-20`,
-        category: 'Internet, TV & Telefonia',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Claro Fibra / Vivo',
-        notes: 'Banda larga residencial 600 Mega.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 69.95 },
-          { name: 'Paula', percentage: 50, amount: 69.95 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-moradia-${month}`,
-        name: 'Financiamento Imobiliário / Aluguel',
-        amount: 2450.00,
-        dueDate: `${month}-10`,
-        category: 'Financiamentos & Empréstimos',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Caixa Econômica / Locador',
-        notes: 'Parcela mensal da moradia da família.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 1225.00 },
-          { name: 'Paula', percentage: 50, amount: 1225.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-mercado-${month}`,
-        name: 'Supermercado & Feira do Mês',
-        amount: 1650.00,
-        dueDate: `${month}-08`,
-        category: 'Alimentação & Supermercado',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Supermercado Principal',
-        notes: 'Compras essenciais de mercado e mantimentos.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 825.00 },
-          { name: 'Paula', percentage: 50, amount: 825.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-saude-${month}`,
-        name: 'Plano de Saúde Familiar',
-        amount: 980.00,
-        dueDate: `${month}-25`,
-        category: 'Saúde & Farmácia',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Operadora de Saúde',
-        notes: 'Mensalidade do plano de saúde do casal.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 490.00 },
-          { name: 'Paula', percentage: 50, amount: 490.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-streaming-${month}`,
-        name: 'Streaming & Assinaturas',
-        amount: 69.90,
-        dueDate: `${month}-12`,
-        category: 'Lazer & Assinaturas',
-        status: 'paid',
-        paidAt: `${month}-05T12:00:00.000Z`,
-        paidBy: 'Carlos',
-        recurrence: 'Mensal Fixa',
-        favored: 'Netflix / Spotify Família',
-        notes: 'Serviços de entretenimento digital da casa.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 34.95 },
-          { name: 'Paula', percentage: 50, amount: 34.95 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-    ];
-
-    // Remove tombstones for preset IDs
-    const presetIds = presetBills.map(b => b.id);
-    const cleanDeleted = this.getDeletedBillIds().filter(id => !presetIds.includes(id));
-    localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
-
-    // Clear series slugs for preset bills so they propagate properly
-    const presetNames = presetBills.map(b => b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-    const cleanSlugs = this.getDeletedSeriesSlugs().filter(s => {
-      return !presetNames.some(pn => {
-        const slug = pn.replace(/[^a-z0-9]/g, '-').substring(0, 24);
-        return s === slug || s === pn;
-      });
-    });
-    localStorage.setItem('financas_deleted_series_slugs', JSON.stringify(cleanSlugs));
+    // Clear all deletion tombstones so all restored items display without suppression
+    localStorage.setItem('financas_deleted_bill_ids', JSON.stringify([]));
+    localStorage.setItem('financas_deleted_revenue_ids', JSON.stringify([]));
+    localStorage.setItem('financas_deleted_series_slugs', JSON.stringify([]));
+    localStorage.setItem('financas_deleted_month_instances', JSON.stringify([]));
 
     // Save bills to main storage and safety vault
-    this.saveBills(presetBills);
+    this.saveBills(coupleBills);
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(coupleBills));
 
-    // Auto-propagate across all months
-    this.autoPropagateRecurringBills();
+    // Save revenues to main storage and safety vault
+    this.saveRevenues(coupleRevs);
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(coupleRevs));
 
-    // Save revenues (Carlos R$ 6850, Paula R$ 7240, Rendimentos R$ 345,80)
-    const revenues = this.updateCoupleSalaries(6850, 7240, month);
+    localStorage.setItem(STORAGE_KEY_CUSTOMIZED, 'true');
 
-    return { bills: presetBills, revenues };
+    this.broadcastUpdate('BILLS_UPDATED', { count: coupleBills.length });
+    this.broadcastUpdate('REVENUES_UPDATED', { count: coupleRevs.length });
+
+    // Sync with server immediately
+    this.syncWithServer().catch(() => {});
+
+    return { bills: coupleBills, revenues: coupleRevs };
   }
 
   // Reset to default sample

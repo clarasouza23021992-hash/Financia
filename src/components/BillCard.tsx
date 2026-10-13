@@ -134,12 +134,12 @@ export const BillCard: React.FC<BillCardProps> = ({
         ? 'ring-2 ring-emerald-400 dark:ring-emerald-400 scale-[1.01] shadow-lg shadow-emerald-500/20' 
         : ''
     } ${
-      bill.status === 'overdue' 
-        ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 shadow-xs' 
-        : isPaid
-        ? 'bg-slate-50/75 dark:bg-[#091024]/60 border-emerald-300/50 dark:border-emerald-800/40 border-l-[6px] border-l-emerald-500 opacity-60 dark:opacity-50 hover:opacity-90 shadow-none'
-        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800 shadow-xs'
-    } p-4`}>
+      isPaid
+        ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-300/60 dark:border-emerald-800/40 border-l-[5px] border-l-emerald-500 premium-card'
+        : bill.status === 'overdue'
+        ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 border-l-[5px] border-l-rose-500 premium-card'
+        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-teal-500/80 premium-card hover:border-slate-300 dark:hover:border-slate-700'
+    } p-4 transition-all duration-200`}>
       {/* Celebration micro notification on mark as paid */}
       <AnimatePresence>
         {isCelebrating && (
@@ -265,12 +265,13 @@ export const BillCard: React.FC<BillCardProps> = ({
 
         {/* Amount & Copy Amount Button */}
         <div className="text-right flex-shrink-0">
-          <div className={`text-[19px] font-black tracking-tight leading-none ${
+          <div className={`text-[19px] font-extrabold tracking-tight leading-none font-mono ${
             isPaid 
               ? 'text-emerald-700 dark:text-emerald-400' 
               : 'text-slate-900 dark:text-white'
           }`}>
-            R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            <span className="text-xs font-sans font-bold text-slate-400 dark:text-slate-500 mr-0.5">R$</span>
+            {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           {isPaid ? (
             <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">

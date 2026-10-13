@@ -1,14 +1,15 @@
 import React from 'react';
-import { Calendar, CheckCircle2, Trophy, Flame, TrendingUp, Sparkles, Target, ArrowRight } from 'lucide-react';
+import { Calendar, CheckCircle2, Trophy, Flame, TrendingUp, Sparkles, Target, ArrowRight, MessageCircle } from 'lucide-react';
 import { Bill } from '../types/finance';
 
 interface KpiCardsProps {
   bills: Bill[];
   totalRevenue?: number;
   onSelectFilter?: (status: string) => void;
+  onShareWhatsApp?: () => void;
 }
 
-export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => {
+export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter, onShareWhatsApp }) => {
   // Strictly filter out any salary or migrated revenue items
   const validBills = bills.filter(b => {
     if (b.category === 'Salário & Renda') return false;
@@ -117,7 +118,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
         <div 
           id="kpi-card-total-month"
           onClick={() => onSelectFilter?.('all')}
-          className="bg-white dark:bg-[#131D38] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 shadow-xs flex flex-col justify-between cursor-pointer active-press hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
+          className="bg-white dark:bg-[#131D38] border border-slate-200/80 dark:border-slate-800 rounded-2xl p-3.5 premium-card flex flex-col justify-between cursor-pointer active-press hover:border-slate-300 dark:hover:border-slate-700 transition-colors"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10.5px] font-bold tracking-wider text-slate-500 dark:text-slate-400 uppercase">
@@ -128,8 +129,9 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
             </div>
           </div>
           <div>
-            <div className="text-[17px] font-extrabold text-slate-900 dark:text-white tracking-tight">
-              {formatCurrency(totalAmount)}
+            <div className="text-[17px] font-extrabold text-slate-900 dark:text-white tracking-tight font-mono">
+              <span className="text-xs font-sans font-bold text-slate-400 dark:text-slate-500 mr-0.5">R$</span>
+              {totalAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
               {paidBills.length > 0 && pendingBills.length > 0 ? (
@@ -151,7 +153,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
         <div 
           id="kpi-card-paid"
           onClick={() => onSelectFilter?.('paid')}
-          className="bg-white dark:bg-[#131D38] border border-emerald-200/70 dark:border-emerald-900/40 rounded-2xl p-3.5 shadow-xs flex flex-col justify-between cursor-pointer active-press hover:border-emerald-300 dark:hover:border-emerald-800 transition-colors"
+          className="bg-white dark:bg-[#131D38] border border-emerald-200/70 dark:border-emerald-900/40 rounded-2xl p-3.5 premium-card flex flex-col justify-between cursor-pointer active-press hover:border-emerald-300 dark:hover:border-emerald-800 transition-colors"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="text-[10.5px] font-bold tracking-wider text-emerald-600 dark:text-emerald-400 uppercase">
@@ -162,8 +164,9 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
             </div>
           </div>
           <div>
-            <div className="text-[17px] font-extrabold text-emerald-700 dark:text-emerald-400 tracking-tight">
-              {formatCurrency(paidAmount)}
+            <div className="text-[17px] font-extrabold text-emerald-700 dark:text-emerald-400 tracking-tight font-mono">
+              <span className="text-xs font-sans font-bold text-emerald-500/70 mr-0.5">R$</span>
+              {paidAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
             </div>
             <div className="text-[11px] font-semibold text-slate-500 dark:text-slate-400 mt-0.5 truncate">
               <span className="text-emerald-600 dark:text-emerald-400 font-semibold">
@@ -177,7 +180,7 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
       {/* 2. VISUAL PROGRESS BAR & MOTIVATION CARD */}
       <div 
         id="kpi-card-progress"
-        className={`bg-white dark:bg-[#131D38] border rounded-2xl p-3.5 shadow-xs transition-all ${
+        className={`bg-white dark:bg-[#131D38] border rounded-2xl p-3.5 premium-card transition-all ${
           motivation.isComplete 
             ? 'border-emerald-300 dark:border-emerald-800/80 bg-gradient-to-br from-emerald-50/40 via-white to-teal-50/30 dark:from-[#0f242b]/40 dark:via-[#131D38] dark:to-[#131D38]' 
             : 'border-slate-200/80 dark:border-slate-800'
@@ -211,6 +214,20 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
             <span className={`text-[11px] font-extrabold px-2.5 py-1 rounded-full shadow-2xs ${motivation.badgeBg}`}>
               {motivation.badgeText}
             </span>
+            {onShareWhatsApp && (
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onShareWhatsApp();
+                }}
+                title="Compartilhar retrospectiva e resumo no WhatsApp"
+                className="inline-flex items-center gap-1 px-2.5 py-1 rounded-full bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 font-extrabold text-[10.5px] border border-emerald-500/30 transition-all active:scale-95 cursor-pointer shadow-2xs"
+              >
+                <MessageCircle className="w-3 h-3 fill-emerald-500/30 text-emerald-600 dark:text-emerald-400" />
+                <span>WhatsApp</span>
+              </button>
+            )}
           </div>
         </div>
 
@@ -230,9 +247,9 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
               <div className="w-[1px] h-full bg-slate-400 dark:bg-slate-300"></div>
             </div>
 
-            {/* Filled Progress Bar with smooth transition */}
+            {/* Filled Progress Bar with smooth transition and shimmer sheen */}
             <div 
-              className={`h-full rounded-full transition-all duration-700 ease-out relative ${
+              className={`h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden ${
                 motivation.isComplete
                   ? 'bg-gradient-to-r from-emerald-500 via-teal-400 to-[#00C49F] shadow-sm shadow-emerald-500/40'
                   : 'bg-gradient-to-r from-emerald-500 via-teal-400 to-[#00C49F]'
@@ -241,8 +258,10 @@ export const KpiCards: React.FC<KpiCardsProps> = ({ bills, onSelectFilter }) => 
                 width: `${totalCount === 0 ? 0 : Math.min(100, Math.max(paidCountPercentage, paidCount > 0 ? 5 : 0))}%` 
               }}
             >
-              {/* Subtle glossy sheen reflection */}
-              <div className="absolute inset-0 bg-gradient-to-b from-white/30 to-transparent rounded-full"></div>
+              {/* Subtle animated shimmer sheen */}
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/40 to-transparent w-full h-full animate-shimmer pointer-events-none" />
+              {/* Glossy top sheen reflection */}
+              <div className="absolute inset-0 bg-gradient-to-b from-white/25 to-transparent rounded-full pointer-events-none" />
             </div>
           </div>
 

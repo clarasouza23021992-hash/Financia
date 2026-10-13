@@ -5,7 +5,7 @@ import {
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
-  Images, X, RotateCcw
+  Images, X, RotateCcw, MessageCircle, Palette
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -47,9 +47,12 @@ import { BackupModal } from './components/BackupModal';
 import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './components/ReorderQuickActionsModal';
 import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
 import { FamilyAuthModal } from './components/FamilyAuthModal';
+import { WhatsAppSummaryModal } from './components/WhatsAppSummaryModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
+import { ThemePickerModal } from './components/ThemePickerModal';
+import { getStoredTheme, applyTheme, AccentTheme } from './utils/theme';
 
 export default function App() {
   // Core State backed by CloudKit Sync Engine
@@ -189,8 +192,23 @@ export default function App() {
   const [isNotificationCenterOpen, setIsNotificationCenterOpen] = useState(false);
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
+  const [isWhatsAppSummaryOpen, setIsWhatsAppSummaryOpen] = useState(false);
   const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
+  const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
+  const [currentAccentTheme, setCurrentAccentTheme] = useState<AccentTheme>(() => getStoredTheme());
+
+  // Apply Accent Theme on mount & listen to changes
+  useEffect(() => {
+    applyTheme(currentAccentTheme.id);
+    const handleThemeChange = (e: any) => {
+      if (e.detail) {
+        setCurrentAccentTheme(e.detail);
+      }
+    };
+    window.addEventListener('accent-theme-changed', handleThemeChange);
+    return () => window.removeEventListener('accent-theme-changed', handleThemeChange);
+  }, [currentAccentTheme.id]);
 
   // Active household member editing debts (Carlos on Carlos's device / Paula on wife's device)
   const [activeUserName, setActiveUserName] = useState<string>(() => cloudkit.getCurrentUserName());
@@ -1193,26 +1211,9 @@ export default function App() {
     setIsBillModalOpen(true);
   };
 
-  // Open WhatsApp Share with all pending bills
+  // Open WhatsApp Share Retrospective & Summary Modal
   const handleShareWhatsApp = () => {
-    const pending = currentMonthBills.filter(b => b.status === 'pending' || b.status === 'overdue');
-    const total = pending.reduce((sum, b) => sum + b.amount, 0);
-    const half = total / 2;
-
-    let text = `*Resumo de Contas do Lar - Finanças da Minha Casa*\n`;
-    text += `📅 Mês: ${selectedMonth.label}\n`;
-    text += `💰 Total Pendente: R$ ${total.toFixed(2).replace('.', ',')}\n`;
-    const name1 = profiles[0]?.name || 'Você';
-    const name2 = profiles[1]?.name || 'Cônjuge';
-    text += `👥 Divisão: R$ ${half.toFixed(2).replace('.', ',')} para cada (${name1} & ${name2})\n\n`;
-    text += `*Contas a pagar:*\n`;
-    pending.forEach((b, i) => {
-      text += `${i + 1}. ${b.name} - R$ ${b.amount.toFixed(2).replace('.', ',')} (Vence: ${b.dueDate})\n`;
-      if (b.pixKey) text += `   Pix: ${b.pixKey}\n`;
-    });
-
-    const url = `https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`;
-    window.open(url, '_blank');
+    setIsWhatsAppSummaryOpen(true);
   };
 
   // Device switch
@@ -1332,6 +1333,8 @@ export default function App() {
         onToggleActiveUser={handleToggleActiveUser}
         onOpenFamilyAuth={() => setIsFamilyAuthModalOpen(true)}
         isFamilyAuthenticated={Boolean(authSession?.token)}
+        onOpenThemePicker={() => setIsThemePickerOpen(true)}
+        activeThemeColor={currentAccentTheme.primary}
       />
 
       {/* Intelligent Due Date & Alteration Notification Toast Banner */}
@@ -1433,6 +1436,7 @@ export default function App() {
               bills={currentMonthBills}
               totalRevenue={totalGrandRevenue}
               onSelectFilter={(status) => setStatusFilter(status)}
+              onShareWhatsApp={handleShareWhatsApp}
             />
 
             {/* Filter Tabs Row */}
@@ -1488,6 +1492,20 @@ export default function App() {
             {/* Quick Actions Row */}
             <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
               {quickActionsOrder.map((actionId) => {
+                if (actionId === 'whatsapp_summary') {
+                  return (
+                    <button
+                      key="whatsapp_summary"
+                      type="button"
+                      onClick={() => setIsWhatsAppSummaryOpen(true)}
+                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 font-bold text-xs border border-emerald-200 dark:border-emerald-800 active-press whitespace-nowrap transition-all shadow-2xs cursor-pointer"
+                      title="Gerar cartão de retrospectiva e resumo para WhatsApp"
+                    >
+                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 fill-emerald-500/30" />
+                      <span>Resumo WhatsApp</span>
+                    </button>
+                  );
+                }
                 if (actionId === 'scanner') {
                   return (
                     <button
@@ -1578,6 +1596,17 @@ export default function App() {
                 }
                 return null;
               })}
+
+              {/* Botão de Trocar Tema */}
+              <button
+                type="button"
+                onClick={() => setIsThemePickerOpen(true)}
+                className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all cursor-pointer shadow-2xs"
+                title="Personalizar Tema & Cores do App"
+              >
+                <Palette className="w-3.5 h-3.5" style={{ color: currentAccentTheme.primary }} />
+                <span>Tema: {currentAccentTheme.name}</span>
+              </button>
 
               {/* Botão de Organizar / Mover Botões */}
               <button
@@ -1870,58 +1899,73 @@ export default function App() {
       </main>
 
       {/* Native Bottom Tab Bar Navigation */}
-      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-md border-t border-slate-200/80 dark:border-slate-800 px-2 sm:px-6 py-1 shadow-sm">
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-1.5 shadow-lg">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-2">
           {/* Tab 1: Contas / Dívidas */}
           <motion.button
-            whileTap={{ scale: 0.92 }}
+            whileTap={{ scale: 0.94 }}
             onClick={() => setCurrentTab('bills')}
-            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
+            style={currentTab === 'bills' ? {
+              backgroundColor: currentAccentTheme.subtleBg,
+              color: currentAccentTheme.primary,
+            } : undefined}
+            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'bills'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'font-extrabold shadow-2xs'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
             }`}
           >
             <div className="relative">
-              <FileText className="w-4.5 h-4.5" />
+              <FileText className="w-5 h-5 stroke-[2.2]" />
               {currentMonthBills.length > 0 && (
-                <span className="absolute -top-1 -right-2 bg-amber-500 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center">
+                <span className="absolute -top-1 -right-2.5 bg-amber-500 text-white text-[9px] font-black min-w-4 h-4 px-1 rounded-full flex items-center justify-center shadow-xs">
                   {currentMonthBills.length}
                 </span>
               )}
             </div>
-            <span className="text-[10px] tracking-tight whitespace-nowrap">Dívidas</span>
+            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Dívidas</span>
           </motion.button>
 
           {/* Tab 2: Fluxo de Caixa */}
           <motion.button
-            whileTap={{ scale: 0.92 }}
+            whileTap={{ scale: 0.94 }}
             onClick={() => setCurrentTab('cashflow')}
-            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
+            style={currentTab === 'cashflow' ? {
+              backgroundColor: currentAccentTheme.subtleBg,
+              color: currentAccentTheme.primary,
+            } : undefined}
+            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'cashflow'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'font-extrabold shadow-2xs'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
             }`}
           >
-            <TrendingUp className="w-4.5 h-4.5" />
-            <span className="text-[10px] tracking-tight whitespace-nowrap">Fluxo</span>
+            <TrendingUp className="w-5 h-5 stroke-[2.2]" />
+            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Fluxo</span>
           </motion.button>
 
-          {/* Tab 3: Sincronia View (Full Screen, Zero Black Overlay) */}
+          {/* Tab 3: Sincronia View */}
           <motion.button
-            whileTap={{ scale: 0.92 }}
+            whileTap={{ scale: 0.94 }}
             onClick={() => setCurrentTab('sync')}
-            className={`relative flex flex-col items-center gap-0.5 py-1 px-3 sm:px-4 rounded-xl transition-all cursor-pointer ${
+            style={currentTab === 'sync' ? {
+              backgroundColor: currentAccentTheme.subtleBg,
+              color: currentAccentTheme.primary,
+            } : undefined}
+            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'sync'
-                ? 'text-[#00A884] dark:text-[#00E5B5] font-bold'
-                : 'text-slate-400 hover:text-slate-600'
+                ? 'font-extrabold shadow-2xs'
+                : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
             }`}
           >
             <div className="relative">
-              <Cloud className="w-4.5 h-4.5" />
-              <span className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+              <Cloud className="w-5 h-5 stroke-[2.2]" />
+              <span 
+                className="absolute -top-0.5 -right-1 w-2 h-2 rounded-full animate-pulse"
+                style={{ backgroundColor: currentAccentTheme.primary }}
+              />
             </div>
-            <span className="text-[10px] tracking-tight whitespace-nowrap">Sincronia</span>
+            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Sincronia</span>
           </motion.button>
         </div>
       </nav>
@@ -2141,6 +2185,37 @@ export default function App() {
         onSaveOrder={(newOrder) => {
           setQuickActionsOrder(newOrder);
           showTemporaryToast('✨ Nova ordem dos botões salva!');
+        }}
+      />
+
+      <WhatsAppSummaryModal
+        isOpen={isWhatsAppSummaryOpen}
+        onClose={() => setIsWhatsAppSummaryOpen(false)}
+        selectedMonth={selectedMonth.label}
+        selectedMonthId={selectedMonth.id}
+        bills={currentMonthBills}
+        revenues={currentMonthRevenues}
+        profiles={profiles}
+        onShowToast={(msg) => showTemporaryToast(msg)}
+      />
+
+      {/* Theme Customization Modal */}
+      <ThemePickerModal
+        isOpen={isThemePickerOpen}
+        onClose={() => setIsThemePickerOpen(false)}
+        isDarkMode={isDarkMode}
+        onToggleDarkMode={() => {
+          setIsDarkMode(prev => {
+            const next = !prev;
+            try {
+              localStorage.setItem('financas_dark_mode', String(next));
+            } catch {}
+            return next;
+          });
+        }}
+        onThemeChanged={(newTheme) => {
+          setCurrentAccentTheme(newTheme);
+          showTemporaryToast(`✨ Tema aplicado: ${newTheme.name}`);
         }}
       />
 

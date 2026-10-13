@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Home, Plus, Cloud, RefreshCw, Calculator, Bell, Calendar, Clock, ShieldCheck } from 'lucide-react';
+import { Home, Plus, Cloud, RefreshCw, Calculator, Bell, Calendar, Clock, ShieldCheck, MessageCircle, Palette } from 'lucide-react';
 import { CloudDevice } from '../types/finance';
 
 interface HeaderProps {
@@ -27,6 +27,8 @@ interface HeaderProps {
   onToggleActiveUser?: () => void;
   onOpenFamilyAuth?: () => void;
   isFamilyAuthenticated?: boolean;
+  onOpenThemePicker?: () => void;
+  activeThemeColor?: string;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -39,6 +41,7 @@ export const Header: React.FC<HeaderProps> = ({
   unreadNotificationsCount = 0,
   onOpenBudgets,
   onOpenWifeConnect,
+  onShareWhatsApp,
   onManualRefresh,
   isRefreshing = false,
   isOffline,
@@ -47,6 +50,8 @@ export const Header: React.FC<HeaderProps> = ({
   onToggleActiveUser,
   onOpenFamilyAuth,
   isFamilyAuthenticated = false,
+  onOpenThemePicker,
+  activeThemeColor,
 }) => {
   const [currentClock, setCurrentClock] = useState<string>(() => {
     const d = new Date();
@@ -67,7 +72,10 @@ export const Header: React.FC<HeaderProps> = ({
       <div className="flex items-center justify-between max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto w-full gap-2">
         {/* Brand & Month */}
         <div className="flex items-center gap-2.5 sm:gap-3 min-w-0">
-          <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-[#00C49F] flex items-center justify-center shadow-xs flex-shrink-0">
+          <div 
+            className="w-8 h-8 sm:w-9 sm:h-9 rounded-xl flex items-center justify-center shadow-xs flex-shrink-0 transition-colors"
+            style={{ backgroundColor: activeThemeColor || 'var(--color-brand-primary, #00C49F)' }}
+          >
             <Home className="w-4 h-4 sm:w-5 sm:h-5 text-[#0A1128]" />
           </div>
           <div className="min-w-0">
@@ -132,6 +140,19 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {/* WhatsApp Summary Button */}
+          {onShareWhatsApp && (
+            <button
+              id="btn-header-share-whatsapp"
+              type="button"
+              onClick={onShareWhatsApp}
+              title="Compartilhar Resumo do Mês no WhatsApp"
+              className="flex items-center justify-center w-8 h-8 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-300 hover:text-emerald-200 active:scale-90 transition-all border border-emerald-500/40 cursor-pointer"
+            >
+              <MessageCircle className="w-4 h-4 fill-emerald-500/40" />
+            </button>
+          )}
+
           {/* Calculator Button */}
           {onOpenCalculator && (
             <button
@@ -172,12 +193,33 @@ export const Header: React.FC<HeaderProps> = ({
             </button>
           )}
 
+          {/* Personalizar Tema & Cores Button */}
+          {onOpenThemePicker && (
+            <button
+              id="btn-header-theme"
+              type="button"
+              onClick={onOpenThemePicker}
+              title="Personalizar Tema & Cores do App"
+              className="relative flex items-center justify-center w-8 h-8 rounded-xl bg-slate-800/90 hover:bg-slate-700 text-slate-200 hover:text-white active:scale-90 transition-all border border-slate-700/60 cursor-pointer"
+            >
+              <Palette className="w-4 h-4 text-amber-300" />
+              <span 
+                className="absolute -top-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border border-[#0A1128] shadow-xs"
+                style={{ backgroundColor: activeThemeColor || 'var(--color-brand-primary, #00C49F)' }}
+              />
+            </button>
+          )}
+
           {/* New Bill Button */}
           <button
             id="btn-header-new-bill"
             type="button"
             onClick={onOpenNewBill}
-            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-2 bg-[#00C49F] hover:bg-[#00B290] text-[#0A1128] font-bold rounded-xl text-xs active:scale-95 transition-all shadow-xs"
+            className="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-2 font-black rounded-xl text-xs active:scale-95 transition-all shadow-xs"
+            style={{ 
+              backgroundColor: activeThemeColor || 'var(--color-brand-primary, #00C49F)',
+              color: 'var(--color-brand-text, #0A1128)' 
+            }}
           >
             <Plus className="w-4 h-4 stroke-[2.5]" />
             <span className="hidden sm:inline">Nova Conta</span>

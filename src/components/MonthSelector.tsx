@@ -123,7 +123,7 @@ export const MonthSelector: React.FC<MonthSelectorProps> = ({
 
   return (
     <div className="px-4 py-2">
-      <div className="bg-white dark:bg-[#131D38] p-3.5 rounded-2xl border border-slate-200 dark:border-slate-800 shadow-xs">
+      <div className="bg-white dark:bg-[#131D38] p-3.5 rounded-2xl border border-slate-200/80 dark:border-slate-800/80 premium-card">
         {/* Header navigation bar */}
         <div className="flex items-center justify-between gap-2 mb-2.5">
           <div className="flex items-center gap-2 min-w-0">

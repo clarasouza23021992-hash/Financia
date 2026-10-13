@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { 
   X, Target, PiggyBank, Plus, Check, Trash2, 
   TrendingUp, AlertCircle, ArrowUpRight, ShieldCheck, 
@@ -31,10 +32,33 @@ const DEFAULT_GOALS: SavingsGoal[] = [
   { id: 'goal-2', name: 'Viagem de Férias', targetAmount: 5000, currentAmount: 2350, icon: '✈️' },
 ];
 
+const parseSavedGoals = (raw: string | null | any): SavingsGoal[] => {
+  if (!raw) return DEFAULT_GOALS;
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    if (Array.isArray(parsed) && parsed.length > 0) {
+      const sanitized = parsed
+        .filter(g => g && typeof g === 'object')
+        .map((g: any, idx: number) => ({
+          id: String(g.id || `goal-${idx + 1}`),
+          name: String(g.name || 'Nova Meta'),
+          targetAmount: Math.max(0, Number(g.targetAmount) || 1000),
+          currentAmount: Math.max(0, Number(g.currentAmount) || 0),
+          icon: String(g.icon || '🎯'),
+          targetDate: g.targetDate ? String(g.targetDate) : undefined,
+        }));
+      return sanitized.length > 0 ? sanitized : DEFAULT_GOALS;
+    }
+    return DEFAULT_GOALS;
+  } catch {
+    return DEFAULT_GOALS;
+  }
+};
+
 export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
   isOpen,
   onClose,
-  bills,
+  bills = [],
   selectedMonthLabel = 'Mês Atual',
 }) => {
   const [activeTab, setActiveTab] = useState<'budget' | 'goals'>('budget');
@@ -52,12 +76,30 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
   // Goals state
   const [goals, setGoals] = useState<SavingsGoal[]>(() => {
     try {
-      const saved = localStorage.getItem(GOALS_STORAGE_KEY);
-      return saved ? JSON.parse(saved) : DEFAULT_GOALS;
+      const saved = typeof window !== 'undefined' ? localStorage.getItem(GOALS_STORAGE_KEY) : null;
+      return parseSavedGoals(saved);
     } catch {
       return DEFAULT_GOALS;
     }
   });
+
+  // Listen to external updates from VaultsGoalsView
+  useEffect(() => {
+    const handleExternalChange = (e: any) => {
+      const incoming = Array.isArray(e?.detail?.goals) 
+        ? e.detail.goals 
+        : (Array.isArray(e?.detail) ? e.detail : null);
+      if (incoming) {
+        const sanitized = parseSavedGoals(incoming);
+        setGoals(prev => {
+          if (JSON.stringify(prev) === JSON.stringify(sanitized)) return prev;
+          return sanitized;
+        });
+      }
+    };
+    window.addEventListener('savings-goals-changed', handleExternalChange);
+    return () => window.removeEventListener('savings-goals-changed', handleExternalChange);
+  }, []);
 
   // Editing budget item
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
@@ -84,14 +126,20 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
   useEffect(() => {
     try {
       localStorage.setItem(GOALS_STORAGE_KEY, JSON.stringify(goals));
+      window.dispatchEvent(
+        new CustomEvent('savings-goals-changed', {
+          detail: { goals },
+        })
+      );
     } catch {}
   }, [goals]);
 
   if (!isOpen) return null;
 
-  // Calculate actual spending per category in current bills
+  // Calculate actual spending per category in current bills safely
   const spentPerCategory: Record<string, number> = {};
-  bills.forEach((b) => {
+  (bills || []).forEach((b) => {
+    if (!b) return;
     const cat = b.category || 'Outros';
     spentPerCategory[cat] = (spentPerCategory[cat] || 0) + (Number(b.amount) || 0);
   });
@@ -141,7 +189,8 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
     setGoals((prev) =>
       prev.map((g) => {
         if (g.id === goalId) {
-          const updated = isAdd ? g.currentAmount + num : Math.max(0, g.currentAmount - num);
+          const current = Number(g.currentAmount) || 0;
+          const updated = isAdd ? current + num : Math.max(0, current - num);
           return { ...g, currentAmount: updated };
         }
         return g;
@@ -471,16 +520,42 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
               </div>
             )}
 
-            {/* Goals List */}
-            <div className="space-y-3">
-              {goals.map((g) => {
-                const percent = g.targetAmount > 0 ? Math.min(100, Math.round((g.currentAmount / g.targetAmount) * 100)) : 0;
+            {/* Goals List with Framer Motion entry animations */}
+            <motion.div 
+              initial="hidden"
+              animate="visible"
+              variants={{
+                hidden: { opacity: 0 },
+                visible: {
+                  opacity: 1,
+                  transition: {
+                    staggerChildren: 0.08,
+                    delayChildren: 0.04,
+                  },
+                },
+              }}
+              className="space-y-3"
+            >
+              {(goals || []).map((g, index) => {
+                const targetNum = Number(g?.targetAmount) || 0;
+                const currentNum = Number(g?.currentAmount) || 0;
+                const percent = targetNum > 0 ? Math.min(100, Math.round((currentNum / targetNum) * 100)) : 0;
                 const isComplete = percent >= 100;
                 const isAdjusting = adjustGoalId === g.id;
 
                 return (
-                  <div
+                  <motion.div
                     key={g.id}
+                    layout
+                    variants={{
+                      hidden: { opacity: 0, y: 22, scale: 0.95 },
+                      visible: { 
+                        opacity: 1, 
+                        y: 0, 
+                        scale: 1, 
+                        transition: { type: 'spring', damping: 20, stiffness: 260 } 
+                      },
+                    }}
                     className={`p-4 rounded-2xl border transition-all ${
                       isComplete
                         ? 'bg-emerald-50/70 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800'
@@ -495,15 +570,20 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
                             {g.name}
                           </h4>
                           <span className="text-[11px] text-slate-500 dark:text-slate-400">
-                            Meta: R$ {g.targetAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                            Meta: R$ {(Number(g.targetAmount) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                           </span>
                         </div>
                       </div>
 
                       <div className="flex items-center gap-1.5">
-                        <span className={`text-xs font-extrabold ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}>
+                        <motion.span 
+                          initial={{ scale: 0.5, opacity: 0 }}
+                          animate={{ scale: 1, opacity: 1 }}
+                          transition={{ delay: 0.2 + index * 0.08, type: 'spring' }}
+                          className={`text-xs font-extrabold ${isComplete ? 'text-emerald-600 dark:text-emerald-400' : 'text-teal-600 dark:text-teal-400'}`}
+                        >
                           {percent}%
-                        </span>
+                        </motion.span>
                         {deletingGoalId === g.id ? (
                           <div className="flex items-center gap-1 bg-rose-50 dark:bg-rose-950/50 p-1 rounded-lg text-[10px] border border-rose-300 dark:border-rose-800">
                             <span className="text-rose-700 dark:text-rose-300 font-bold">Apagar?</span>
@@ -535,13 +615,15 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
                       </div>
                     </div>
 
-                    {/* Progress Bar */}
+                    {/* Progress Bar with smooth Framer Motion entry expansion */}
                     <div className="w-full h-2.5 bg-slate-200 dark:bg-slate-800 rounded-full overflow-hidden">
-                      <div
-                        className={`h-full transition-all duration-500 ${
+                      <motion.div
+                        initial={{ width: 0 }}
+                        animate={{ width: `${percent}%` }}
+                        transition={{ duration: 0.95, ease: [0.16, 1, 0.3, 1], delay: 0.15 + index * 0.08 }}
+                        className={`h-full rounded-full transition-colors ${
                           isComplete ? 'bg-emerald-500' : 'bg-gradient-to-r from-teal-500 to-emerald-400'
                         }`}
-                        style={{ width: `${percent}%` }}
                       />
                     </div>
 
@@ -549,7 +631,7 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
                       <span className="text-slate-600 dark:text-slate-400">
                         Guardado:{' '}
                         <strong className="text-slate-900 dark:text-white">
-                          R$ {g.currentAmount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+                          R$ {(Number(g.currentAmount) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
                         </strong>
                       </span>
 
@@ -602,10 +684,10 @@ export const BudgetGoalsModal: React.FC<BudgetGoalsModalProps> = ({
                         </div>
                       )}
                     </div>
-                  </div>
+                  </motion.div>
                 );
               })}
-            </div>
+            </motion.div>
           </div>
         )}
 

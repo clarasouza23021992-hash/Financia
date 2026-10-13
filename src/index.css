@@ -69,7 +69,7 @@
 
 /* iOS Safe Areas & Header / Modal Viewport Protections */
 .header-safe-top {
-  padding-top: env(safe-area-inset-top, 0.5rem);
+  padding-top: calc(env(safe-area-inset-top, 0px) + 0.65rem);
 }
 
 .bottom-nav-safe {

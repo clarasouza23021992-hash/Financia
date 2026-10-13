@@ -576,7 +576,10 @@ class CloudKitSyncEngine {
       };
 
       this.ws.onerror = () => {
-        this.ws?.close();
+        // Do not call this.ws?.close() directly here: per WebSocket specifications,
+        // an error automatically triggers the onclose event. Calling close() from within
+        // onerror causes infinite recursion ("RangeError: Maximum call stack size exceeded")
+        // if the socket is already closing or connection failed.
       };
     } catch (e) {
       console.warn('WebSocket connection not available:', e);

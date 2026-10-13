@@ -27,6 +27,23 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
   spouseProfileName = 'Esposa',
 }) => {
   const [showAuditDetails, setShowAuditDetails] = useState(false);
+  const [isCollapsed, setIsCollapsed] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('financas_couple_card_collapsed') === 'true';
+    } catch {
+      return false;
+    }
+  });
+
+  const toggleCollapse = () => {
+    setIsCollapsed(prev => {
+      const next = !prev;
+      try {
+        localStorage.setItem('financas_couple_card_collapsed', String(next));
+      } catch {}
+      return next;
+    });
+  };
 
   // Real revenues only, excluding any mock records
   const realRevenues = revenues.filter(r => !isMockRevenue(r));
@@ -122,15 +139,100 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
     return `R$ ${val.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   };
 
+  // COLLAPSED VIEW: Minimalist, space-saving 1-row summary for high usability
+  if (isCollapsed) {
+    return (
+      <div id="couple-revenue-summary" className="px-4 py-1.5 animate-fadeIn">
+        <div className="bg-gradient-to-r from-[#0A1128] via-[#0E1A38] to-[#12244E] text-white rounded-2xl p-2.5 sm:p-3 shadow-md border border-slate-700/60 relative overflow-hidden transition-all">
+          <div className="absolute -right-8 -top-8 w-24 h-24 bg-teal-500/10 rounded-full blur-xl pointer-events-none" />
+          
+          <div className="relative z-10 flex items-center justify-between gap-2">
+            {/* Clickable summary area to expand */}
+            <button
+              type="button"
+              onClick={toggleCollapse}
+              className="flex items-center gap-2.5 flex-1 min-w-0 text-left group active-press"
+              title="Toque para expandir detalhes da receita do casal"
+            >
+              <div className="w-8 h-8 rounded-xl bg-teal-400/20 text-[#00C49F] flex items-center justify-center shrink-0 font-bold group-hover:scale-105 transition-transform">
+                <Wallet className="w-4 h-4" />
+              </div>
+
+              <div className="min-w-0">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className="text-[11px] font-bold tracking-wider text-teal-300 uppercase truncate">
+                    Receita • {selectedMonth}
+                  </span>
+                  <span
+                    className={`text-[9.5px] font-extrabold px-1.5 py-0.5 rounded-md shrink-0 flex items-center gap-1 ${
+                      isAllPaid
+                        ? 'bg-emerald-500/25 text-emerald-300'
+                        : isSurplus
+                          ? 'bg-emerald-500/20 text-emerald-300'
+                          : 'bg-rose-500/20 text-rose-300'
+                    }`}
+                  >
+                    {isAllPaid ? (
+                      <>
+                        <CheckCircle2 className="w-2.5 h-2.5 text-emerald-400" />
+                        <span>100% Pago</span>
+                      </>
+                    ) : (
+                      <span>{isSurplus ? '+ Sobra' : '− Falta'} {formatBRL(Math.abs(projectedBalance))}</span>
+                    )}
+                  </span>
+                </div>
+
+                <div className="text-[11.5px] text-slate-200 font-semibold truncate flex items-center gap-2 mt-0.5">
+                  <span className="font-extrabold text-white">{formatBRL(grandTotalRevenue)}</span>
+                  <span className="text-slate-400">•</span>
+                  <span className="text-slate-300 text-[10.5px]">
+                    {userSalary > 0 && spouseSalary > 0 ? 'Salários Somados' : 'Renda Cadastrada'}
+                  </span>
+                  <span className="text-teal-400/80 text-[10px] hidden sm:inline">(Toque p/ expandir)</span>
+                </div>
+              </div>
+            </button>
+
+            {/* Quick Actions & Expand Button */}
+            <div className="flex items-center gap-1.5 shrink-0">
+              <button
+                type="button"
+                onClick={onOpenNewRevenue}
+                className="px-2 py-1 bg-teal-500/20 hover:bg-teal-500/30 text-teal-200 text-[10.5px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/30 active-press"
+                title="Cadastrar nova receita"
+              >
+                <Plus className="w-3.5 h-3.5 text-[#00C49F]" />
+                <span className="hidden xs:inline">+ Receita</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
+                title="Expandir detalhes da receita"
+                aria-label="Expandir detalhes da receita"
+              >
+                <ChevronDown className="w-3.5 h-3.5 text-teal-300" />
+                <span className="text-[10.5px]">Expandir</span>
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // EXPANDED VIEW: Complete detailed breakdown with Recolher button
   return (
-    <div id="couple-revenue-summary" className="px-4 py-1.5">
+    <div id="couple-revenue-summary" className="px-4 py-1.5 animate-fadeIn">
       <div className="bg-gradient-to-br from-[#0A1128] via-[#0E1A38] to-[#12244E] text-white rounded-2xl p-3 sm:p-3.5 shadow-md border border-slate-700/60 relative overflow-hidden">
         {/* Background glow decoration */}
         <div className="absolute -right-12 -top-12 w-40 h-40 bg-teal-500/15 rounded-full blur-2xl pointer-events-none" />
         <div className="absolute -left-12 -bottom-12 w-40 h-40 bg-purple-500/10 rounded-full blur-2xl pointer-events-none" />
 
         <div className="relative z-10 space-y-2">
-          {/* Top header line */}
+          {/* Top header line with expand/collapse control */}
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-2">
               <div className="w-8 h-8 rounded-xl bg-teal-400/20 text-[#00C49F] flex items-center justify-center font-bold">
@@ -150,20 +252,32 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
               <button
                 type="button"
                 onClick={onOpenRevenueList}
-                className="px-2.5 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
+                className="px-2 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
                 title="Ver lista detalhada de receitas"
               >
                 <TrendingUp className="w-3.5 h-3.5 text-teal-300" />
-                <span>Ver Todas</span>
+                <span className="hidden xs:inline">Ver Todas</span>
               </button>
 
               <button
                 type="button"
                 onClick={onOpenNewRevenue}
-                className="px-2.5 py-1 bg-teal-500/25 hover:bg-teal-500/35 active:bg-teal-500/40 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/40 active-press"
+                className="px-2 py-1 bg-teal-500/25 hover:bg-teal-500/35 active:bg-teal-500/40 text-teal-200 text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-teal-400/40 active-press"
               >
                 <Plus className="w-3.5 h-3.5 text-[#00C49F]" />
-                <span>+ Receita</span>
+                <span className="hidden xs:inline">+ Receita</span>
+              </button>
+
+              {/* Collapse button */}
+              <button
+                type="button"
+                onClick={toggleCollapse}
+                className="px-2 py-1 bg-white/10 hover:bg-white/20 active:bg-white/25 text-slate-300 hover:text-white text-[11px] font-bold rounded-lg flex items-center gap-1 transition-all border border-white/15 active-press"
+                title="Recolher card para liberar espaço na tela"
+                aria-label="Recolher card de receita"
+              >
+                <ChevronUp className="w-3.5 h-3.5 text-slate-300" />
+                <span className="text-[10.5px]">Recolher</span>
               </button>
             </div>
           </div>

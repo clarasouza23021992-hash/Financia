@@ -175,39 +175,15 @@ function saveSessions(sessions: Record<string, AuthSession>) {
   }
 }
 
-// Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
+// Filter out only explicitly marked mock/demo seed items
 function isMockBillServer(b: any): boolean {
   if (!b) return true;
-  // CRITICAL: Any bill edited by user, paid, with receipt, or user-created is NEVER a mock bill!
-  if (
-    b.isEdited === true ||
-    Boolean(b.lastEditedAt) ||
-    Boolean(b.paidAt) ||
-    Boolean(b.receiptUrl) ||
-    b.isRealUserDebt === true ||
-    b.isCustomized === true
-  ) {
-    return false;
-  }
+  // If explicitly flagged as mock/demo seed
   if (b.isMockSeed === true || b.isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
-  if (
-    id.startsWith('bill-mock-') ||
-    id.startsWith('bill-sample-') ||
-    id === 'bill-gas-pago'
-  ) {
+  if (id.startsWith('bill-mock-') || id.startsWith('bill-sample-')) {
     return true;
   }
-  // Only exact unedited preset IDs without any user action are mock seeds
-  if (
-    !b.paidAt && !b.receiptUrl && !b.isEdited &&
-    (id === 'bill-condominio' || id === 'bill-luz' || id === 'bill-gas' || id === 'bill-internet' || id === 'bill-financiamento' || id === 'bill-mercado' || id === 'bill-saude')
-  ) {
-    return true;
-  }
-  if (b.category === 'Salário & Renda') return true;
-  const lowerName = String(b.name || '').toLowerCase();
-  if (lowerName === 'meu salário' || lowerName === 'salário esposa' || lowerName === 'salario') return true;
   return false;
 }
 
@@ -227,27 +203,13 @@ function loadHouseholds(): Record<string, HouseholdData> {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const store: Record<string, HouseholdData> = JSON.parse(raw);
-      // Clean mock bills and mock revenues from all households
-      let changed = false;
-      Object.keys(store).forEach(k => {
-        const h = store[k];
-        if (h && Array.isArray(h.bills)) {
-          const originalLen = h.bills.length;
-          h.bills = h.bills.filter((b: any) => !isMockBillServer(b));
-          if (h.bills.length !== originalLen) changed = true;
-        }
-        if (h && Array.isArray(h.revenues)) {
-          const originalRevLen = h.revenues.length;
-          h.revenues = h.revenues.filter((r: any) => !isMockRevenueServer(r));
-          if (h.revenues.length !== originalRevLen) changed = true;
-        }
-      });
-      if (changed) {
-        fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf-8');
-      }
       return store;
     }
   } catch (err) {
+    console.error('Error reading households file:', err);
+  }
+  return {};
+}
     console.error('Error reading households file:', err);
   }
   return {};

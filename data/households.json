@@ -27,18 +27,9 @@
         "phone": ""
       }
     ],
-    "devices": [
-      {
-        "id": "dev_1791649097273_lgj98",
-        "name": "Carlos (iPhone)",
-        "model": "iPhone (Tela de Início)",
-        "owner": "Você",
-        "lastActive": "Agora mesmo",
-        "connectedAt": "2026-10-10T16:36:05.491Z"
-      }
-    ],
+    "devices": [],
     "isWifeConnected": false,
-    "lastUpdated": "2026-10-10T16:36:05.491Z",
+    "lastUpdated": "2026-10-14T13:00:00.000Z",
     "deletedBillIds": [
       "test-bill-1"
     ],

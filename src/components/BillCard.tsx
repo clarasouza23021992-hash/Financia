@@ -4,7 +4,7 @@ import {
   QrCode, Barcode, FileText, Paperclip, Undo2, Eye, Calendar, Sparkles
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
-import { motion, AnimatePresence } from 'motion/react';
+import { motion, AnimatePresence } from 'framer-motion';
 import { Bill, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { getCategoryInfo } from '../utils/categories';
 import { cloudkit } from '../services/cloudkitSync';

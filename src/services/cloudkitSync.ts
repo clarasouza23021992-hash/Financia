@@ -62,29 +62,12 @@ export const MOCK_BILL_IDS = [
 
 export function isMockBill(b: Partial<Bill>): boolean {
   if (!b) return true;
-  // CRITICAL: Any bill edited by user, marked as paid, with receipt, or user-created is NEVER mock!
-  if (
-    b.isEdited === true || 
-    Boolean(b.lastEditedAt) || 
-    Boolean(b.paidAt) || 
-    Boolean(b.receiptUrl) || 
-    (b as any).isRealUserDebt === true ||
-    (b as any).isCustomized === true
-  ) {
-    return false;
-  }
+  // Only explicitly flagged mock/sample items are mock
   if ((b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
-  if (
-    id.startsWith('bill-mock-') ||
-    id.startsWith('bill-sample-') ||
-    id === 'bill-gas-pago'
-  ) {
+  if (id.startsWith('bill-mock-') || id.startsWith('bill-sample-')) {
     return true;
   }
-  if (b.category === 'Salário & Renda') return true;
-  const lowerName = String(b.name || '').toLowerCase();
-  if (lowerName === 'meu salário' || lowerName === 'salário esposa') return true;
   return false;
 }
 

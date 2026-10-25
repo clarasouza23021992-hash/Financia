@@ -447,26 +447,26 @@ export const BackupModal: React.FC<BackupModalProps> = ({
 
               {/* Action Buttons */}
               <div className="space-y-2.5 pt-1">
+                {/* 1-Click Download Document Button */}
+                <button
+                  type="button"
+                  onClick={handleDownloadBackup}
+                  disabled={isProcessing}
+                  className="w-full py-3.5 px-4 bg-[#00C49F] hover:bg-[#00b290] disabled:bg-slate-300 text-[#0A1128] font-black rounded-xl text-xs sm:text-sm active-press flex items-center justify-center gap-2 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
+                >
+                  <Download className={`w-4 h-4 ${isProcessing ? 'animate-bounce' : ''}`} />
+                  <span>{isProcessing ? 'Baixando Arquivo...' : 'Baixar Documento Completo (.json)'}</span>
+                </button>
+
                 {/* 1-Click Email Backup Button */}
                 <button
                   type="button"
                   onClick={handleEmailBackup}
                   disabled={isProcessing}
-                  className="w-full py-3 px-4 bg-[#00C49F] hover:bg-[#00b290] disabled:bg-slate-300 text-[#0A1128] font-black rounded-xl text-xs sm:text-sm active-press flex items-center justify-center gap-2 shadow-md shadow-teal-500/20 transition-all cursor-pointer"
-                >
-                  <Mail className={`w-4 h-4 ${isProcessing ? 'animate-spin' : ''}`} />
-                  <span>{isProcessing ? 'Preparando Arquivo...' : '1-Clique: Enviar Backup para o E-mail'}</span>
-                </button>
-
-                {/* 1-Click Download Button */}
-                <button
-                  type="button"
-                  onClick={handleDownloadBackup}
-                  disabled={isProcessing}
                   className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold rounded-xl text-xs active-press flex items-center justify-center gap-2 transition-all border border-slate-300 dark:border-slate-700 cursor-pointer"
                 >
-                  <Download className="w-4 h-4 text-teal-600 dark:text-teal-400" />
-                  <span>Baixar Arquivo no Aparelho (.json)</span>
+                  <Mail className={`w-4 h-4 text-teal-600 dark:text-teal-400 ${isProcessing ? 'animate-spin' : ''}`} />
+                  <span>Enviar Cópia para o E-mail</span>
                 </button>
 
                 {/* WhatsApp Share Button */}

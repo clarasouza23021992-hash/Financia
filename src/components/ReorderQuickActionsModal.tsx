@@ -17,7 +17,7 @@ export const DEFAULT_QUICK_ACTIONS: QuickActionConfig[] = [
   { id: 'whatsapp_summary', label: 'Resumo WhatsApp', icon: 'MessageCircle', description: 'Cartão visual e texto para enviar no WhatsApp do casal' },
   { id: 'scanner', label: 'Escanear Boleto / Pix', icon: 'ScanLine', description: 'Leitor de código de barras e chave Pix com câmera' },
   { id: 'gallery', label: 'Galeria Comprovantes', icon: 'Images', description: 'Visualizador de fotos e prints de comprovantes do mês' },
-  { id: 'budget', label: 'Metas & Teto', icon: 'Target', description: 'Metas de economia e tetos por categoria' },
+  { id: 'budget', label: 'Teto de Gastos', icon: 'SlidersHorizontal', description: 'Definir tetos e limites de gastos por categoria' },
   { id: 'reminders', label: 'Lembretes', icon: 'Bell', description: 'Central de avisos e notificações de vencimento' },
   { id: 'calculator', label: 'Calculadora', icon: 'Calculator', description: 'Calculadora rápida com lançamento direto em conta' },
   { id: 'categories', label: 'Categorias', icon: 'Tag', description: 'Gerenciar categorias de gastos da casa' },

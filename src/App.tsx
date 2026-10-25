@@ -4,7 +4,7 @@ import {
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
-  RefreshCw, ScanLine, Calculator, Target, Clock, Paperclip, Tag,
+  RefreshCw, ScanLine, Calculator, Clock, Paperclip, Tag,
   Images, X, RotateCcw, MessageCircle, Palette
 } from 'lucide-react';
 import { 
@@ -1311,6 +1311,7 @@ export default function App() {
       {/* Native App Header */}
       <Header
         activeDevice={activeDevice}
+        selectedMonth={selectedMonth.label}
         onOpenNewBill={() => {
           setEditingBill(null);
           setIsBillModalOpen(true);
@@ -1559,8 +1560,8 @@ export default function App() {
                       onClick={() => setIsBudgetModalOpen(true)}
                       className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
                     >
-                      <Target className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                      <span>Metas & Teto</span>
+                      <SlidersHorizontal className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
+                      <span>Teto de Gastos</span>
                     </button>
                   );
                 }
@@ -1885,7 +1886,7 @@ export default function App() {
                   exit={{ opacity: 0, y: -8, filter: 'blur(1px)' }}
                   transition={{ duration: 0.2, ease: [0.25, 0.1, 0.25, 1] }}
                 >
-                  {/* Tab 3: Full Screen Real-Time Sync & Family Hub */}
+                  {/* Tab 4: Full Screen Real-Time Sync & Family Hub */}
                   <ErrorBoundary fallbackTitle="Painel de Sincronia">
                     <SyncView
                       activeDevice={activeDevice}
@@ -1912,8 +1913,8 @@ export default function App() {
       </main>
 
       {/* Native Bottom Tab Bar Navigation */}
-      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 px-3 sm:px-6 py-1.5 shadow-lg">
-        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-2">
+      <nav className="flex-shrink-0 z-40 w-full bg-white/95 dark:bg-[#0A1128]/95 backdrop-blur-xl border-t border-slate-200/80 dark:border-slate-800/80 px-2 sm:px-6 py-1.5 shadow-lg">
+        <div className="max-w-xl md:max-w-2xl lg:max-w-3xl mx-auto flex items-center justify-around gap-1 sm:gap-2">
           {/* Tab 1: Contas / Dívidas */}
           <motion.button
             whileTap={{ scale: 0.94 }}
@@ -1922,7 +1923,7 @@ export default function App() {
               backgroundColor: currentAccentTheme.subtleBg,
               color: currentAccentTheme.primary,
             } : undefined}
-            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
+            className={`relative flex flex-col items-center gap-1 py-1 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'bills'
                 ? 'font-extrabold shadow-2xs'
                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -1936,7 +1937,7 @@ export default function App() {
                 </span>
               )}
             </div>
-            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Dívidas</span>
+            <span className="text-[10px] sm:text-[10.5px] tracking-tight whitespace-nowrap">Dívidas</span>
           </motion.button>
 
           {/* Tab 2: Fluxo de Caixa */}
@@ -1947,14 +1948,14 @@ export default function App() {
               backgroundColor: currentAccentTheme.subtleBg,
               color: currentAccentTheme.primary,
             } : undefined}
-            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
+            className={`relative flex flex-col items-center gap-1 py-1 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'cashflow'
                 ? 'font-extrabold shadow-2xs'
                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
             }`}
           >
             <TrendingUp className="w-5 h-5 stroke-[2.2]" />
-            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Fluxo</span>
+            <span className="text-[10px] sm:text-[10.5px] tracking-tight whitespace-nowrap">Fluxo</span>
           </motion.button>
 
           {/* Tab 3: Sincronia View */}
@@ -1965,7 +1966,7 @@ export default function App() {
               backgroundColor: currentAccentTheme.subtleBg,
               color: currentAccentTheme.primary,
             } : undefined}
-            className={`relative flex flex-col items-center gap-1 py-1.5 px-4 rounded-2xl transition-all cursor-pointer ${
+            className={`relative flex flex-col items-center gap-1 py-1 px-3 sm:px-4 rounded-2xl transition-all cursor-pointer ${
               currentTab === 'sync'
                 ? 'font-extrabold shadow-2xs'
                 : 'text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 font-semibold'
@@ -1978,7 +1979,7 @@ export default function App() {
                 style={{ backgroundColor: currentAccentTheme.primary }}
               />
             </div>
-            <span className="text-[10.5px] tracking-tight whitespace-nowrap">Sincronia</span>
+            <span className="text-[10px] sm:text-[10.5px] tracking-tight whitespace-nowrap">Sincronia</span>
           </motion.button>
         </div>
       </nav>

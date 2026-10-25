@@ -320,6 +320,24 @@ export interface CategoryBudget {
   limit: number;
 }
 
+export interface GoalContribution {
+  id: string;
+  goalId: string;
+  date: string;
+  amount: number;
+  contributedBy: string;
+  note?: string;
+  sourceMonth?: string;
+  type: 'deposit' | 'withdrawal';
+}
+
+export interface SavingsGoalPartnerSplit {
+  partner1Name?: string;
+  partner1Amount?: number;
+  partner2Name?: string;
+  partner2Amount?: number;
+}
+
 export interface SavingsGoal {
   id: string;
   name: string;
@@ -327,6 +345,16 @@ export interface SavingsGoal {
   currentAmount: number;
   targetDate?: string;
   icon?: string;
+  category?: 'reserva' | 'viagem' | 'casa' | 'carro' | 'investimento' | 'outros' | string;
+  monthlyTarget?: number;
+  color?: string;
+  notes?: string;
+  partnerSplit?: SavingsGoalPartnerSplit;
+  contributions?: GoalContribution[];
+  isCompleted?: boolean;
+  completedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 export interface ChangeNotification {

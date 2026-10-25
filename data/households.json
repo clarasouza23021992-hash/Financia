@@ -27,9 +27,18 @@
         "phone": ""
       }
     ],
-    "devices": [],
+    "devices": [
+      {
+        "id": "dev_1792895411284_s5zh1",
+        "name": "Carlos (iPhone)",
+        "model": "Computador / Web",
+        "owner": "Você",
+        "lastActive": "2026-10-25T02:44:30.547Z",
+        "connectedAt": "2026-10-25T02:43:58.592Z"
+      }
+    ],
     "isWifeConnected": false,
-    "lastUpdated": "2026-10-14T13:00:00.000Z",
+    "lastUpdated": "2026-10-25T02:44:30.547Z",
     "deletedBillIds": [
       "test-bill-1"
     ],
@@ -42,7 +51,7 @@
         "sourceDeviceName": "Paula (iPhone)",
         "sourceUserName": "Paula",
         "actionType": "bill_paid",
-        "title": "Conta Paga! ✅",
+        "title": "Conta Paga!",
         "message": "Paula marcou \"Teste Luz\" como PAGA",
         "targetItemName": "Teste Luz",
         "amount": 150,

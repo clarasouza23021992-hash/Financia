@@ -175,21 +175,90 @@ function saveSessions(sessions: Record<string, AuthSession>) {
   }
 }
 
-// Filter out only explicitly marked mock/demo seed items
-function isMockBillServer(b: any): boolean {
-  if (!b) return true;
-  // If explicitly flagged as mock/demo seed
+function isFakePresetBillServer(b: any): boolean {
+  if (!b) return false;
   if (b.isMockSeed === true || b.isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
-  if (id.startsWith('bill-mock-') || id.startsWith('bill-sample-')) {
+  if (
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id.startsWith('bill-preset-') ||
+    id.startsWith('bill-condominio-202') ||
+    id.startsWith('bill-luz-202') ||
+    id.startsWith('bill-gas-202') ||
+    id.startsWith('bill-internet-202') ||
+    id.startsWith('bill-moradia-202') ||
+    id.startsWith('bill-financiamento-202') ||
+    id.startsWith('bill-mercado-202') ||
+    id.startsWith('bill-saude-202') ||
+    id.startsWith('bill-streaming-202') ||
+    id.startsWith('bill-teste-luz-')
+  ) {
     return true;
   }
+  return false;
+}
+
+function isFakePresetRevenueServer(r: any): boolean {
+  if (!r) return false;
+  if (r.isMockSeed === true || r.isDemoPlaceholder === true) return true;
+  const id = String(r.id || '');
+  if (
+    id.startsWith('rev-mock-') ||
+    id.startsWith('rev-sample-') ||
+    id.startsWith('rev-preset-') ||
+    id.startsWith('rev-carlos-202') ||
+    id.startsWith('rev-paula-202') ||
+    id.startsWith('rev-invest-202')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+// Filter out only explicitly marked mock/demo seed items or invented bills, NEVER real user bills
+function isMockBillServer(b: any): boolean {
+  if (!b) return true;
+  // Always purge fake preset bills even if flagged with isRealUserDebt or isEdited
+  if (isFakePresetBillServer(b)) return true;
+  if (b.isMockSeed === true || b.isDemoPlaceholder === true) return true;
+
+  // CRITICAL: Any bill edited by user, paid, with receipt, or user-created is NEVER a mock bill!
+  if (
+    b.isEdited === true ||
+    Boolean(b.lastEditedAt) ||
+    Boolean(b.paidAt) ||
+    Boolean(b.receiptUrl) ||
+    b.isRealUserDebt === true ||
+    b.isCustomized === true
+  ) {
+    return false;
+  }
+  const id = String(b.id || '');
+  if (
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id === 'bill-gas-pago'
+  ) {
+    return true;
+  }
+  // Only exact unedited preset IDs without any user action are mock seeds
+  if (
+    !b.paidAt && !b.receiptUrl && !b.isEdited &&
+    (id === 'bill-condominio' || id === 'bill-luz' || id === 'bill-gas' || id === 'bill-internet' || id === 'bill-financiamento' || id === 'bill-mercado' || id === 'bill-saude')
+  ) {
+    return true;
+  }
+  if (b.category === 'Salário & Renda') return true;
+  const lowerName = String(b.name || '').toLowerCase();
+  if (lowerName === 'meu salário' || lowerName === 'salário esposa' || lowerName === 'salario') return true;
   return false;
 }
 
 // Filter out only explicitly marked mock/demo seed revenues
 function isMockRevenueServer(r: any): boolean {
   if (!r) return true;
+  if (isFakePresetRevenueServer(r)) return true;
   if (r.isMockSeed === true || r.isDemoPlaceholder === true) return true;
   const id = String(r.id || '');
   if (id.startsWith('rev-mock-') || id.startsWith('rev-sample-')) {
@@ -203,13 +272,27 @@ function loadHouseholds(): Record<string, HouseholdData> {
     if (fs.existsSync(DATA_FILE)) {
       const raw = fs.readFileSync(DATA_FILE, 'utf-8');
       const store: Record<string, HouseholdData> = JSON.parse(raw);
+      // Clean mock bills and mock revenues from all households
+      let changed = false;
+      Object.keys(store).forEach(k => {
+        const h = store[k];
+        if (h && Array.isArray(h.bills)) {
+          const originalLen = h.bills.length;
+          h.bills = h.bills.filter((b: any) => !isMockBillServer(b));
+          if (h.bills.length !== originalLen) changed = true;
+        }
+        if (h && Array.isArray(h.revenues)) {
+          const originalRevLen = h.revenues.length;
+          h.revenues = h.revenues.filter((r: any) => !isMockRevenueServer(r));
+          if (h.revenues.length !== originalRevLen) changed = true;
+        }
+      });
+      if (changed) {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(store, null, 2), 'utf-8');
+      }
       return store;
     }
   } catch (err) {
-    console.error('Error reading households file:', err);
-  }
-  return {};
-}
     console.error('Error reading households file:', err);
   }
   return {};
@@ -234,13 +317,37 @@ function getOrCreateHousehold(cleanId: string): { store: Record<string, Househol
       bills: [],
       revenues: [],
       devices: [],
-      profiles: [],
+      profiles: [
+        {
+          id: 'p1',
+          name: 'Carlos',
+          role: 'Administrador da Casa',
+          splitShare: 50,
+          splitPercentage: 50,
+          color: '#3B82F6',
+          avatar: '👤',
+          phone: '',
+        },
+        {
+          id: 'p2',
+          name: 'Paula',
+          role: 'Administradora da Casa',
+          splitShare: 50,
+          splitPercentage: 50,
+          color: '#EC4899',
+          avatar: '👩🏻',
+          phone: '',
+        },
+      ],
       notifications: [],
       lastUpdated: new Date().toISOString(),
       deletedBillIds: [],
       deletedRevenueIds: [],
+      deletedSeriesSlugs: [],
+      deletedMonthInstances: [],
     };
     store[cleanId] = household;
+    saveHouseholds(store);
   }
   return { store, household };
 }

@@ -28,6 +28,24 @@ const STORAGE_KEY_PAYMENT_LOGS = 'financas_cloudkit_payment_logs_v1';
 const STORAGE_KEY_SAFETY_VAULT_BILLS = 'financas_safety_vault_bills_v1';
 const STORAGE_KEY_SAFETY_VAULT_REVENUES = 'financas_safety_vault_revenues_v1';
 
+export interface VaultSnapshot {
+  id: string;
+  createdAt: string;
+  formattedDate: string;
+  billsCount: number;
+  paidBillsCount: number;
+  revenuesCount: number;
+  totalBillsAmount: number;
+  totalRevenuesAmount: number;
+  label?: string;
+  payload: {
+    bills: Bill[];
+    revenues: Revenue[];
+    categories?: any[];
+    profiles?: any[];
+  };
+}
+
 export const DEFAULT_PROFILES: UserProfile[] = [
   { id: 'p1', name: 'Carlos', role: 'Administrador da Casa', splitShare: 50, splitPercentage: 50, color: '#3B82F6', avatar: '👤', phone: '' },
   { id: 'p2', name: 'Paula', role: 'Administradora da Casa', splitShare: 50, splitPercentage: 50, color: '#EC4899', avatar: '👩🏻', phone: '' },
@@ -60,19 +78,66 @@ export const MOCK_BILL_IDS = [
   'bill-saude',
 ];
 
-export function isMockBill(b: Partial<Bill>): boolean {
-  if (!b) return true;
-  // Only explicitly flagged mock/sample items are mock
+export function isFakePresetBill(b: Partial<Bill>): boolean {
+  if (!b) return false;
   if ((b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true) return true;
   const id = String(b.id || '');
-  if (id.startsWith('bill-mock-') || id.startsWith('bill-sample-')) {
+  if (
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id.startsWith('bill-preset-') ||
+    id.startsWith('bill-condominio-202') ||
+    id.startsWith('bill-luz-202') ||
+    id.startsWith('bill-gas-202') ||
+    id.startsWith('bill-internet-202') ||
+    id.startsWith('bill-moradia-202') ||
+    id.startsWith('bill-financiamento-202') ||
+    id.startsWith('bill-mercado-202') ||
+    id.startsWith('bill-saude-202') ||
+    id.startsWith('bill-streaming-202') ||
+    id.startsWith('bill-teste-luz-')
+  ) {
     return true;
   }
   return false;
 }
 
+export function isFakePresetRevenue(r: Partial<Revenue>): boolean {
+  if (!r) return false;
+  if ((r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true) return true;
+  const id = String(r.id || '');
+  if (
+    id.startsWith('rev-mock-') ||
+    id.startsWith('rev-sample-') ||
+    id.startsWith('rev-preset-') ||
+    id.startsWith('rev-carlos-202') ||
+    id.startsWith('rev-paula-202') ||
+    id.startsWith('rev-invest-202')
+  ) {
+    return true;
+  }
+  return false;
+}
+
+export function isMockBill(b: Partial<Bill>): boolean {
+  if (!b) return true;
+  if (isFakePresetBill(b)) return true;
+  if ((b as any).isMockSeed === true || (b as any).isDemoPlaceholder === true) return true;
+  const id = String(b.id || '');
+  if (
+    id.startsWith('bill-mock-') ||
+    id.startsWith('bill-sample-') ||
+    id === 'bill-gas-pago'
+  ) {
+    return true;
+  }
+  if (b.category === 'Salário & Renda') return true;
+  return false;
+}
+
 export function isMockRevenue(r: Partial<Revenue>): boolean {
   if (!r) return true;
+  if (isFakePresetRevenue(r)) return true;
   if ((r as any).isMockSeed === true || (r as any).isDemoPlaceholder === true) return true;
   const id = String(r.id || '');
   if (id.startsWith('rev-mock-') || id.startsWith('rev-sample-')) {
@@ -559,7 +624,10 @@ class CloudKitSyncEngine {
       };
 
       this.ws.onerror = () => {
-        this.ws?.close();
+        // Do not call this.ws?.close() directly here: per WebSocket specifications,
+        // an error automatically triggers the onclose event. Calling close() from within
+        // onerror causes infinite recursion ("RangeError: Maximum call stack size exceeded")
+        // if the socket is already closing or connection failed.
       };
     } catch (e) {
       console.warn('WebSocket connection not available:', e);
@@ -1026,9 +1094,9 @@ class CloudKitSyncEngine {
       // Strip only exact legacy mock bills
       let cleaned = parsed.filter(b => !isMockBill(b));
       
-      // Safety safeguard: if filtering purged everything, but parsed had real bills, keep them!
+      // Safety safeguard: keep non-mock real bills if any exist
       if (cleaned.length === 0 && parsed.length > 0) {
-        const potentialReal = parsed.filter(b => b && (Number(b.amount) > 0 || (b.name && b.name.trim().length > 0)));
+        const potentialReal = parsed.filter(b => b && !isFakePresetBill(b) && !isMockBill(b) && (Number(b.amount) > 0 || (b.name && b.name.trim().length > 0)));
         if (potentialReal.length > 0) {
           cleaned = potentialReal;
         }
@@ -3858,6 +3926,147 @@ class CloudKitSyncEngine {
   }
 
   /**
+   * Creates a dedicated point-in-time snapshot stored in local Vault
+   */
+  public createVaultSnapshot(label?: string): VaultSnapshot {
+    const bills = this.getBills().filter(b => !isMockBill(b));
+    const revenues = this.getRevenues().filter(r => !isMockRevenue(r));
+    const categories = getStoredCategories();
+    const profiles = this.getProfiles();
+    const now = new Date();
+    const nowIso = now.toISOString();
+    const formattedDate = `${now.toLocaleDateString('pt-BR')} às ${now.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })}`;
+    const paidBillsCount = bills.filter(b => b.status === 'paid').length;
+    const totalBillsAmount = bills.reduce((acc, b) => acc + (b.amount || 0), 0);
+    const totalRevenuesAmount = revenues.reduce((acc, r) => acc + (r.amount || 0), 0);
+
+    const snapshot: VaultSnapshot = {
+      id: `snap-${Date.now()}`,
+      createdAt: nowIso,
+      formattedDate,
+      billsCount: bills.length,
+      paidBillsCount,
+      revenuesCount: revenues.length,
+      totalBillsAmount,
+      totalRevenuesAmount,
+      label: label || `Ponto Seguro (${bills.length} contas, ${revenues.length} receitas)`,
+      payload: {
+        bills,
+        revenues,
+        categories,
+        profiles,
+      },
+    };
+
+    if (typeof window !== 'undefined') {
+      try {
+        const existingRaw = localStorage.getItem('financas_vault_snapshots_list');
+        const existingList: VaultSnapshot[] = existingRaw ? JSON.parse(existingRaw) : [];
+        const updated = [snapshot, ...existingList.filter(s => s && s.id !== snapshot.id)].slice(0, 15);
+        localStorage.setItem('financas_vault_snapshots_list', JSON.stringify(updated));
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(bills));
+        localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(revenues));
+      } catch (err) {
+        console.warn('Failed to save vault snapshot:', err);
+      }
+    }
+
+    return snapshot;
+  }
+
+  /**
+   * Retrieves list of saved vault snapshots
+   */
+  public getVaultSnapshots(): VaultSnapshot[] {
+    if (typeof window === 'undefined') return [];
+    try {
+      const raw = localStorage.getItem('financas_vault_snapshots_list');
+      if (!raw) {
+        const rawVault = localStorage.getItem(STORAGE_KEY_SAFETY_VAULT_BILLS);
+        if (rawVault) {
+          const bills = JSON.parse(rawVault).filter((b: any) => !isMockBill(b));
+          if (bills.length > 0) {
+            return [this.createVaultSnapshot('Ponto Inicial do Cofre')];
+          }
+        }
+        return [];
+      }
+      return JSON.parse(raw);
+    } catch {
+      return [];
+    }
+  }
+
+  /**
+   * Restores data from a specific vault snapshot
+   */
+  public restoreVaultSnapshot(snapshotId: string, mode: 'replace' | 'merge' = 'replace'): {
+    success: boolean;
+    message: string;
+    billsCount: number;
+    revenuesCount: number;
+  } {
+    const list = this.getVaultSnapshots();
+    const snap = list.find(s => s.id === snapshotId);
+    if (!snap) {
+      return { success: false, message: 'Ponto de restauração não encontrado.', billsCount: 0, revenuesCount: 0 };
+    }
+    const incomingBills = (snap.payload.bills || []).filter(b => !isMockBill(b));
+    const incomingRevenues = (snap.payload.revenues || []).filter(r => !isMockRevenue(r));
+
+    let finalBills: Bill[] = [];
+    if (mode === 'merge') {
+      const cur = this.getBills();
+      const existingIds = new Set(cur.map(b => b.id));
+      finalBills = [...cur, ...incomingBills.filter(b => !existingIds.has(b.id))];
+    } else {
+      finalBills = incomingBills;
+    }
+
+    let finalRevs: Revenue[] = [];
+    if (mode === 'merge') {
+      const cur = this.getRevenues();
+      const existingIds = new Set(cur.map(r => r.id));
+      finalRevs = [...cur, ...incomingRevenues.filter(r => !existingIds.has(r.id))];
+    } else {
+      finalRevs = incomingRevenues;
+    }
+
+    this.safeSaveBillsToStorage(finalBills);
+    this.saveRevenues(finalRevs);
+
+    if (snap.payload.categories && snap.payload.categories.length > 0) {
+      saveStoredCategories(snap.payload.categories);
+    }
+    if (snap.payload.profiles && snap.payload.profiles.length > 0) {
+      this.saveProfiles(snap.payload.profiles);
+    }
+
+    this.syncWithServer();
+    this.broadcastUpdate('BILLS_UPDATED', { count: finalBills.length });
+    this.broadcastUpdate('REVENUES_UPDATED', { count: finalRevs.length });
+
+    return {
+      success: true,
+      message: `Ponto de "${snap.formattedDate}" restaurado com sucesso! (${finalBills.length} contas, ${finalRevs.length} receitas)`,
+      billsCount: finalBills.length,
+      revenuesCount: finalRevs.length,
+    };
+  }
+
+  /**
+   * Deletes a vault snapshot
+   */
+  public deleteVaultSnapshot(snapshotId: string): void {
+    if (typeof window === 'undefined') return;
+    try {
+      const list = this.getVaultSnapshots();
+      const updated = list.filter(s => s.id !== snapshotId);
+      localStorage.setItem('financas_vault_snapshots_list', JSON.stringify(updated));
+    } catch {}
+  }
+
+  /**
    * Restores a backup from server file
    */
   public async restoreServerBackup(filename: string, mode: 'replace' | 'merge' = 'replace'): Promise<{ success: boolean; message: string }> {
@@ -4015,20 +4224,70 @@ class CloudKitSyncEngine {
     // Purge any corrupted tombstones that might hide newly created items
     localStorage.removeItem('financas_deleted_revenue_ids');
 
-    // Purge mock bills and mock revenues if any exist in local storage
-    const bills = this.getBills();
-    const cleanBills = bills.filter(b => !isMockBill(b));
-    if (cleanBills.length !== bills.length) {
-      localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(cleanBills));
-      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(cleanBills));
-    }
+    const cleanStorageKeyBills = (key: string) => {
+      try {
+        const val = localStorage.getItem(key);
+        if (val && val !== '[]' && val !== 'null') {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(b => b && !isMockBill(b));
+            if (filtered.length !== parsed.length) {
+              if (filtered.length > 0) {
+                localStorage.setItem(key, JSON.stringify(filtered));
+              } else {
+                localStorage.removeItem(key);
+              }
+            }
+          }
+        }
+      } catch {}
+    };
 
-    const revs = this.getRevenues();
-    const cleanRevs = revs.filter(r => !isMockRevenue(r));
-    if (cleanRevs.length !== revs.length) {
-      localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(cleanRevs));
-      localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(cleanRevs));
-    }
+    const cleanStorageKeyRevs = (key: string) => {
+      try {
+        const val = localStorage.getItem(key);
+        if (val && val !== '[]' && val !== 'null') {
+          const parsed = JSON.parse(val);
+          if (Array.isArray(parsed)) {
+            const filtered = parsed.filter(r => r && !isMockRevenue(r));
+            if (filtered.length !== parsed.length) {
+              if (filtered.length > 0) {
+                localStorage.setItem(key, JSON.stringify(filtered));
+              } else {
+                localStorage.removeItem(key);
+              }
+            }
+          }
+        }
+      } catch {}
+    };
+
+    const fallbackBillKeys = [
+      STORAGE_KEY_BILLS,
+      STORAGE_KEY_SAFETY_VAULT_BILLS,
+      'financas_safety_vault_bills_v2',
+      'financas_safety_vault_bills_v1',
+      'financas_cloudkit_bills_v3',
+      'financas_cloudkit_bills_v2',
+      'financas_cloudkit_bills_v1',
+      'financas_cloudkit_bills',
+      'financas_bills_v3',
+      'financas_bills_v2',
+      'financas_bills',
+      'household_bills',
+      'financas_bills_backup',
+      'financas_bills_local',
+    ];
+    fallbackBillKeys.forEach(cleanStorageKeyBills);
+
+    const fallbackRevKeys = [
+      STORAGE_KEY_REVENUES,
+      STORAGE_KEY_SAFETY_VAULT_REVENUES,
+      'financas_cloudkit_revenues_v2',
+      'financas_cloudkit_revenues_v1',
+      'financas_cloudkit_revenues',
+    ];
+    fallbackRevKeys.forEach(cleanStorageKeyRevs);
 
     return false;
   }
@@ -5033,234 +5292,42 @@ class CloudKitSyncEngine {
     };
   }
 
-  // Restore complete household preset (Carlos & Paula) with realistic household bills
-  public restoreCouplePresetData(targetMonthId: string = '2026-11'): { bills: Bill[]; revenues: Revenue[] } {
-    const month = targetMonthId || '2026-11';
-    const activeDev = this.getActiveDevice().name || 'iPhone Carlos';
-    const nowIso = new Date().toISOString();
+  // Completely purge all fictitious sample debts and fake revenues, resetting to clean real data
+  public async purgeAllFakePresetData(): Promise<{ billsRemoved: number; revenuesRemoved: number }> {
+    if (typeof window === 'undefined') return { billsRemoved: 0, revenuesRemoved: 0 };
 
-    const presetBills: Bill[] = [
-      {
-        id: `bill-preset-condominio-${month}`,
-        name: 'Taxa de Condomínio',
-        amount: 580.00,
-        dueDate: `${month}-10`,
-        category: 'Moradia & Condomínio',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Administradora do Condomínio',
-        notes: 'Boleto mensal do condomínio.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 290.00 },
-          { name: 'Paula', percentage: 50, amount: 290.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-luz-${month}`,
-        name: 'Energia Elétrica (Enel)',
-        amount: 245.60,
-        dueDate: `${month}-15`,
-        category: 'Energia Elétrica (Luz)',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Enel Distribuição',
-        notes: 'Consumo de energia da residência.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 122.80 },
-          { name: 'Paula', percentage: 50, amount: 122.80 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-gas-${month}`,
-        name: 'Gás Encanado (Comgás)',
-        amount: 85.40,
-        dueDate: `${month}-18`,
-        category: 'Gás (Encanado / Botijão)',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Comgás',
-        notes: 'Consumo de gás encanado.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 42.70 },
-          { name: 'Paula', percentage: 50, amount: 42.70 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-internet-${month}`,
-        name: 'Internet Fibra Óptica',
-        amount: 139.90,
-        dueDate: `${month}-20`,
-        category: 'Internet, TV & Telefonia',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Claro Fibra / Vivo',
-        notes: 'Banda larga residencial 600 Mega.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 69.95 },
-          { name: 'Paula', percentage: 50, amount: 69.95 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-moradia-${month}`,
-        name: 'Financiamento Imobiliário / Aluguel',
-        amount: 2450.00,
-        dueDate: `${month}-10`,
-        category: 'Financiamentos & Empréstimos',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Caixa Econômica / Locador',
-        notes: 'Parcela mensal da moradia da família.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 1225.00 },
-          { name: 'Paula', percentage: 50, amount: 1225.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-mercado-${month}`,
-        name: 'Supermercado & Feira do Mês',
-        amount: 1650.00,
-        dueDate: `${month}-08`,
-        category: 'Alimentação & Supermercado',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Supermercado Principal',
-        notes: 'Compras essenciais de mercado e mantimentos.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 825.00 },
-          { name: 'Paula', percentage: 50, amount: 825.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'variable_value',
-      },
-      {
-        id: `bill-preset-saude-${month}`,
-        name: 'Plano de Saúde Familiar',
-        amount: 980.00,
-        dueDate: `${month}-25`,
-        category: 'Saúde & Farmácia',
-        status: 'pending',
-        recurrence: 'Mensal Fixa',
-        favored: 'Operadora de Saúde',
-        notes: 'Mensalidade do plano de saúde do casal.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 490.00 },
-          { name: 'Paula', percentage: 50, amount: 490.00 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-      {
-        id: `bill-preset-streaming-${month}`,
-        name: 'Streaming & Assinaturas',
-        amount: 69.90,
-        dueDate: `${month}-12`,
-        category: 'Lazer & Assinaturas',
-        status: 'paid',
-        paidAt: `${month}-05T12:00:00.000Z`,
-        paidBy: 'Carlos',
-        recurrence: 'Mensal Fixa',
-        favored: 'Netflix / Spotify Família',
-        notes: 'Serviços de entretenimento digital da casa.',
-        barcode: '',
-        pixKey: '',
-        pixType: 'Pix Copia e Cola',
-        splitHousehold: true,
-        splitDetails: [
-          { name: 'Carlos', percentage: 50, amount: 34.95 },
-          { name: 'Paula', percentage: 50, amount: 34.95 },
-        ],
-        version: 1,
-        updatedAt: nowIso,
-        updatedByDevice: activeDev,
-        isSynced: true,
-        fixedValueType: 'fixed_value',
-      },
-    ];
+    const rawBills = this.getBills();
+    const realBills = rawBills.filter(b => !isFakePresetBill(b) && !isMockBill(b));
+    const billsRemoved = rawBills.length - realBills.length;
+    localStorage.setItem(STORAGE_KEY_BILLS, JSON.stringify(realBills));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_BILLS, JSON.stringify(realBills));
 
-    // Remove tombstones for preset IDs
-    const presetIds = presetBills.map(b => b.id);
-    const cleanDeleted = this.getDeletedBillIds().filter(id => !presetIds.includes(id));
-    localStorage.setItem('financas_deleted_bill_ids', JSON.stringify(cleanDeleted));
+    const rawRevs = this.getRevenues();
+    const realRevs = rawRevs.filter(r => !isFakePresetRevenue(r) && !isMockRevenue(r));
+    const revenuesRemoved = rawRevs.length - realRevs.length;
+    localStorage.setItem(STORAGE_KEY_REVENUES, JSON.stringify(realRevs));
+    localStorage.setItem(STORAGE_KEY_SAFETY_VAULT_REVENUES, JSON.stringify(realRevs));
 
-    // Clear series slugs for preset bills so they propagate properly
-    const presetNames = presetBills.map(b => b.name.trim().toLowerCase().normalize('NFD').replace(/[\u0300-\u036f]/g, ''));
-    const cleanSlugs = this.getDeletedSeriesSlugs().filter(s => {
-      return !presetNames.some(pn => {
-        const slug = pn.replace(/[^a-z0-9]/g, '-').substring(0, 24);
-        return s === slug || s === pn;
+    this.broadcastUpdate('BILLS_UPDATED', { count: realBills.length });
+    this.broadcastUpdate('REVENUES_UPDATED', { count: realRevs.length });
+
+    try {
+      const houseId = this.getHouseholdId();
+      await fetch(`/api/household/${encodeURIComponent(houseId)}/sync`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          bills: realBills,
+          revenues: realRevs,
+          profiles: this.getProfiles(),
+          device: this.getCurrentDeviceInfo(),
+          forceReplace: true,
+          clientTimestamp: new Date().toISOString(),
+        }),
       });
-    });
-    localStorage.setItem('financas_deleted_series_slugs', JSON.stringify(cleanSlugs));
+    } catch {}
 
-    // Save bills to main storage and safety vault
-    this.saveBills(presetBills);
-
-    // Auto-propagate across all months
-    this.autoPropagateRecurringBills();
-
-    // Save revenues (Carlos R$ 6850, Paula R$ 7240, Rendimentos R$ 345,80)
-    const revenues = this.updateCoupleSalaries(6850, 7240, month);
-
-    return { bills: presetBills, revenues };
+    return { billsRemoved, revenuesRemoved };
   }
 
   // Reset to default sample

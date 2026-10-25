@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { 
-  Wallet, TrendingUp, Plus, Edit3, Sparkles, Scale, CheckCircle2, 
+  Wallet, TrendingUp, Plus, Sparkles, Scale, CheckCircle2, 
   AlertCircle, Clock, ShieldCheck, ChevronDown, ChevronUp, Eye, EyeOff,
   Layers, CreditCard
 } from 'lucide-react';
@@ -245,7 +245,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
                   <span className="font-extrabold text-white font-mono tracking-tight">{formatBRL(grandTotalRevenue)}</span>
                   <span className="text-slate-500">•</span>
                   <span className="text-slate-300 text-[10.5px]">
-                    {userProfileName.toUpperCase()} & {spouseProfileName.toUpperCase()}
+                    RECEITA TOTAL DA FAMÍLIA
                   </span>
                 </div>
               </div>
@@ -345,7 +345,7 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
             <div className="flex items-center justify-between gap-2 flex-wrap">
               <span className="text-[10px] font-black tracking-widest uppercase text-slate-400 font-mono flex items-center gap-1">
                 <Sparkles className="w-3 h-3 text-amber-400" />
-                RENDA COMBINADA DO CASAL • {selectedMonth.toUpperCase()}
+                RECEITA TOTAL DA FAMÍLIA • {selectedMonth.toUpperCase()}
               </span>
 
               {/* Dynamic Live Tag */}
@@ -386,64 +386,43 @@ export const CoupleRevenueCard: React.FC<CoupleRevenueCardProps> = ({
             </div>
           </div>
 
-          {/* Individual Contributions (Carlos & Paula) as Card Sub-Accounts */}
-          <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-white/10">
-            {/* Você / Carlos */}
+          {/* Ação Unificada de Receita Conjunta */}
+          <div className="pt-2 border-t border-white/10 flex items-center justify-between gap-2">
             <button
               type="button"
-              onClick={handleEditUser}
-              className="bg-black/35 hover:bg-black/55 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-amber-400/40 text-left flex items-center justify-between group active-press"
-              title="Clique para editar ou cadastrar seu salário"
+              onClick={onOpenNewRevenue}
+              className="flex-1 bg-black/40 hover:bg-black/60 transition-all py-2.5 px-3 rounded-2xl border border-white/10 hover:border-amber-400/40 text-left flex items-center justify-between group active-press cursor-pointer"
+              title="Cadastrar salário conjunto ou entrada de receita"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-base sm:text-lg">👨🏻‍💻</span>
-                <div className="min-w-0">
-                  <div className="font-extrabold text-slate-200 text-[11px] flex items-center gap-1 uppercase tracking-wider font-mono truncate">
-                    <span>{userProfileName || 'Carlos'}</span>
-                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
+              <div className="flex items-center gap-2.5">
+                <span className="text-lg">💰</span>
+                <div>
+                  <div className="font-extrabold text-slate-200 text-xs">
+                    Salário & Receitas Conjuntas
                   </div>
-                  <div className="font-black text-amber-200 text-xs sm:text-sm font-mono truncate mt-0.5">
-                    {formatBRL(userSalary)}
-                  </div>
-                  <div className="text-[9.5px] text-slate-400 truncate">
-                    {userSalary > 0 ? 'Toque p/ editar' : '+ Cadastrar'}
+                  <div className="text-[10px] text-slate-400">
+                    Toque para cadastrar o salário do casal ou nova entrada
                   </div>
                 </div>
               </div>
+              <Plus className="w-4 h-4 text-amber-300 shrink-0 group-hover:scale-110 transition-transform" />
             </button>
 
-            {/* Esposa / Paula */}
             <button
               type="button"
-              onClick={handleEditSpouse}
-              className="bg-black/35 hover:bg-black/55 transition-all p-2.5 rounded-2xl border border-white/10 hover:border-amber-400/40 text-left flex items-center justify-between group active-press"
-              title="Clique para editar ou cadastrar o salário da esposa"
+              onClick={onOpenRevenueList}
+              className="bg-black/40 hover:bg-black/60 transition-all py-2.5 px-3 rounded-2xl border border-white/10 hover:border-white/20 text-slate-300 hover:text-white text-xs font-semibold flex items-center gap-1.5 shrink-0 active-press cursor-pointer"
+              title="Ver extrato completo de receitas"
             >
-              <div className="flex items-center gap-2 min-w-0">
-                <span className="text-base sm:text-lg">👩🏻‍💼</span>
-                <div className="min-w-0">
-                  <div className="font-extrabold text-slate-200 text-[11px] flex items-center gap-1 uppercase tracking-wider font-mono truncate">
-                    <span>{spouseProfileName || 'Paula'}</span>
-                    {isWifeConnected && (
-                      <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 shrink-0" title="Conectada em tempo real" />
-                    )}
-                    <Edit3 className="w-2.5 h-2.5 text-slate-400 opacity-60 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </div>
-                  <div className="font-black text-amber-200 text-xs sm:text-sm font-mono truncate mt-0.5">
-                    {formatBRL(spouseSalary)}
-                  </div>
-                  <div className="text-[9.5px] text-slate-400 truncate">
-                    {spouseSalary > 0 ? 'Toque p/ editar' : '+ Cadastrar'}
-                  </div>
-                </div>
-              </div>
+              <TrendingUp className="w-3.5 h-3.5 text-teal-400" />
+              <span className="hidden sm:inline">Ver Extrato</span>
             </button>
           </div>
 
           {/* Card Bottom Row: Embossed Cardholder Names & Month Validity Code */}
           <div className="pt-2 border-t border-white/10 flex items-center justify-between text-[10px] text-slate-400 font-mono">
             <div>
-              <span className="text-[8.5px] uppercase tracking-widest text-slate-500 block">TITULARES DA CONTA</span>
+              <span className="text-[8.5px] uppercase tracking-widest text-slate-500 block">CONTA DA FAMÍLIA</span>
               <span className="font-black text-slate-200 tracking-wider">
                 {(userProfileName || 'CARLOS').toUpperCase()} & {(spouseProfileName || 'PAULA').toUpperCase()}
               </span>

@@ -129,17 +129,31 @@ export const BillCard: React.FC<BillCardProps> = ({
   const isPaid = bill.status === 'paid';
 
   return (
-    <div className={`rounded-2xl border transition-all duration-300 w-full max-w-full min-w-0 overflow-hidden relative ${
-      isCelebrating 
-        ? 'ring-2 ring-emerald-400 dark:ring-emerald-400 scale-[1.01] shadow-lg shadow-emerald-500/20' 
-        : ''
-    } ${
-      isPaid
-        ? 'bg-emerald-50/30 dark:bg-emerald-950/15 border-emerald-300/60 dark:border-emerald-800/40 border-l-[5px] border-l-emerald-500 premium-card'
-        : bill.status === 'overdue'
-        ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 border-l-[5px] border-l-rose-500 premium-card'
-        : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-[var(--color-brand-primary)] premium-card hover:border-slate-300 dark:hover:border-slate-700'
-    } p-4 transition-all duration-200`}>
+    <motion.div
+      layout
+      initial={false}
+      animate={{
+        backgroundColor: isPaid 
+          ? 'rgba(16, 185, 129, 0.08)' 
+          : bill.status === 'overdue'
+          ? undefined
+          : undefined,
+        borderColor: isPaid ? 'rgba(16, 185, 129, 0.35)' : undefined,
+        scale: isCelebrating ? 1.015 : 1,
+      }}
+      transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
+      className={`rounded-2xl border w-full max-w-full min-w-0 overflow-hidden relative ${
+        isCelebrating 
+          ? 'ring-2 ring-emerald-400 dark:ring-emerald-400 shadow-lg shadow-emerald-500/20' 
+          : ''
+      } ${
+        isPaid
+          ? 'border-l-[5px] border-l-emerald-500 premium-card'
+          : bill.status === 'overdue'
+          ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 border-l-[5px] border-l-rose-500 premium-card'
+          : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-[var(--color-brand-primary)] premium-card hover:border-slate-300 dark:hover:border-slate-700'
+      } p-4 transition-colors duration-300`}
+    >
       {/* Celebration micro notification on mark as paid */}
       <AnimatePresence>
         {isCelebrating && (
@@ -156,15 +170,22 @@ export const BillCard: React.FC<BillCardProps> = ({
         )}
       </AnimatePresence>
 
-      {/* Background Watermark Stamp for Paid Bills */}
-      {isPaid && (
-        <div 
-          aria-hidden="true"
-          className="absolute -right-3 -bottom-2 pointer-events-none select-none opacity-[0.08] dark:opacity-[0.14] text-emerald-600 dark:text-emerald-400 font-black text-6xl tracking-tight rotate-[-12deg]"
-        >
-          PAGO ✓
-        </div>
-      )}
+      {/* Background Watermark Stamp for Paid Bills with smooth motion */}
+      <AnimatePresence>
+        {isPaid && (
+          <motion.div 
+            key="paid-stamp"
+            aria-hidden="true"
+            initial={{ opacity: 0, scale: 0.65, rotate: -25 }}
+            animate={{ opacity: 0.12, scale: 1, rotate: -12 }}
+            exit={{ opacity: 0, scale: 0.8, rotate: -20 }}
+            transition={{ type: 'spring', stiffness: 350, damping: 20 }}
+            className="absolute -right-3 -bottom-2 pointer-events-none select-none text-emerald-600 dark:text-emerald-400 font-black text-6xl tracking-tight"
+          >
+            PAGO ✓
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       {/* Top Header: Category Tag & Status Tag */}
       <div className="flex items-start justify-between gap-2 mb-2 w-full min-w-0">
@@ -245,18 +266,25 @@ export const BillCard: React.FC<BillCardProps> = ({
               <motion.button
                 type="button"
                 key="paid"
-                initial={{ opacity: 0, scale: 0.88, y: -2 }}
+                initial={{ opacity: 0, scale: 0.6, y: -4 }}
                 animate={{ opacity: 1, scale: 1, y: 0 }}
-                exit={{ opacity: 0, scale: 0.88, y: 2 }}
-                transition={{ duration: 0.22, ease: 'easeOut' }}
+                exit={{ opacity: 0, scale: 0.7, y: 2 }}
+                transition={{ type: 'spring', stiffness: 450, damping: 22 }}
                 onClick={(e) => {
                   e.stopPropagation();
                   onTogglePaid(bill);
                 }}
                 title="Conta marcada como paga. Toque para desfazer e voltar para pendente."
-                className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1 shadow-xs shrink-0 hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer active-press transition-colors"
+                className="text-[11px] font-extrabold px-2.5 py-0.5 rounded-full bg-emerald-100 text-emerald-800 dark:bg-emerald-950/70 dark:text-emerald-300 border border-emerald-300 dark:border-emerald-700 flex items-center gap-1.5 shadow-xs shrink-0 hover:bg-emerald-200 dark:hover:bg-emerald-900 cursor-pointer active-press transition-colors"
               >
-                <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400" />
+                <motion.div
+                  initial={{ scale: 0, rotate: -70 }}
+                  animate={{ scale: [0, 1.35, 1], rotate: [-70, 12, 0] }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 20, duration: 0.45 }}
+                  className="relative flex items-center justify-center shrink-0"
+                >
+                  <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 stroke-[2.8]" />
+                </motion.div>
                 <span>Paga ✓</span>
               </motion.button>
             )}
@@ -274,9 +302,21 @@ export const BillCard: React.FC<BillCardProps> = ({
             {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
           </div>
           {isPaid ? (
-            <span className="inline-flex items-center gap-0.5 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 mt-1">
-              <Check className="w-3 h-3 stroke-[2.5]" /> Liquidada
-            </span>
+            <motion.span
+              initial={{ opacity: 0, scale: 0.7 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ duration: 0.25 }}
+              className="inline-flex items-center gap-1 text-[10.5px] font-bold text-emerald-600 dark:text-emerald-400 mt-1"
+            >
+              <motion.div
+                initial={{ scale: 0, rotate: -45 }}
+                animate={{ scale: [0, 1.4, 1], rotate: [-45, 10, 0] }}
+                transition={{ duration: 0.35, delay: 0.05 }}
+              >
+                <Check className="w-3 h-3 stroke-[3] text-emerald-500" />
+              </motion.div>
+              <span>Liquidada</span>
+            </motion.span>
           ) : (
             <button
               onClick={(e) => copyToClipboard(`R$ ${bill.amount.toFixed(2)}`, 'amount', e)}
@@ -342,12 +382,26 @@ export const BillCard: React.FC<BillCardProps> = ({
         }`}>
           {bill.name}
         </h3>
-        {isPaid && (
-          <span className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400" />
-            <span>Paga</span>
-          </span>
-        )}
+        <AnimatePresence>
+          {isPaid && (
+            <motion.span
+              initial={{ opacity: 0, scale: 0.5, x: -6 }}
+              animate={{ opacity: 1, scale: 1, x: 0 }}
+              exit={{ opacity: 0, scale: 0.5, x: -6 }}
+              transition={{ type: 'spring', stiffness: 500, damping: 25 }}
+              className="inline-flex items-center gap-1 text-[10px] font-black uppercase px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-700 dark:text-emerald-300 border border-emerald-500/30 shrink-0"
+            >
+              <motion.div
+                initial={{ scale: 0, rotate: -45 }}
+                animate={{ scale: [0, 1.4, 1], rotate: [-45, 10, 0] }}
+                transition={{ duration: 0.38, delay: 0.05 }}
+              >
+                <CheckCircle2 className="w-3 h-3 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
+              </motion.div>
+              <span>Paga</span>
+            </motion.span>
+          )}
+        </AnimatePresence>
       </div>
       <div className="text-xs text-slate-500 dark:text-slate-400 mb-2.5">
         Favorecido: <span className="font-medium text-slate-700 dark:text-slate-300">{bill.favored}</span>
@@ -579,41 +633,86 @@ export const BillCard: React.FC<BillCardProps> = ({
 
       {/* Bottom Action Bar */}
       <div className="flex items-center justify-between gap-2 pt-1">
-        {/* Primary Status Toggle Button */}
-        {bill.status === 'paid' ? (
-          <button
-            onClick={() => onTogglePaid(bill)}
-            className="flex-1 py-2.5 px-3 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-200/90 dark:hover:bg-emerald-900/80 border border-emerald-400/80 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 text-xs font-black rounded-xl active-press flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-2xs"
-            title="Dívida marcada como PAGA. Toque se desejar desfazer e voltar para pendente."
-          >
-            <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.5]" />
-            <span>✓ Conta Paga (Toque p/ Desfazer)</span>
-          </button>
-        ) : (
-          <button
-            onClick={handleMarkAsPaid}
-            style={{
-              backgroundColor: 'var(--color-brand-primary)',
-              color: 'var(--color-brand-text)',
-              boxShadow: '0 2px 10px -2px var(--color-brand-glow)'
-            }}
-            className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 transition-all ${
-              isCelebrating ? 'scale-[0.98] ring-2 ring-white/60' : ''
-            }`}
-          >
-            {isCelebrating ? (
-              <>
-                <Sparkles className="w-4 h-4 animate-spin" />
-                <span>Quitando... 🎉</span>
-              </>
-            ) : (
-              <>
-                <Check className="w-4 h-4 stroke-[3]" />
-                <span>Marcar como Pago</span>
-              </>
-            )}
-          </button>
-        )}
+        {/* Primary Status Toggle Button with Smooth Confirmation Animation */}
+        <AnimatePresence mode="wait" initial={false}>
+          {bill.status === 'paid' ? (
+            <motion.button
+              key="button-paid"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              onClick={() => onTogglePaid(bill)}
+              className="flex-1 py-2.5 px-3 bg-emerald-100/80 dark:bg-emerald-950/60 hover:bg-emerald-200/90 dark:hover:bg-emerald-900/80 border border-emerald-400/80 dark:border-emerald-700 text-emerald-900 dark:text-emerald-200 text-xs font-black rounded-xl active-press flex items-center justify-center gap-2 transition-colors cursor-pointer shadow-2xs group relative overflow-hidden"
+              title="Dívida marcada como PAGA. Toque se desejar desfazer e voltar para pendente."
+            >
+              <div className="relative flex items-center justify-center">
+                {/* Expanding pulse wave on confirmation icon */}
+                <motion.span
+                  initial={{ scale: 0.8, opacity: 0.7 }}
+                  animate={{ scale: 2.3, opacity: 0 }}
+                  transition={{ duration: 0.65, ease: 'easeOut' }}
+                  className="absolute inset-0 rounded-full bg-emerald-500 pointer-events-none"
+                />
+                <motion.div
+                  initial={{ scale: 0, rotate: -90 }}
+                  animate={{ scale: [0, 1.35, 1], rotate: [-90, 15, 0] }}
+                  transition={{ type: 'spring', stiffness: 500, damping: 22, duration: 0.45 }}
+                  className="relative z-10 shrink-0"
+                >
+                  <CheckCircle2 className="w-4 h-4 text-emerald-600 dark:text-emerald-400 stroke-[2.8]" />
+                </motion.div>
+              </div>
+              <motion.span
+                initial={{ opacity: 0, x: 4 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ duration: 0.2, delay: 0.08 }}
+              >
+                ✓ Conta Paga (Toque p/ Desfazer)
+              </motion.span>
+            </motion.button>
+          ) : (
+            <motion.button
+              key="button-pending"
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              transition={{ duration: 0.22, ease: 'easeOut' }}
+              onClick={handleMarkAsPaid}
+              style={{
+                backgroundColor: 'var(--color-brand-primary)',
+                color: 'var(--color-brand-text)',
+                boxShadow: '0 2px 10px -2px var(--color-brand-glow)'
+              }}
+              className={`flex-1 py-2.5 px-3 text-xs font-extrabold rounded-xl active-press flex items-center justify-center gap-1.5 transition-all cursor-pointer ${
+                isCelebrating ? 'scale-[0.98] ring-2 ring-white/60' : ''
+              }`}
+            >
+              {isCelebrating ? (
+                <>
+                  <motion.div
+                    animate={{ rotate: 360 }}
+                    transition={{ repeat: Infinity, duration: 0.8, ease: 'linear' }}
+                  >
+                    <Sparkles className="w-4 h-4 text-amber-300" />
+                  </motion.div>
+                  <span>Quitando... 🎉</span>
+                </>
+              ) : (
+                <>
+                  <motion.div
+                    whileHover={{ scale: 1.25, rotate: 10 }}
+                    transition={{ type: 'spring', stiffness: 400 }}
+                    className="shrink-0 flex items-center justify-center"
+                  >
+                    <Check className="w-4 h-4 stroke-[3]" />
+                  </motion.div>
+                  <span>Marcar como Pago</span>
+                </>
+              )}
+            </motion.button>
+          )}
+        </AnimatePresence>
 
         {/* Secondary Icons (Share, Move Month, Edit, Delete) */}
         <div className="flex items-center gap-1">
@@ -736,6 +835,6 @@ export const BillCard: React.FC<BillCardProps> = ({
           )}
         </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 };

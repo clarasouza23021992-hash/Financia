@@ -7,6 +7,7 @@ import {
 import { Bill, Revenue } from '../types/finance';
 import { exportFinancialPDF, exportFinancialCSV } from '../services/pdfExporter';
 import { getCategoryInfo } from '../utils/categories';
+import { useLongPress } from '../hooks/useLongPress';
 
 interface CashFlowReportProps {
   bills: Bill[];
@@ -16,7 +17,135 @@ interface CashFlowReportProps {
   onEditRevenue?: (revenue: Revenue) => void;
   onDeleteRevenue: (revenue: Revenue) => void;
   onOpenBudgets?: () => void;
+  onLongPressRevenue?: (revenue: Revenue) => void;
+  onLongPressBill?: (bill: Bill) => void;
 }
+
+const RevenueRowItem: React.FC<{
+  rev: Revenue;
+  onEdit?: (r: Revenue) => void;
+  onDelete: (r: Revenue) => void;
+  onLongPress?: (r: Revenue) => void;
+}> = ({ rev, onEdit, onDelete, onLongPress }) => {
+  const longPress = useLongPress({
+    onLongPress: () => onLongPress?.(rev),
+    onClick: () => onEdit?.(rev),
+  });
+
+  return (
+    <div 
+      {...longPress}
+      className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer group select-none active:scale-[0.99]"
+      title="Toque e segure para abrir opções (editar, excluir...)"
+    >
+      <div className="flex-1 min-w-0 pr-2">
+        <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
+          <span>{rev.name}</span>
+          <Edit3 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
+        </div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
+          <span>📅 {rev.date.split('-').reverse().join('/')}</span>
+          <span>•</span>
+          <span className="font-semibold text-slate-700 dark:text-slate-300">👤 {rev.profileName}</span>
+          <span>•</span>
+          <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rev.category}</span>
+          {rev.recurrence === 'Mensal' && (
+            <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">
+              Mensal
+            </span>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 shrink-0">
+        <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
+          + R$ {rev.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        </div>
+        {onEdit && (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onEdit(rev);
+            }}
+            className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+            title="Editar Receita"
+          >
+            <Edit3 className="w-3.5 h-3.5" />
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDelete(rev);
+          }}
+          className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
+          title="Excluir Receita"
+        >
+          <Trash2 className="w-3.5 h-3.5" />
+        </button>
+      </div>
+    </div>
+  );
+};
+
+const CashFlowBillItemRow: React.FC<{
+  bill: Bill;
+  onLongPress?: (b: Bill) => void;
+}> = ({ bill, onLongPress }) => {
+  const catInfo = getCategoryInfo(bill.category);
+  const isPaid = bill.status === 'paid';
+  const isOverdue = bill.status === 'overdue';
+
+  const longPress = useLongPress({
+    onLongPress: () => onLongPress?.(bill),
+  });
+
+  return (
+    <div 
+      {...longPress}
+      className={`flex items-center justify-between p-3 rounded-xl border transition-all select-none cursor-pointer active:scale-[0.99] ${
+        isPaid
+          ? 'bg-slate-100/70 dark:bg-slate-900/50 border-emerald-300/60 dark:border-emerald-800/40 border-l-4 border-l-emerald-500 opacity-60 hover:opacity-100'
+          : 'bg-slate-50 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800 hover:border-slate-300 dark:hover:border-slate-700'
+      }`}
+      title="Toque e segure para abrir opções (editar, liquidar, excluir...)"
+    >
+      <div className="min-w-0 pr-2">
+        <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
+          <span>{bill.name}</span>
+          <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
+            isPaid
+              ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
+              : isOverdue
+              ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
+              : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
+          }`}>
+            {isPaid ? 'Paga' : isOverdue ? 'Atrasada' : 'Pendente'}
+          </span>
+        </div>
+        <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
+          <span>📅 Venc: {bill.dueDate.split('-').reverse().join('/')}</span>
+          <span>•</span>
+          <span className="truncate">{catInfo.name}</span>
+          {bill.recurrence === 'Parcelada' && bill.installmentNumber && (
+            <>
+              <span>•</span>
+              <span className="font-semibold text-teal-600 dark:text-teal-400">
+                {bill.installmentNumber}/{bill.totalInstallments}
+              </span>
+            </>
+          )}
+        </div>
+      </div>
+      <div className="flex items-center gap-2 flex-shrink-0">
+        <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
+          - R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
+        </div>
+      </div>
+    </div>
+  );
+};
 
 export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   bills,
@@ -26,6 +155,8 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
   onEditRevenue,
   onDeleteRevenue,
   onOpenBudgets,
+  onLongPressRevenue,
+  onLongPressBill,
 }) => {
   const totalRevenues = revenues.reduce((acc, r) => acc + r.amount, 0);
   const totalBills = bills.reduce((acc, b) => acc + b.amount, 0);
@@ -199,59 +330,13 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
             </div>
           ) : (
             revenues.map((rev) => (
-              <div 
+              <RevenueRowItem
                 key={rev.id}
-                className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200/80 dark:border-slate-800 hover:border-emerald-300 dark:hover:border-emerald-800 transition-all cursor-pointer group"
-                onClick={() => onEditRevenue && onEditRevenue(rev)}
-              >
-                <div className="flex-1 min-w-0 pr-2">
-                  <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5 truncate">
-                    <span>{rev.name}</span>
-                    <Edit3 className="w-3 h-3 text-slate-400 opacity-0 group-hover:opacity-100 transition-opacity shrink-0" />
-                  </div>
-                  <div className="text-[11px] text-slate-500 dark:text-slate-400 flex flex-wrap items-center gap-x-2 gap-y-0.5 mt-0.5">
-                    <span>📅 {rev.date.split('-').reverse().join('/')}</span>
-                    <span>•</span>
-                    <span className="font-semibold text-slate-700 dark:text-slate-300">👤 {rev.profileName}</span>
-                    <span>•</span>
-                    <span className="text-emerald-600 dark:text-emerald-400 font-semibold">{rev.category}</span>
-                    {rev.recurrence === 'Mensal' && (
-                      <span className="text-[10px] bg-emerald-50 dark:bg-emerald-950/60 text-emerald-700 dark:text-emerald-300 px-1.5 py-0.2 rounded font-bold">
-                        Mensal
-                      </span>
-                    )}
-                  </div>
-                </div>
-                <div className="flex items-center gap-2 shrink-0">
-                  <div className="text-sm font-extrabold text-emerald-600 dark:text-emerald-400">
-                    + R$ {rev.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                  </div>
-                  {onEditRevenue && (
-                    <button
-                      type="button"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onEditRevenue(rev);
-                      }}
-                      className="text-slate-400 hover:text-emerald-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-                      title="Editar Receita"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onDeleteRevenue(rev);
-                    }}
-                    className="text-slate-400 hover:text-rose-600 p-1.5 rounded-lg hover:bg-slate-200 dark:hover:bg-slate-800 transition-colors"
-                    title="Excluir Receita"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              </div>
+                rev={rev}
+                onEdit={onEditRevenue}
+                onDelete={onDeleteRevenue}
+                onLongPress={onLongPressRevenue}
+              />
             ))
           )}
         </div>
@@ -277,55 +362,13 @@ export const CashFlowReport: React.FC<CashFlowReportProps> = ({
               Nenhuma dívida registrada neste mês.
             </div>
           ) : (
-            bills.map((bill) => {
-              const catInfo = getCategoryInfo(bill.category);
-              const isPaid = bill.status === 'paid';
-              const isOverdue = bill.status === 'overdue';
-
-              return (
-                <div 
-                  key={bill.id}
-                  className={`flex items-center justify-between p-3 rounded-xl border transition-all ${
-                    isPaid
-                      ? 'bg-slate-100/70 dark:bg-slate-900/50 border-emerald-300/60 dark:border-emerald-800/40 border-l-4 border-l-emerald-500 opacity-60 hover:opacity-100'
-                      : 'bg-slate-50 dark:bg-slate-900 border-slate-200/80 dark:border-slate-800'
-                  }`}
-                >
-                  <div className="min-w-0 pr-2">
-                    <div className="text-xs font-bold text-slate-900 dark:text-white truncate flex items-center gap-1.5">
-                      <span>{bill.name}</span>
-                      <span className={`text-[10px] px-1.5 py-0.2 rounded-full font-bold ${
-                        isPaid
-                          ? 'bg-emerald-100 dark:bg-emerald-950/60 text-emerald-800 dark:text-emerald-300'
-                          : isOverdue
-                          ? 'bg-rose-100 dark:bg-rose-950/60 text-rose-800 dark:text-rose-300'
-                          : 'bg-amber-100 dark:bg-amber-950/60 text-amber-800 dark:text-amber-300'
-                      }`}>
-                        {isPaid ? 'Paga' : isOverdue ? 'Atrasada' : 'Pendente'}
-                      </span>
-                    </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 flex items-center gap-2 mt-0.5">
-                      <span>📅 Venc: {bill.dueDate.split('-').reverse().join('/')}</span>
-                      <span>•</span>
-                      <span className="truncate">{catInfo.name}</span>
-                      {bill.recurrence === 'Parcelada' && bill.installmentNumber && (
-                        <>
-                          <span>•</span>
-                          <span className="font-semibold text-teal-600 dark:text-teal-400">
-                            {bill.installmentNumber}/{bill.totalInstallments}
-                          </span>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                  <div className="flex items-center gap-2 flex-shrink-0">
-                    <div className="text-sm font-extrabold text-rose-600 dark:text-rose-400">
-                      - R$ {bill.amount.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}
-                    </div>
-                  </div>
-                </div>
-              );
-            })
+            bills.map((bill) => (
+              <CashFlowBillItemRow
+                key={bill.id}
+                bill={bill}
+                onLongPress={onLongPressBill}
+              />
+            ))
           )}
         </div>
       </div>

@@ -8,6 +8,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { Bill, getBillEffectiveMonth, isBillRescheduled, getMonthNamePtBr, getMonthShortPtBr } from '../types/finance';
 import { getCategoryInfo } from '../utils/categories';
 import { cloudkit } from '../services/cloudkitSync';
+import { useLongPress } from '../hooks/useLongPress';
 
 interface BillCardProps {
   bill: Bill;
@@ -19,6 +20,7 @@ interface BillCardProps {
   onMoveMonth?: (bill: Bill, targetMonth: string) => void;
   onRestoreDueMonth?: (bill: Bill) => void;
   onReassignActor?: (bill: Bill, newActor: string) => void;
+  onLongPress?: (bill: Bill) => void;
 }
 
 export const BillCard: React.FC<BillCardProps> = ({
@@ -31,6 +33,7 @@ export const BillCard: React.FC<BillCardProps> = ({
   onMoveMonth,
   onRestoreDueMonth,
   onReassignActor,
+  onLongPress,
 }) => {
   const [copiedField, setCopiedField] = useState<string | null>(null);
   const [isMonthPickerOpen, setIsMonthPickerOpen] = useState(false);
@@ -128,8 +131,17 @@ export const BillCard: React.FC<BillCardProps> = ({
 
   const isPaid = bill.status === 'paid';
 
+  const longPressHandlers = useLongPress({
+    onLongPress: () => {
+      if (onLongPress) {
+        onLongPress(bill);
+      }
+    },
+  });
+
   return (
     <motion.div
+      {...longPressHandlers}
       layout
       initial={false}
       animate={{
@@ -142,7 +154,8 @@ export const BillCard: React.FC<BillCardProps> = ({
         scale: isCelebrating ? 1.015 : 1,
       }}
       transition={{ duration: 0.35, ease: [0.16, 1, 0.3, 1] }}
-      className={`rounded-2xl border w-full max-w-full min-w-0 overflow-hidden relative ${
+      title="Toque e segure para abrir opções (editar, excluir, comprovante...)"
+      className={`rounded-2xl border w-full max-w-full min-w-0 overflow-hidden relative select-none ${
         isCelebrating 
           ? 'ring-2 ring-emerald-400 dark:ring-emerald-400 shadow-lg shadow-emerald-500/20' 
           : ''
@@ -152,7 +165,7 @@ export const BillCard: React.FC<BillCardProps> = ({
           : bill.status === 'overdue'
           ? 'bg-white dark:bg-[#131D38] border-rose-200 dark:border-rose-900/60 border-l-[5px] border-l-rose-500 premium-card'
           : 'bg-white dark:bg-[#131D38] border-slate-200/80 dark:border-slate-800/80 border-l-[5px] border-l-[var(--color-brand-primary)] premium-card hover:border-slate-300 dark:hover:border-slate-700'
-      } p-4 transition-colors duration-300`}
+      } p-4 transition-colors duration-300 cursor-pointer`}
     >
       {/* Celebration micro notification on mark as paid */}
       <AnimatePresence>

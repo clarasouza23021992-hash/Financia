@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo, useCallback, useRef } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { 
   Search, Filter, Plus, FileText, TrendingUp, 
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
@@ -53,6 +53,191 @@ import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
 import { ThemePickerModal } from './components/ThemePickerModal';
 import { getStoredTheme, applyTheme, AccentTheme } from './utils/theme';
+import { ItemActionSheetModal, ActionSheetTarget } from './components/ItemActionSheetModal';
+import { useLongPress } from './hooks/useLongPress';
+
+const QUICK_ACTION_DETAILS: Record<string, { id: string; label: string; icon: string; description: string }> = {
+  whatsapp_summary: {
+    id: 'whatsapp_summary',
+    label: 'Resumo WhatsApp',
+    icon: 'MessageCircle',
+    description: 'Gerar resumo formatado do mês com retrospectiva para envio no WhatsApp',
+  },
+  scanner: {
+    id: 'scanner',
+    label: 'Escanear Boleto / Pix',
+    icon: 'ScanLine',
+    description: 'Leitor inteligente de código de barras ou Copia e Cola Pix com preenchimento automático',
+  },
+  gallery: {
+    id: 'gallery',
+    label: 'Galeria Comprovantes',
+    icon: 'Images',
+    description: 'Visualizar e navegar por todos os comprovantes e fotos de pagamentos anexados',
+  },
+  budget: {
+    id: 'budget',
+    label: 'Teto de Gastos',
+    icon: 'SlidersHorizontal',
+    description: 'Definir limites e metas mensais de gastos por categoria da família',
+  },
+  reminders: {
+    id: 'reminders',
+    label: 'Lembretes',
+    icon: 'Bell',
+    description: 'Central de notificações, alertas de vencimento e auditoria',
+  },
+  calculator: {
+    id: 'calculator',
+    label: 'Calculadora',
+    icon: 'Calculator',
+    description: 'Calculadora rápida para divisão de despesas e contas',
+  },
+  categories: {
+    id: 'categories',
+    label: 'Categorias',
+    icon: 'Tag',
+    description: 'Gerenciar categorias personalizadas de despesas e receitas',
+  },
+};
+
+const billsContainerVariants: Variants = {
+  hidden: { opacity: 0 },
+  visible: {
+    opacity: 1,
+    transition: {
+      staggerChildren: 0.045,
+      delayChildren: 0.02,
+    },
+  },
+  exit: {
+    opacity: 0,
+    transition: { duration: 0.16, ease: 'easeOut' as const },
+  },
+};
+
+const billCardItemVariants: Variants = {
+  hidden: {
+    opacity: 0,
+    scale: 0.93,
+    y: 12,
+  },
+  visible: (i: number) => ({
+    opacity: 1,
+    scale: 1,
+    y: 0,
+    transition: {
+      type: 'spring' as const,
+      damping: 24,
+      stiffness: 360,
+      mass: 0.8,
+      delay: Math.min(i * 0.035, 0.28),
+    },
+  }),
+};
+
+interface QuickActionButtonItemProps {
+  actionId: string;
+  badge?: React.ReactNode;
+  onExecute: () => void;
+  onLongPress: () => void;
+}
+
+const QuickActionButtonItem: React.FC<QuickActionButtonItemProps> = ({
+  actionId,
+  badge,
+  onExecute,
+  onLongPress,
+}) => {
+  const longPress = useLongPress({
+    onClick: onExecute,
+    onLongPress,
+  });
+
+  const renderContent = () => {
+    switch (actionId) {
+      case 'whatsapp_summary':
+        return (
+          <>
+            <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 fill-emerald-500/30 shrink-0" />
+            <span>Resumo WhatsApp</span>
+          </>
+        );
+      case 'scanner':
+        return (
+          <>
+            <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400 shrink-0" />
+            <span>Escanear Boleto / Pix</span>
+          </>
+        );
+      case 'gallery':
+        return (
+          <>
+            <Images className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5] shrink-0" />
+            <span>Galeria Comprovantes</span>
+            {badge}
+          </>
+        );
+      case 'budget':
+        return (
+          <>
+            <SlidersHorizontal className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5] shrink-0" />
+            <span>Teto de Gastos</span>
+          </>
+        );
+      case 'reminders':
+        return (
+          <>
+            <Bell className="w-3.5 h-3.5 text-[#FFD166] shrink-0" />
+            <span>Lembretes</span>
+            {badge}
+          </>
+        );
+      case 'calculator':
+        return (
+          <>
+            <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5] shrink-0" />
+            <span>Calculadora</span>
+          </>
+        );
+      case 'categories':
+        return (
+          <>
+            <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5] shrink-0" />
+            <span>Categorias</span>
+          </>
+        );
+      default:
+        return null;
+    }
+  };
+
+  const getStyleClass = () => {
+    switch (actionId) {
+      case 'whatsapp_summary':
+        return 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800';
+      case 'scanner':
+        return 'bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 border-teal-200 dark:border-teal-800';
+      case 'gallery':
+        return 'bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-teal-500/20 hover:from-teal-500/20 hover:to-emerald-500/30 text-teal-900 dark:text-[#00E5B5] border-teal-500/30';
+      case 'budget':
+        return 'bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] border-teal-500/30';
+      default:
+        return 'bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 border-slate-200 dark:border-slate-700';
+    }
+  };
+
+  return (
+    <button
+      type="button"
+      {...longPress}
+      className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl font-bold text-xs border active-press whitespace-nowrap transition-all shadow-2xs select-none cursor-pointer ${getStyleClass()}`}
+      title="Toque rápido para abrir ou segure para ver opções"
+    >
+      {renderContent()}
+    </button>
+  );
+};
 
 export default function App() {
   // Core State backed by CloudKit Sync Engine
@@ -66,6 +251,9 @@ export default function App() {
   const [billToDelete, setBillToDelete] = useState<Bill | null>(null);
   const [revenueToDelete, setRevenueToDelete] = useState<Revenue | null>(null);
   const [isBackupModalOpen, setIsBackupModalOpen] = useState(false);
+
+  // Touch and hold / Long-press context action sheet target (bills, revenues, quick actions)
+  const [actionSheetTarget, setActionSheetTarget] = useState<ActionSheetTarget | null>(null);
 
   // Shared Family Account (Carlos & Paula same login)
   const [isFamilyAuthModalOpen, setIsFamilyAuthModalOpen] = useState(false);
@@ -1506,109 +1694,45 @@ export default function App() {
             {/* Quick Actions Row */}
             <div className="px-4 py-1 flex items-center gap-2 overflow-x-auto no-scrollbar">
               {quickActionsOrder.map((actionId) => {
-                if (actionId === 'whatsapp_summary') {
-                  return (
-                    <button
-                      key="whatsapp_summary"
-                      type="button"
-                      onClick={() => setIsWhatsAppSummaryOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 font-bold text-xs border border-emerald-200 dark:border-emerald-800 active-press whitespace-nowrap transition-all shadow-2xs cursor-pointer"
-                      title="Gerar cartão de retrospectiva e resumo para WhatsApp"
-                    >
-                      <MessageCircle className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 fill-emerald-500/30" />
-                      <span>Resumo WhatsApp</span>
-                    </button>
-                  );
-                }
-                if (actionId === 'scanner') {
-                  return (
-                    <button
-                      key="scanner"
-                      type="button"
-                      onClick={() => setIsBoletoScannerOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-teal-50 dark:bg-teal-950/40 hover:bg-teal-100 dark:hover:bg-teal-900/50 text-teal-800 dark:text-teal-200 font-bold text-xs border border-teal-200 dark:border-teal-800 active-press whitespace-nowrap transition-all shadow-2xs"
-                    >
-                      <ScanLine className="w-3.5 h-3.5 text-teal-600 dark:text-teal-400" />
-                      <span>Escanear Boleto / Pix</span>
-                    </button>
-                  );
-                }
-                if (actionId === 'gallery') {
-                  return (
-                    <button
-                      key="gallery"
-                      type="button"
-                      onClick={handleOpenReceiptsGallery}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-gradient-to-r from-teal-500/10 via-emerald-500/15 to-teal-500/20 hover:from-teal-500/20 hover:to-emerald-500/30 text-teal-900 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
-                      title="Galeria de Comprovantes do Mês (Fotos & Prints)"
-                    >
-                      <Images className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                      <span>Galeria Comprovantes</span>
-                      {filterCounts.withReceipt > 0 && (
-                        <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500 text-[#0A1128] font-black">
-                          {filterCounts.withReceipt}
-                        </span>
-                      )}
-                    </button>
-                  );
-                }
-                if (actionId === 'budget') {
-                  return (
-                    <button
-                      key="budget"
-                      type="button"
-                      onClick={() => setIsBudgetModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3.5 py-2 rounded-2xl bg-gradient-to-r from-teal-500/15 to-emerald-500/20 hover:from-teal-500/25 hover:to-emerald-500/30 text-teal-800 dark:text-[#00E5B5] font-bold text-xs border border-teal-500/30 active-press whitespace-nowrap transition-all shadow-2xs"
-                    >
-                      <SlidersHorizontal className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                      <span>Teto de Gastos</span>
-                    </button>
-                  );
-                }
-                if (actionId === 'reminders') {
-                  return (
-                    <button
-                      key="reminders"
-                      type="button"
-                      onClick={() => setIsNotificationCenterOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
-                    >
-                      <Bell className="w-3.5 h-3.5 text-[#FFD166]" />
-                      <span>Lembretes</span>
-                      {unreadNotificationsCount > 0 && (
-                        <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />
-                      )}
-                    </button>
-                  );
-                }
-                if (actionId === 'calculator') {
-                  return (
-                    <button
-                      key="calculator"
-                      type="button"
-                      onClick={() => setIsCalculatorOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
-                    >
-                      <Calculator className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                      <span>Calculadora</span>
-                    </button>
-                  );
-                }
-                if (actionId === 'categories') {
-                  return (
-                    <button
-                      key="categories"
-                      type="button"
-                      onClick={() => setIsCategoriesModalOpen(true)}
-                      className="inline-flex items-center gap-1.5 px-3 py-2 rounded-2xl bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-800 dark:text-slate-200 font-bold text-xs border border-slate-200 dark:border-slate-700 active-press whitespace-nowrap transition-all shadow-2xs"
-                      title="Gerenciar categorias de despesas"
-                    >
-                      <Tag className="w-3.5 h-3.5 text-teal-600 dark:text-[#00E5B5]" />
-                      <span>Categorias</span>
-                    </button>
-                  );
-                }
-                return null;
+                const meta = QUICK_ACTION_DETAILS[actionId];
+                if (!meta) return null;
+
+                const getActionBadge = () => {
+                  if (actionId === 'gallery' && filterCounts.withReceipt > 0) {
+                    return (
+                      <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-teal-500 text-[#0A1128] font-black">
+                        {filterCounts.withReceipt}
+                      </span>
+                    );
+                  }
+                  if (actionId === 'reminders' && unreadNotificationsCount > 0) {
+                    return <span className="w-2 h-2 rounded-full bg-rose-500 animate-pulse" />;
+                  }
+                  return undefined;
+                };
+
+                return (
+                  <QuickActionButtonItem
+                    key={actionId}
+                    actionId={actionId}
+                    badge={getActionBadge()}
+                    onExecute={() => {
+                      if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
+                      else if (actionId === 'scanner') setIsBoletoScannerOpen(true);
+                      else if (actionId === 'gallery') handleOpenReceiptsGallery();
+                      else if (actionId === 'budget') setIsBudgetModalOpen(true);
+                      else if (actionId === 'reminders') setIsNotificationCenterOpen(true);
+                      else if (actionId === 'calculator') setIsCalculatorOpen(true);
+                      else if (actionId === 'categories') setIsCategoriesModalOpen(true);
+                    }}
+                    onLongPress={() => {
+                      setActionSheetTarget({
+                        type: 'quick_action',
+                        data: meta,
+                      });
+                    }}
+                  />
+                );
               })}
 
               {/* Botão de Trocar Tema */}
@@ -1814,38 +1938,49 @@ export default function App() {
                   </div>
                 )
               ) : (
-                <AnimatePresence mode="popLayout" initial={false}>
-                  {filteredBills.map(bill => (
-                    <motion.div
-                      key={bill.id}
-                      layout
-                      initial={{ opacity: 0, y: 16, scale: 0.98 }}
-                      animate={{ opacity: 1, y: 0, scale: 1 }}
-                      exit={{
-                        opacity: 0,
-                        scale: 0.88,
-                        x: -36,
-                        filter: 'blur(3px)',
-                        transition: { duration: 0.26, ease: 'easeOut' },
-                      }}
-                      transition={{ duration: 0.2 }}
-                    >
-                      <BillCard
-                        bill={bill}
-                        onEdit={(b) => {
-                          setEditingBill(b);
-                          setIsBillModalOpen(true);
+                <AnimatePresence mode="popLayout" initial={true}>
+                  <motion.div
+                    key={`bills-group-${selectedMonth.id}-${statusFilter}-${categoryFilter}-${searchQuery.trim() ? 'q' : 'all'}`}
+                    variants={billsContainerVariants}
+                    initial="hidden"
+                    animate="visible"
+                    exit="exit"
+                    className="space-y-3"
+                  >
+                    {filteredBills.map((bill, index) => (
+                      <motion.div
+                        key={bill.id}
+                        layout
+                        variants={billCardItemVariants}
+                        custom={index}
+                        initial="hidden"
+                        animate="visible"
+                        exit={{
+                          opacity: 0,
+                          scale: 0.9,
+                          x: -24,
+                          filter: 'blur(2px)',
+                          transition: { duration: 0.2, ease: 'easeOut' },
                         }}
-                        onDelete={handleDeleteBill}
-                        onTogglePaid={handleTogglePaid}
-                        onViewReceipt={handleViewReceipt}
-                        onAttachReceipt={handleAttachReceipt}
-                        onMoveMonth={handleMoveBillMonth}
-                        onRestoreDueMonth={handleRestoreDueMonth}
-                        onReassignActor={handleReassignActor}
-                      />
-                    </motion.div>
-                  ))}
+                      >
+                        <BillCard
+                          bill={bill}
+                          onEdit={(b) => {
+                            setEditingBill(b);
+                            setIsBillModalOpen(true);
+                          }}
+                          onDelete={handleDeleteBill}
+                          onTogglePaid={handleTogglePaid}
+                          onViewReceipt={handleViewReceipt}
+                          onAttachReceipt={handleAttachReceipt}
+                          onMoveMonth={handleMoveBillMonth}
+                          onRestoreDueMonth={handleRestoreDueMonth}
+                          onReassignActor={handleReassignActor}
+                          onLongPress={(b) => setActionSheetTarget({ type: 'bill', data: b })}
+                        />
+                      </motion.div>
+                    ))}
+                  </motion.div>
                 </AnimatePresence>
               )}
             </div>
@@ -1873,6 +2008,8 @@ export default function App() {
                       onEditRevenue={handleOpenEditRevenue}
                       onDeleteRevenue={(rev) => setRevenueToDelete(rev)}
                       onOpenBudgets={() => setIsBudgetModalOpen(true)}
+                      onLongPressRevenue={(rev) => setActionSheetTarget({ type: 'revenue', data: rev })}
+                      onLongPressBill={(b) => setActionSheetTarget({ type: 'bill', data: b })}
                     />
                   </ErrorBoundary>
                 </motion.div>
@@ -2230,6 +2367,76 @@ export default function App() {
         onThemeChanged={(newTheme) => {
           setCurrentAccentTheme(newTheme);
           showTemporaryToast(`✨ Tema aplicado: ${newTheme.name}`);
+        }}
+      />
+
+      {/* Touch-and-Hold / Long-Press Context Menu Modal (Dívidas, Receitas e Funcionalidades) */}
+      <ItemActionSheetModal
+        target={actionSheetTarget}
+        onClose={() => setActionSheetTarget(null)}
+        onEditBill={(bill) => {
+          setActionSheetTarget(null);
+          setEditingBill(bill);
+          setIsBillModalOpen(true);
+        }}
+        onDeleteBill={(bill) => {
+          setActionSheetTarget(null);
+          handleDeleteBill(bill);
+        }}
+        onTogglePaidBill={(bill) => {
+          setActionSheetTarget(null);
+          handleTogglePaid(bill);
+        }}
+        onViewReceiptBill={(bill) => {
+          setActionSheetTarget(null);
+          handleViewReceipt(bill);
+        }}
+        onAttachReceiptBill={(bill) => {
+          setActionSheetTarget(null);
+          handleAttachReceipt(bill);
+        }}
+        onShareBill={(bill) => {
+          setActionSheetTarget(null);
+          const shareText = `*Dívida da Casa: ${bill.name}*\n` +
+            `💰 Valor: R$ ${bill.amount.toFixed(2)}\n` +
+            `📅 Vencimento: ${bill.dueDate.split('-').reverse().join('/')}\n` +
+            `🏢 Favorecido: ${bill.favored}\n` +
+            (bill.status === 'paid' ? '✅ Status: Paga\n' : '⏳ Status: Pendente\n') +
+            (bill.pixKey ? `🔑 Pix: ${bill.pixKey}\n` : '') +
+            (bill.barcode ? `📄 Código de Barras: ${bill.barcode}\n` : '');
+          if (navigator.share) {
+            navigator.share({ title: bill.name, text: shareText }).catch(() => {});
+          } else {
+            navigator.clipboard.writeText(shareText);
+            showTemporaryToast('📋 Informações copiadas para envio!');
+          }
+        }}
+        onMoveMonthBill={(bill) => {
+          setActionSheetTarget(null);
+          setEditingBill(bill);
+          setIsBillModalOpen(true);
+        }}
+        onEditRevenue={(rev) => {
+          setActionSheetTarget(null);
+          handleOpenEditRevenue(rev);
+        }}
+        onDeleteRevenue={(rev) => {
+          setActionSheetTarget(null);
+          setRevenueToDelete(rev);
+        }}
+        onExecuteQuickAction={(actionId) => {
+          setActionSheetTarget(null);
+          if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
+          else if (actionId === 'scanner') setIsBoletoScannerOpen(true);
+          else if (actionId === 'gallery') handleOpenReceiptsGallery();
+          else if (actionId === 'budget') setIsBudgetModalOpen(true);
+          else if (actionId === 'reminders') setIsNotificationCenterOpen(true);
+          else if (actionId === 'calculator') setIsCalculatorOpen(true);
+          else if (actionId === 'categories') setIsCategoriesModalOpen(true);
+        }}
+        onOpenReorderQuickActions={() => {
+          setActionSheetTarget(null);
+          setIsReorderModalOpen(true);
         }}
       />
 

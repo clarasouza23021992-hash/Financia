@@ -2,6 +2,24 @@
 <html lang="pt-BR">
   <head>
     <meta charset="UTF-8" />
+    <script>
+      // Intercept and suppress Vite HMR WebSocket connection errors in Cloud Run environment
+      window.addEventListener('unhandledrejection', function(event) {
+        if (event && event.reason) {
+          var msg = String(event.reason.message || event.reason || '');
+          if (msg.includes('WebSocket') || msg.includes('websocket') || msg.includes('@vite/client')) {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+        }
+      });
+      window.addEventListener('error', function(event) {
+        if (event && event.message && (event.message.includes('WebSocket') || event.message.includes('websocket') || event.message.includes('[vite]'))) {
+          event.preventDefault();
+          event.stopPropagation();
+        }
+      }, true);
+    </script>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta name="mobile-web-app-capable" content="yes" />

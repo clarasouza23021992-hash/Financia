@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { 
   X, ArrowUp, ArrowDown, RotateCcw, Check, 
   Target, Bell, Calculator, Tag, ScanLine, Images, 
-  SlidersHorizontal, Sparkles, CheckCircle2, GripVertical, MessageCircle
+  SlidersHorizontal, Sparkles, CheckCircle2, GripVertical, MessageCircle, Zap
 } from 'lucide-react';
 
 export interface QuickActionConfig {
@@ -14,6 +14,7 @@ export interface QuickActionConfig {
 }
 
 export const DEFAULT_QUICK_ACTIONS: QuickActionConfig[] = [
+  { id: 'automation', label: 'Automação & Agenda', icon: 'Zap', description: 'Importar SMS de cartão, agenda (.ics) e quitação de parcelas' },
   { id: 'whatsapp_summary', label: 'Resumo WhatsApp', icon: 'MessageCircle', description: 'Cartão visual e texto para enviar no WhatsApp do casal' },
   { id: 'scanner', label: 'Escanear Boleto / Pix', icon: 'ScanLine', description: 'Leitor de código de barras e chave Pix com câmera' },
   { id: 'gallery', label: 'Galeria Comprovantes', icon: 'Images', description: 'Visualizador de fotos e prints de comprovantes do mês' },
@@ -119,6 +120,7 @@ export const ReorderQuickActionsModal: React.FC<ReorderQuickActionsModalProps> =
 
   const renderIcon = (iconName: string) => {
     switch (iconName) {
+      case 'Zap': return <Zap className="w-4 h-4 text-amber-500" />;
       case 'MessageCircle': return <MessageCircle className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />;
       case 'ScanLine': return <ScanLine className="w-4 h-4 text-teal-600 dark:text-teal-400" />;
       case 'Images': return <Images className="w-4 h-4 text-teal-600 dark:text-[#00E5B5]" />;

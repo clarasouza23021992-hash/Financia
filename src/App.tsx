@@ -5,7 +5,7 @@ import {
   Cloud, Users, Bell, AlertTriangle, CheckCircle2, ChevronRight,
   ShieldCheck, Share2, Sparkles, SlidersHorizontal,
   RefreshCw, ScanLine, Calculator, Clock, Paperclip, Tag,
-  Images, X, RotateCcw, MessageCircle, Palette
+  Images, X, RotateCcw, MessageCircle, Palette, Zap
 } from 'lucide-react';
 import { 
   Bill, Revenue, CloudDevice, UserProfile, NotificationSetting, 
@@ -48,6 +48,7 @@ import { ReorderQuickActionsModal, getSavedQuickActionsOrder } from './component
 import { ActionFeedbackToast, ActionToastData } from './components/ActionFeedbackToast';
 import { FamilyAuthModal } from './components/FamilyAuthModal';
 import { WhatsAppSummaryModal } from './components/WhatsAppSummaryModal';
+import { AutomationHubModal } from './components/AutomationHubModal';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { authService, AuthSessionData } from './services/authService';
 import { parseScannedBoletoOrPix } from './utils/pixParser';
@@ -57,6 +58,12 @@ import { ItemActionSheetModal, ActionSheetTarget } from './components/ItemAction
 import { useLongPress } from './hooks/useLongPress';
 
 const QUICK_ACTION_DETAILS: Record<string, { id: string; label: string; icon: string; description: string }> = {
+  automation: {
+    id: 'automation',
+    label: 'Automação & SMS',
+    icon: 'Zap',
+    description: 'Importar SMS do cartão, exportar agenda (.ics) e desconto de parcelas',
+  },
   whatsapp_summary: {
     id: 'whatsapp_summary',
     label: 'Resumo WhatsApp',
@@ -156,6 +163,13 @@ const QuickActionButtonItem: React.FC<QuickActionButtonItemProps> = ({
 
   const renderContent = () => {
     switch (actionId) {
+      case 'automation':
+        return (
+          <>
+            <Zap className="w-3.5 h-3.5 text-amber-500 fill-amber-500/20 shrink-0" />
+            <span>Automação & SMS</span>
+          </>
+        );
       case 'whatsapp_summary':
         return (
           <>
@@ -214,6 +228,8 @@ const QuickActionButtonItem: React.FC<QuickActionButtonItemProps> = ({
 
   const getStyleClass = () => {
     switch (actionId) {
+      case 'automation':
+        return 'bg-gradient-to-r from-amber-500/10 via-amber-500/15 to-amber-500/20 hover:from-amber-500/20 hover:to-amber-500/30 text-amber-900 dark:text-amber-300 border-amber-500/40 shadow-xs';
       case 'whatsapp_summary':
         return 'bg-emerald-50 dark:bg-emerald-950/40 hover:bg-emerald-100 dark:hover:bg-emerald-900/50 text-emerald-800 dark:text-emerald-200 border-emerald-200 dark:border-emerald-800';
       case 'scanner':
@@ -381,6 +397,7 @@ export default function App() {
   const [isBudgetModalOpen, setIsBudgetModalOpen] = useState(false);
   const [isCategoriesModalOpen, setIsCategoriesModalOpen] = useState(false);
   const [isWhatsAppSummaryOpen, setIsWhatsAppSummaryOpen] = useState(false);
+  const [isAutomationHubOpen, setIsAutomationHubOpen] = useState(false);
   const [quickActionsOrder, setQuickActionsOrder] = useState<string[]>(() => getSavedQuickActionsOrder());
   const [isReorderModalOpen, setIsReorderModalOpen] = useState(false);
   const [isThemePickerOpen, setIsThemePickerOpen] = useState(false);
@@ -1201,6 +1218,38 @@ export default function App() {
     }
   };
 
+  const handleBulkAddBills = (newBills: Array<Omit<Bill, 'id'> & { id?: string }>) => {
+    newBills.forEach(b => {
+      cloudkit.saveBill({
+        ...b,
+        lastEditedBy: activeUserName,
+        lastEditedAt: new Date().toISOString(),
+        isEdited: false,
+        lastActionDescription: 'Importado via Automação de Cartão',
+      });
+    });
+    setBills(cloudkit.getBills());
+    showActionToast({
+      id: `bulk-add-${Date.now()}`,
+      type: 'save',
+      title: 'Contas Cadastradas com Sucesso! 💳',
+      message: `${newBills.length} parcela(s) adicionadas automaticamente às faturas certas!`,
+    });
+  };
+
+  const handleBulkUpdateBillsStatus = (billIds: string[], status: 'paid') => {
+    billIds.forEach(id => {
+      cloudkit.toggleBillStatus(id, status, activeUserName);
+    });
+    setBills(cloudkit.getBills());
+    showActionToast({
+      id: `bulk-status-${Date.now()}`,
+      type: 'save',
+      title: 'Parcelas Liquidadas com Sucesso! ✅',
+      message: `${billIds.length} parcela(s) quitadas com economia de juros!`,
+    });
+  };
+
   const handleMoveBillMonth = (bill: Bill, targetMonthId: string) => {
     const dueMonth = (bill.dueDate || '').substring(0, 7);
     const isReturningToDueMonth = targetMonthId === dueMonth;
@@ -1717,7 +1766,8 @@ export default function App() {
                     actionId={actionId}
                     badge={getActionBadge()}
                     onExecute={() => {
-                      if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
+                      if (actionId === 'automation') setIsAutomationHubOpen(true);
+                      else if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
                       else if (actionId === 'scanner') setIsBoletoScannerOpen(true);
                       else if (actionId === 'gallery') handleOpenReceiptsGallery();
                       else if (actionId === 'budget') setIsBudgetModalOpen(true);
@@ -2426,7 +2476,8 @@ export default function App() {
         }}
         onExecuteQuickAction={(actionId) => {
           setActionSheetTarget(null);
-          if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
+          if (actionId === 'automation') setIsAutomationHubOpen(true);
+          else if (actionId === 'whatsapp_summary') setIsWhatsAppSummaryOpen(true);
           else if (actionId === 'scanner') setIsBoletoScannerOpen(true);
           else if (actionId === 'gallery') handleOpenReceiptsGallery();
           else if (actionId === 'budget') setIsBudgetModalOpen(true);
@@ -2438,6 +2489,17 @@ export default function App() {
           setActionSheetTarget(null);
           setIsReorderModalOpen(true);
         }}
+      />
+
+      {/* Automation Hub: SMS Card Import, Calendar Sync & Discount Simulator */}
+      <AutomationHubModal
+        isOpen={isAutomationHubOpen}
+        onClose={() => setIsAutomationHubOpen(false)}
+        bills={currentMonthBills}
+        selectedMonthLabel={selectedMonth.label}
+        onAddBills={handleBulkAddBills}
+        onBulkUpdateBillsStatus={handleBulkUpdateBillsStatus}
+        onShowToast={(msg) => showTemporaryToast(msg)}
       />
 
       {/* Visual Feedback Confirmation Toast (Salvo, Editado, Excluído) */}

@@ -70,6 +70,7 @@ export const CoffeeFinanceModal: React.FC<CoffeeFinanceModalProps> = ({
   const [extraExpenses, setExtraExpenses] = useState<WeeklyExtraExpense[]>([]);
   const [newExpenseDesc, setNewExpenseDesc] = useState('');
   const [newExpenseAmount, setNewExpenseAmount] = useState('');
+  const [confirmDeleteExpenseId, setConfirmDeleteExpenseId] = useState<string | null>(null);
 
   // Past Routines
   const [pastRoutines, setPastRoutines] = useState<WeeklyCoffeeRoutine[]>(() => {
@@ -770,13 +771,37 @@ export const CoffeeFinanceModal: React.FC<CoffeeFinanceModalProps> = ({
                             <span className="font-medium text-slate-800 dark:text-slate-200">{exp.description}</span>
                             <div className="flex items-center gap-2">
                               <span className="font-bold text-slate-900 dark:text-white">{formatBRL(exp.amount)}</span>
-                              <button
-                                type="button"
-                                onClick={() => handleRemoveExpense(exp.id)}
-                                className="text-slate-400 hover:text-rose-500 p-1"
-                              >
-                                <Trash2 className="w-3 h-3" />
-                              </button>
+                              {confirmDeleteExpenseId === exp.id ? (
+                                <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-0.5 rounded-lg text-[10.5px]">
+                                  <span className="font-bold text-rose-700 dark:text-rose-300">Apagar?</span>
+                                  <button
+                                    type="button"
+                                    onClick={() => {
+                                      handleRemoveExpense(exp.id);
+                                      setConfirmDeleteExpenseId(null);
+                                    }}
+                                    className="font-black text-rose-600 dark:text-rose-300 hover:underline cursor-pointer"
+                                  >
+                                    Sim
+                                  </button>
+                                  <button
+                                    type="button"
+                                    onClick={() => setConfirmDeleteExpenseId(null)}
+                                    className="font-semibold text-slate-600 dark:text-slate-400 hover:underline cursor-pointer"
+                                  >
+                                    Não
+                                  </button>
+                                </div>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => setConfirmDeleteExpenseId(exp.id)}
+                                  className="text-slate-400 hover:text-rose-500 p-1 cursor-pointer"
+                                  title="Remover item"
+                                >
+                                  <Trash2 className="w-3 h-3" />
+                                </button>
+                              )}
                             </div>
                           </div>
                         ))}

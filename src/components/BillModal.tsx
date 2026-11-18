@@ -219,6 +219,7 @@ export const BillModal: React.FC<BillModalProps> = ({
   const [receiptSuccessNotice, setReceiptSuccessNotice] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [previewReceiptOpen, setPreviewReceiptOpen] = useState<boolean>(false);
+  const [confirmRemoveReceipt, setConfirmRemoveReceipt] = useState<boolean>(false);
   const [pixDetectedNotice, setPixDetectedNotice] = useState<string | null>(null);
   const [barcodeDetectedNotice, setBarcodeDetectedNotice] = useState<string | null>(null);
   const [categoryNotice, setCategoryNotice] = useState<string | null>(null);
@@ -370,6 +371,7 @@ export const BillModal: React.FC<BillModalProps> = ({
         setApplyToFutureMonths(true);
         setFormError(null);
         setPreviewReceiptOpen(false);
+        setConfirmRemoveReceipt(false);
       } else {
         // Default for new bill
         setName('');
@@ -404,6 +406,7 @@ export const BillModal: React.FC<BillModalProps> = ({
         setApplyToFutureMonths(true);
         setFormError(null);
         setPreviewReceiptOpen(false);
+        setConfirmRemoveReceipt(false);
       }
     }
 
@@ -1886,22 +1889,43 @@ export const BillModal: React.FC<BillModalProps> = ({
                       />
                     </label>
 
-                    {/* Remove Button */}
-                    <button
-                      type="button"
-                      onClick={() => {
-                        setReceiptName('');
-                        setReceiptUrl('');
-                        setReceiptSize('');
-                        setReceiptOriginalSize('');
-                        setReceiptSuccessNotice(null);
-                        setFormError(null);
-                      }}
-                      className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active-press cursor-pointer"
-                      title="Remover comprovante"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
+                    {/* Remove Button with Confirmation */}
+                    {confirmRemoveReceipt ? (
+                      <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-1 rounded-xl text-[11px]">
+                        <span className="font-bold text-rose-700 dark:text-rose-300">Remover?</span>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setReceiptName('');
+                            setReceiptUrl('');
+                            setReceiptSize('');
+                            setReceiptOriginalSize('');
+                            setReceiptSuccessNotice(null);
+                            setFormError(null);
+                            setConfirmRemoveReceipt(false);
+                          }}
+                          className="font-black text-rose-600 dark:text-rose-300 hover:underline cursor-pointer"
+                        >
+                          Sim
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setConfirmRemoveReceipt(false)}
+                          className="font-semibold text-slate-600 dark:text-slate-400 hover:underline cursor-pointer"
+                        >
+                          Não
+                        </button>
+                      </div>
+                    ) : (
+                      <button
+                        type="button"
+                        onClick={() => setConfirmRemoveReceipt(true)}
+                        className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 dark:hover:bg-rose-950/40 transition-colors active-press cursor-pointer"
+                        title="Remover comprovante"
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
                   </div>
                 </div>
 

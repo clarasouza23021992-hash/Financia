@@ -989,9 +989,11 @@ export default function App() {
   };
 
   // Handler to clear fictitious demo bills so user sees only real data
+  const [confirmClearMock, setConfirmClearMock] = useState(false);
   const handleClearMockBills = () => {
     const remaining = cloudkit.clearMockBills();
     setBills(remaining);
+    setConfirmClearMock(false);
     showActionToast({
       id: `clear-mock-${Date.now()}`,
       type: 'delete',
@@ -1709,15 +1711,36 @@ export default function App() {
               <div className="mx-4 my-1 p-2.5 bg-blue-50/80 dark:bg-blue-950/40 border border-blue-200/80 dark:border-blue-900/60 rounded-2xl flex items-center justify-between gap-2 text-xs">
                 <div className="text-blue-900 dark:text-blue-200 flex items-center gap-1.5 text-[11px] leading-tight">
                   <span className="text-sm">💡</span>
-                  <span>Existem contas demonstrativas no app. Você pode removê-las com 1 clique.</span>
+                  <span>Existem contas demonstrativas no app. Você pode removê-las com segurança.</span>
                 </div>
-                <button
-                  onClick={handleClearMockBills}
-                  className="flex-shrink-0 px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] rounded-lg active-press transition-colors"
-                  title="Apagar dados fictícios e manter apenas contas cadastradas por você"
-                >
-                  Limpar Dados Fictícios
-                </button>
+                {confirmClearMock ? (
+                  <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/70 border border-rose-300 dark:border-rose-800 px-2 py-1 rounded-xl flex-shrink-0 text-[10.5px]">
+                    <span className="font-bold text-rose-800 dark:text-rose-200">Apagar?</span>
+                    <button
+                      type="button"
+                      onClick={handleClearMockBills}
+                      className="px-2 py-0.5 bg-rose-600 hover:bg-rose-700 text-white font-black rounded-lg cursor-pointer"
+                    >
+                      Sim
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setConfirmClearMock(false)}
+                      className="px-1.5 py-0.5 text-slate-600 dark:text-slate-300 font-bold hover:underline cursor-pointer"
+                    >
+                      Não
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmClearMock(true)}
+                    className="flex-shrink-0 px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white font-extrabold text-[10px] rounded-lg active-press transition-colors cursor-pointer"
+                    title="Apagar dados fictícios e manter apenas contas cadastradas por você"
+                  >
+                    Limpar Dados Fictícios
+                  </button>
+                )}
               </div>
             )}
 

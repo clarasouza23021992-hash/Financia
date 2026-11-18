@@ -65,6 +65,7 @@ export const SyncView: React.FC<SyncViewProps> = ({
   const [showShareModal, setShowShareModal] = useState(false);
   const [copiedInstructions, setCopiedInstructions] = useState(false);
   const [isRestoreModalOpen, setIsRestoreModalOpen] = useState(false);
+  const [confirmClearLogs, setConfirmClearLogs] = useState(false);
   const [livePresence, setLivePresence] = useState(() => cloudkit.getPresenceState());
   const [snapshotInfo, setSnapshotInfo] = useState<{
     hasSnapshot: boolean;
@@ -803,14 +804,37 @@ export const SyncView: React.FC<SyncViewProps> = ({
             </h3>
           </div>
           {propagationLogs.length > 0 && (
-            <button
-              type="button"
-              onClick={handleClearLogs}
-              className="text-[10.5px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center gap-1 cursor-pointer"
-            >
-              <Trash2 className="w-3 h-3" />
-              <span>Limpar</span>
-            </button>
+            confirmClearLogs ? (
+              <div className="flex items-center gap-1.5 bg-rose-50 dark:bg-rose-950/60 border border-rose-300 dark:border-rose-800 px-2 py-1 rounded-lg text-[10.5px]">
+                <span className="font-bold text-rose-700 dark:text-rose-300">Apagar histórico?</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    handleClearLogs();
+                    setConfirmClearLogs(false);
+                  }}
+                  className="font-black text-rose-600 dark:text-rose-300 hover:underline cursor-pointer"
+                >
+                  Sim
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmClearLogs(false)}
+                  className="font-semibold text-slate-600 dark:text-slate-400 hover:underline cursor-pointer"
+                >
+                  Não
+                </button>
+              </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmClearLogs(true)}
+                className="text-[10.5px] text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 flex items-center gap-1 cursor-pointer"
+              >
+                <Trash2 className="w-3 h-3" />
+                <span>Limpar</span>
+              </button>
+            )
           )}
         </div>
 

@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Calendar, Layers, AlertTriangle, RefreshCw, ShieldAlert } from 'lucide-react';
+import { X, Trash2, Calendar, Layers, AlertTriangle, RefreshCw, ShieldAlert, ArrowLeft, CheckCircle2 } from 'lucide-react';
 import { Revenue } from '../types/finance';
 
 interface DeleteRevenueModalProps {
@@ -21,6 +21,24 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
   onDeleteAllMonths,
 }) => {
   const [deletingType, setDeletingType] = useState<'single' | 'all' | null>(null);
+  const [selectedScope, setSelectedScope] = useState<'single' | 'all' | null>(null);
+  const [isConfirmedChecked, setIsConfirmedChecked] = useState(false);
+
+  const isRecurringRevenue = Boolean(
+    revenue && (revenue.recurrence === 'Mensal' || !revenue.recurrence || revenue.category === 'Salário & Renda')
+  );
+
+  useEffect(() => {
+    if (isOpen && revenue) {
+      setDeletingType(null);
+      setIsConfirmedChecked(false);
+      setSelectedScope(isRecurringRevenue ? null : 'single');
+    } else {
+      setDeletingType(null);
+      setSelectedScope(null);
+      setIsConfirmedChecked(false);
+    }
+  }, [isOpen, revenue?.id, isRecurringRevenue]);
 
   if (!isOpen || !revenue) return null;
 
@@ -29,6 +47,7 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
   };
 
   const handleExecuteDelete = (type: 'single' | 'all') => {
+    if (!isConfirmedChecked) return;
     setDeletingType(type);
     setTimeout(() => {
       if (type === 'single') {
@@ -37,6 +56,8 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
         onDeleteAllMonths(revenue);
       }
       setDeletingType(null);
+      setSelectedScope(null);
+      setIsConfirmedChecked(false);
       onClose();
     }, 320);
   };
@@ -72,7 +93,9 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
                   Confirmar Exclusão da Receita
                 </h2>
                 <p className="text-[11px] text-rose-100 font-medium">
-                  Tem certeza mesmo que deseja apagar?
+                  {selectedScope
+                    ? 'Confirmação obrigatória antes de apagar'
+                    : 'Escolha como deseja excluir este lançamento'}
                 </p>
               </div>
             </div>
@@ -117,87 +140,154 @@ export const DeleteRevenueModal: React.FC<DeleteRevenueModalProps> = ({
               </div>
             </motion.div>
 
-            {/* Aviso de Confirmação */}
-            <motion.div 
-              initial={{ opacity: 0, scale: 0.98 }}
-              animate={{ opacity: 1, scale: 1 }}
-              className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/70 rounded-2xl text-xs text-rose-900 dark:text-rose-200 leading-relaxed flex items-start gap-2.5"
-            >
-              <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
-              <div>
-                <strong>Atenção:</strong> Deseja realmente excluir a receita <strong>"{revenue.name}"</strong>? O valor será subtraído do saldo do casal.
-              </div>
-            </motion.div>
+            {/* Step 1: Escolher escopo */}
+            {isRecurringRevenue && !selectedScope ? (
+              <div className="space-y-3">
+                <p className="text-xs text-slate-600 dark:text-slate-300 font-bold">
+                  Como deseja excluir a receita <strong>"{revenue.name}"</strong>?
+                </p>
 
-            {/* Opções de Exclusão */}
-            <div className="space-y-3">
-              <p className="text-xs text-slate-600 dark:text-slate-300 font-bold">
-                Como deseja excluir a receita <strong>"{revenue.name}"</strong>?
-              </p>
-
-              {/* Opção 1: Apenas neste mês */}
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                type="button"
-                disabled={Boolean(deletingType)}
-                onClick={() => handleExecuteDelete('single')}
-                className="w-full text-left p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all group cursor-pointer disabled:opacity-60 shadow-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors">
-                    {deletingType === 'single' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin text-rose-600" />
-                    ) : (
+                {/* Opção 1: Apenas neste mês */}
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => {
+                    setSelectedScope('single');
+                    setIsConfirmedChecked(false);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800/60 hover:bg-slate-50 dark:hover:bg-slate-800 hover:border-slate-300 dark:hover:border-slate-600 transition-all group cursor-pointer shadow-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-slate-100 dark:bg-slate-700 text-slate-700 dark:text-slate-300 flex items-center justify-center flex-shrink-0 group-hover:bg-slate-200 dark:group-hover:bg-slate-600 transition-colors">
                       <Calendar className="w-4 h-4" />
-                    )}
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-slate-900 dark:text-white flex items-center gap-1.5">
-                      <span>Apagar apenas em {currentMonthLabel}</span>
-                      {deletingType === 'single' && (
-                        <span className="text-[10px] text-rose-600 font-bold animate-pulse">Apagando...</span>
-                      )}
                     </div>
-                    <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
-                      Remove a receita somente deste mês. Outros meses continuam normais.
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-slate-900 dark:text-white">
+                        Apagar apenas em {currentMonthLabel}
+                      </div>
+                      <div className="text-[11px] text-slate-500 dark:text-slate-400 leading-snug">
+                        Remove a receita somente deste mês. Outros meses continuam normais.
+                      </div>
                     </div>
                   </div>
-                </div>
-              </motion.button>
+                </motion.button>
 
-              {/* Opção 2: Em TODOS os meses */}
-              <motion.button
-                whileTap={{ scale: 0.98 }}
-                type="button"
-                disabled={Boolean(deletingType)}
-                onClick={() => handleExecuteDelete('all')}
-                className="w-full text-left p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 hover:border-rose-300 dark:hover:border-rose-800 transition-all group cursor-pointer disabled:opacity-60 shadow-xs"
-              >
-                <div className="flex items-center gap-2.5">
-                  <div className="w-9 h-9 rounded-xl bg-rose-200/80 dark:bg-rose-900/70 text-rose-700 dark:text-rose-300 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-300 dark:group-hover:bg-rose-800 transition-colors">
-                    {deletingType === 'all' ? (
-                      <RefreshCw className="w-4 h-4 animate-spin text-rose-700" />
-                    ) : (
+                {/* Opção 2: Em TODOS os meses */}
+                <motion.button
+                  whileTap={{ scale: 0.98 }}
+                  type="button"
+                  onClick={() => {
+                    setSelectedScope('all');
+                    setIsConfirmedChecked(false);
+                  }}
+                  className="w-full text-left p-3.5 rounded-2xl border border-rose-200 dark:border-rose-900/60 bg-rose-50/80 dark:bg-rose-950/40 hover:bg-rose-100 dark:hover:bg-rose-900/50 hover:border-rose-300 dark:hover:border-rose-800 transition-all group cursor-pointer shadow-xs"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <div className="w-9 h-9 rounded-xl bg-rose-200/80 dark:bg-rose-900/70 text-rose-700 dark:text-rose-300 flex items-center justify-center flex-shrink-0 group-hover:bg-rose-300 dark:group-hover:bg-rose-800 transition-colors">
                       <Layers className="w-4 h-4" />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="text-xs font-bold text-rose-900 dark:text-rose-200">
+                        Apagar em TODOS os meses (atual e futuros)
+                      </div>
+                      <div className="text-[11px] text-rose-700 dark:text-rose-300 leading-snug">
+                        Remove esta receita de todos os meses do planejamento financeiro.
+                      </div>
+                    </div>
+                  </div>
+                </motion.button>
+              </div>
+            ) : (
+              /* Step 2: Confirmação final com checkbox */
+              <div className="space-y-3">
+                <motion.div 
+                  initial={{ opacity: 0, scale: 0.98 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  className="p-3.5 bg-rose-50 dark:bg-rose-950/40 border border-rose-300 dark:border-rose-800/70 rounded-2xl text-xs text-rose-900 dark:text-rose-200 leading-relaxed flex items-start gap-2.5"
+                >
+                  <ShieldAlert className="w-4 h-4 text-rose-600 dark:text-rose-400 flex-shrink-0 mt-0.5" />
+                  <div>
+                    <strong>Confirmação Final:</strong>{' '}
+                    {selectedScope === 'all' ? (
+                      <span>
+                        Você vai apagar a receita <strong>"{revenue.name}"</strong> de <strong>TODOS os meses</strong> (atual e futuros). O saldo do casal será reduzido.
+                      </span>
+                    ) : (
+                      <span>
+                        Você vai apagar a receita <strong>"{revenue.name}"</strong> em <strong>{currentMonthLabel}</strong>. O valor será subtraído do saldo do casal.
+                      </span>
                     )}
                   </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="text-xs font-bold text-rose-900 dark:text-rose-200 flex items-center gap-1.5">
-                      <span>Apagar em TODOS os meses (atual e futuros)</span>
-                      {deletingType === 'all' && (
-                        <span className="text-[10px] text-rose-700 font-bold animate-pulse">Apagando...</span>
-                      )}
-                    </div>
-                    <div className="text-[11px] text-rose-700 dark:text-rose-300 leading-snug">
-                      Remove esta receita de todos os meses do planejamento financeiro.
-                    </div>
-                  </div>
-                </div>
-              </motion.button>
-            </div>
+                </motion.div>
 
-            {/* Cancelar */}
-            <div className="pt-2 flex justify-end">
+                <label className="flex items-start gap-2.5 p-3 rounded-2xl border-2 border-rose-200 dark:border-rose-900/60 bg-white dark:bg-slate-900 cursor-pointer hover:border-rose-400 transition-colors select-none">
+                  <input
+                    type="checkbox"
+                    checked={isConfirmedChecked}
+                    disabled={Boolean(deletingType)}
+                    onChange={(e) => setIsConfirmedChecked(e.target.checked)}
+                    className="mt-0.5 w-4 h-4 rounded accent-rose-600 cursor-pointer flex-shrink-0"
+                  />
+                  <span className="text-xs font-bold text-slate-800 dark:text-slate-100 leading-snug">
+                    Sim, tenho certeza que desejo apagar{' '}
+                    {selectedScope === 'all' ? 'em TODOS os meses' : 'esta receita'}
+                  </span>
+                </label>
+
+                <motion.button
+                  whileTap={isConfirmedChecked ? { scale: 0.98 } : undefined}
+                  type="button"
+                  disabled={!isConfirmedChecked || Boolean(deletingType)}
+                  onClick={() => handleExecuteDelete(selectedScope || 'single')}
+                  className={`w-full p-3.5 rounded-2xl border font-black text-xs sm:text-sm flex items-center justify-center gap-2 transition-all ${
+                    isConfirmedChecked
+                      ? 'border-rose-400 dark:border-rose-800 bg-rose-600 hover:bg-rose-700 text-white shadow-lg shadow-rose-600/25 cursor-pointer'
+                      : 'border-slate-200 dark:border-slate-800 bg-slate-100 dark:bg-slate-800/60 text-slate-400 dark:text-slate-500 cursor-not-allowed'
+                  }`}
+                >
+                  {deletingType ? (
+                    <>
+                      <RefreshCw className="w-4 h-4 animate-spin" />
+                      <span>Apagando receita agora...</span>
+                    </>
+                  ) : isConfirmedChecked ? (
+                    <>
+                      <Trash2 className="w-4 h-4" />
+                      <span>
+                        {selectedScope === 'all'
+                          ? 'Confirmar e Apagar de TODOS os Meses'
+                          : 'Confirmar e Apagar Receita'}
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <CheckCircle2 className="w-4 h-4 opacity-50" />
+                      <span>Marque a caixa acima para confirmar</span>
+                    </>
+                  )}
+                </motion.button>
+              </div>
+            )}
+
+            {/* Cancelar / Voltar */}
+            <div className="pt-2 flex items-center justify-between">
+              {isRecurringRevenue && selectedScope ? (
+                <button
+                  type="button"
+                  disabled={Boolean(deletingType)}
+                  onClick={() => {
+                    setSelectedScope(null);
+                    setIsConfirmedChecked(false);
+                  }}
+                  className="px-3 py-2 text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-xl flex items-center gap-1 transition-colors cursor-pointer disabled:opacity-50"
+                >
+                  <ArrowLeft className="w-3.5 h-3.5" />
+                  <span>Voltar</span>
+                </button>
+              ) : (
+                <div />
+              )}
+
               <button
                 type="button"
                 disabled={Boolean(deletingType)}

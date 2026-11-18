@@ -152,7 +152,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
     e.preventDefault();
     const cleanAmount = parseFloat(purchaseAmount.replace(/\./g, '').replace(',', '.')) || 0;
     if (cleanAmount <= 0) {
-      alert('Por favor, informe um valor válido para a compra.');
+      showNotification('⚠️ Por favor, informe um valor válido para a compra.');
       return;
     }
 
@@ -192,7 +192,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
       setPurchaseInstallments(1);
     } catch (err) {
       console.error('Error publishing card purchase:', err);
-      alert('Erro ao publicar compra no cartão.');
+      showNotification('❌ Erro ao publicar compra no cartão.');
     } finally {
       setIsPublishing(false);
     }
@@ -214,7 +214,7 @@ export const BankSyncModal: React.FC<BankSyncModalProps> = ({
       setParsedPushRequest(null);
     } catch (err) {
       console.error('Error publishing parsed push purchase:', err);
-      alert('Erro ao publicar compra da notificação.');
+      showNotification('❌ Erro ao publicar compra da notificação.');
     } finally {
       setIsPublishing(false);
     }

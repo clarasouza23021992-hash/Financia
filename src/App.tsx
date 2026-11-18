@@ -143,6 +143,29 @@ const billCardItemVariants: Variants = {
   }),
 };
 
+const monthContentVariants: Variants = {
+  enter: (direction: number) => ({
+    x: direction >= 0 ? 44 : -44,
+    opacity: 0,
+  }),
+  center: {
+    x: 0,
+    opacity: 1,
+    transition: {
+      x: { type: 'spring' as const, stiffness: 380, damping: 32, mass: 0.75 },
+      opacity: { duration: 0.18, ease: 'easeOut' as const },
+    },
+  },
+  exit: (direction: number) => ({
+    x: direction >= 0 ? -44 : 44,
+    opacity: 0,
+    transition: {
+      x: { duration: 0.13, ease: [0.32, 0.72, 0, 1] as const },
+      opacity: { duration: 0.12, ease: 'easeIn' as const },
+    },
+  }),
+};
+
 interface QuickActionButtonItemProps {
   actionId: string;
   badge?: React.ReactNode;
@@ -368,9 +391,27 @@ export default function App() {
       isCurrent: true,
     };
   });
+  const [monthDirection, setMonthDirection] = useState<number>(1);
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [categoryFilter, setCategoryFilter] = useState<string>('Todas');
+
+  const handleSelectMonth = (month: MonthOption, resetFilters = false) => {
+    if (month.id !== selectedMonth.id) {
+      setMonthDirection(month.id > selectedMonth.id ? 1 : -1);
+      setSelectedMonth(month);
+    }
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('financas_selected_month_id', month.id);
+    }
+    if (resetFilters) {
+      setStatusFilter('all');
+      setCategoryFilter('Todas');
+      setSearchQuery('');
+    }
+    const updated = cloudkit.autoPropagateRecurringBills([month.id]);
+    setBills(updated);
+  };
 
   // Dark Mode
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => {
@@ -1194,6 +1235,7 @@ export default function App() {
         label: targetLabel,
         shortLabel: billMonth,
       };
+      setMonthDirection(targetMonthOption.id > selectedMonth.id ? 1 : -1);
       setSelectedMonth(targetMonthOption);
       showActionToast({
         id: `save-bill-${Date.now()}`,
@@ -1630,17 +1672,22 @@ export default function App() {
             {/* 1. Month Selector with Subsequent Months */}
             <MonthSelector
               selectedMonthId={selectedMonth.id}
-              onSelectMonth={(month) => {
-                setSelectedMonth(month);
-                if (typeof window !== 'undefined') {
-                  localStorage.setItem('financas_selected_month_id', month.id);
-                }
-                const updated = cloudkit.autoPropagateRecurringBills([month.id]);
-                setBills(updated);
-              }}
+              onSelectMonth={(month) => handleSelectMonth(month)}
               bills={allValidBills}
             />
 
+            {/* Animated Monthly Content Wrapper (Lateral Slide-In/Out on Month Change) */}
+            <div className="relative overflow-x-hidden">
+              <AnimatePresence mode="wait" custom={monthDirection} initial={false}>
+                <motion.div
+                  key={selectedMonth.id}
+                  custom={monthDirection}
+                  variants={monthContentVariants}
+                  initial="enter"
+                  animate="center"
+                  exit="exit"
+                  className="w-full space-y-1"
+                >
             {/* 2. Couple Revenue Summary */}
             <CoupleRevenueCard
               revenues={currentMonthRevenues}
@@ -1943,13 +1990,7 @@ export default function App() {
                               <button
                                 key={monthId}
                                 type="button"
-                                onClick={() => {
-                                  setSelectedMonth(found);
-                                  localStorage.setItem('financas_selected_month_id', found.id);
-                                  setStatusFilter('all');
-                                  setCategoryFilter('Todas');
-                                  setSearchQuery('');
-                                }}
+                                onClick={() => handleSelectMonth(found, true)}
                                 className="px-3 py-2 bg-[#0A1128] dark:bg-teal-500 hover:opacity-90 text-white dark:text-[#0A1128] font-extrabold rounded-xl shadow-xs flex items-center gap-1.5 active-press text-xs cursor-pointer transition-all"
                               >
                                 <span>Abrir {count} conta(s) em {found.label}</span>
@@ -2033,6 +2074,9 @@ export default function App() {
                   </motion.div>
                 </AnimatePresence>
               )}
+            </div>
+                </motion.div>
+              </AnimatePresence>
             </div>
                 </motion.div>
               )}
@@ -2496,6 +2540,7 @@ export default function App() {
         isOpen={isAutomationHubOpen}
         onClose={() => setIsAutomationHubOpen(false)}
         bills={currentMonthBills}
+        allBills={allValidBills}
         selectedMonthLabel={selectedMonth.label}
         onAddBills={handleBulkAddBills}
         onBulkUpdateBillsStatus={handleBulkUpdateBillsStatus}

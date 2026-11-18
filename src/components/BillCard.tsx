@@ -113,8 +113,9 @@ export const BillCard: React.FC<BillCardProps> = ({
     if (navigator.share) {
       navigator.share({ title: bill.name, text: shareText }).catch(() => {});
     } else {
-      navigator.clipboard.writeText(shareText);
-      alert('Dados da conta copiados para a área de transferência!');
+      navigator.clipboard?.writeText(shareText).catch(() => {});
+      setCopiedField('share');
+      setTimeout(() => setCopiedField(null), 2000);
     }
   };
 
@@ -731,10 +732,14 @@ export const BillCard: React.FC<BillCardProps> = ({
         <div className="flex items-center gap-1">
           <button
             onClick={handleShare}
-            title="Compartilhar"
-            className="w-8 h-8 rounded-lg flex items-center justify-center text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800 active-press"
+            title={copiedField === 'share' ? 'Dados copiados!' : 'Compartilhar'}
+            className={`w-8 h-8 rounded-lg flex items-center justify-center active-press transition-colors ${
+              copiedField === 'share'
+                ? 'bg-emerald-50 text-emerald-600 dark:bg-emerald-950/60 dark:text-emerald-400'
+                : 'text-slate-500 hover:text-slate-900 hover:bg-slate-100 dark:text-slate-400 dark:hover:text-white dark:hover:bg-slate-800'
+            }`}
           >
-            <Share2 className="w-4 h-4" />
+            {copiedField === 'share' ? <Check className="w-4 h-4" /> : <Share2 className="w-4 h-4" />}
           </button>
           {onMoveMonth && (
             <button

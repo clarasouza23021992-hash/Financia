@@ -14,6 +14,7 @@ interface AutomationHubModalProps {
   isOpen: boolean;
   onClose: () => void;
   bills: Bill[];
+  allBills?: Bill[];
   selectedMonthLabel: string;
   onAddBills: (newBills: Array<Omit<Bill, 'id'> & { id?: string }>) => void;
   onBulkUpdateBillsStatus?: (billIds: string[], status: 'paid') => void;
@@ -24,6 +25,7 @@ export const AutomationHubModal: React.FC<AutomationHubModalProps> = ({
   isOpen,
   onClose,
   bills,
+  allBills,
   selectedMonthLabel,
   onAddBills,
   onBulkUpdateBillsStatus,
@@ -137,11 +139,12 @@ export const AutomationHubModal: React.FC<AutomationHubModalProps> = ({
   };
 
   // --- TAB 3: EARLY PAYOFF / DISCOUNT SIMULATOR STATE ---
-  // Collect all active installment groups across bills
+  // Collect all active installment groups across all months
   const installmentGroups = useMemo(() => {
+    const sourceBills = allBills && allBills.length > 0 ? allBills : bills;
     const map = new Map<string, { baseName: string; totalInst: number; bills: Bill[] }>();
 
-    bills.forEach(b => {
+    sourceBills.forEach(b => {
       if (b.recurrence === 'Parcelada' || (b.installmentNumber && b.installmentNumber > 0)) {
         const raw = b.name.replace(/\s*\(\d+\/\d+\)/, '').trim();
         const key = raw.toLowerCase();
@@ -160,7 +163,7 @@ export const AutomationHubModal: React.FC<AutomationHubModalProps> = ({
       g.bills.sort((a, b) => (a.installmentNumber || 1) - (b.installmentNumber || 1));
       return g;
     });
-  }, [bills]);
+  }, [allBills, bills]);
 
   const [selectedGroupIndex, setSelectedGroupIndex] = useState<number>(0);
   const [selectedBillIdsToAnticipate, setSelectedBillIdsToAnticipate] = useState<string[]>([]);
@@ -687,7 +690,7 @@ export const AutomationHubModal: React.FC<AutomationHubModalProps> = ({
                                     {b.name}
                                   </span>
                                   <span className="text-[10px] text-slate-500 dark:text-slate-400">
-                                    Vencimento original: {b.dueDate.split('-').reverse().join('/')} {isPaid ? '(Já Paga)' : ''}
+                                    Vencimento original: {(b.dueDate || '').split('-').reverse().join('/')} {isPaid ? '(Já Paga)' : ''}
                                   </span>
                                 </div>
                               </div>

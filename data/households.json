@@ -29,16 +29,16 @@
     ],
     "devices": [
       {
-        "id": "dev_1792895411284_s5zh1",
+        "id": "dev_1795004105651_0reuo",
         "name": "Carlos (iPhone)",
-        "model": "Computador / Web",
+        "model": "iPhone (Tela de Início)",
         "owner": "Você",
-        "lastActive": "2026-10-25T02:44:30.547Z",
-        "connectedAt": "2026-10-25T02:43:58.592Z"
+        "lastActive": "2026-11-18T12:20:32.223Z",
+        "connectedAt": "2026-11-18T12:20:01.822Z"
       }
     ],
     "isWifeConnected": false,
-    "lastUpdated": "2026-10-25T02:44:30.547Z",
+    "lastUpdated": "2026-11-18T12:20:32.223Z",
     "deletedBillIds": [
       "test-bill-1"
     ],
